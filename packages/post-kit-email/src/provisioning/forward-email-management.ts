@@ -206,6 +206,41 @@ export class ForwardEmailManagementClient {
     );
   }
 
+  private async reconcileAlias(
+    domain: string,
+    existing: ForwardEmailAliasSummary,
+    aliasName: string,
+    recipients: string[],
+  ): Promise<{ alias: ForwardEmailAliasSummary; created: boolean }> {
+    if (sameRecipients(existing.recipients, recipients)) {
+      return { alias: existing, created: false };
+    }
+    if (!existing.id) {
+      throw new Error(
+        `Forward Email alias ${aliasName} is missing an id; cannot update recipients`,
+      );
+    }
+    const update = new URLSearchParams();
+    for (const recipient of recipients) update.append('recipients', recipient);
+    const { status, data } = await this.request<Record<string, unknown>>(
+      'PUT',
+      `/v1/domains/${encodeURIComponent(domain)}/aliases/${encodeURIComponent(existing.id)}`,
+      update,
+    );
+    if (status >= 400) {
+      throw new Error(`Forward Email update alias failed (${status})`);
+    }
+    const recipientsOut = Array.isArray(data.recipients) ? data.recipients.map(String) : recipients;
+    return {
+      alias: {
+        id: String(data.id ?? existing.id),
+        name: String(data.name ?? aliasName),
+        recipients: recipientsOut,
+      },
+      created: false,
+    };
+  }
+
   async ensureAlias(
     domain: string,
     aliasName: string,
@@ -215,35 +250,7 @@ export class ForwardEmailManagementClient {
       (a) => a.name.toLowerCase() === aliasName.toLowerCase(),
     );
     if (existing) {
-      if (sameRecipients(existing.recipients, recipients)) {
-        return { alias: existing, created: false };
-      }
-      if (!existing.id) {
-        throw new Error(
-          `Forward Email alias ${aliasName} is missing an id; cannot update recipients`,
-        );
-      }
-      const update = new URLSearchParams();
-      for (const recipient of recipients) update.append('recipients', recipient);
-      const { status, data } = await this.request<Record<string, unknown>>(
-        'PUT',
-        `/v1/domains/${encodeURIComponent(domain)}/aliases/${encodeURIComponent(existing.id)}`,
-        update,
-      );
-      if (status >= 400) {
-        throw new Error(`Forward Email update alias failed (${status})`);
-      }
-      const recipientsOut = Array.isArray(data.recipients)
-        ? data.recipients.map(String)
-        : recipients;
-      return {
-        alias: {
-          id: String(data.id ?? existing.id),
-          name: String(data.name ?? aliasName),
-          recipients: recipientsOut,
-        },
-        created: false,
-      };
+      return this.reconcileAlias(domain, existing, aliasName, recipients);
     }
 
     const body = new URLSearchParams();
@@ -258,7 +265,7 @@ export class ForwardEmailManagementClient {
       const again = (await this.listAliases(domain)).find(
         (a) => a.name.toLowerCase() === aliasName.toLowerCase(),
       );
-      if (again) return { alias: again, created: false };
+      if (again) return this.reconcileAlias(domain, again, aliasName, recipients);
       throw new Error(`Forward Email create alias failed (${status})`);
     }
     const recipientsOut = Array.isArray(data.recipients) ? data.recipients.map(String) : recipients;

@@ -167,6 +167,46 @@ describe('ForwardEmailManagementClient idempotency', () => {
     assert.ok(methods.some((entry) => entry.startsWith('PUT ') && entry.endsWith('/aliases/a1')));
   });
 
+  it('reconciles recipients when create races with another provisioner', async () => {
+    const methods: string[] = [];
+    let aliasListCalls = 0;
+    const client = new ForwardEmailManagementClient({
+      apiToken: 'token',
+      baseUrl: 'https://api.example.test',
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        const method = init?.method ?? 'GET';
+        methods.push(`${method} ${url}`);
+        if (url.includes('/aliases') && method === 'GET') {
+          aliasListCalls += 1;
+          if (aliasListCalls === 1) {
+            return new Response(JSON.stringify([]), { status: 200 });
+          }
+          return new Response(
+            JSON.stringify([{ id: 'a1', name: 'noreply', recipients: ['old@example.com'] }]),
+            { status: 200 },
+          );
+        }
+        if (url.includes('/aliases') && method === 'POST') {
+          return new Response('already exists', { status: 409 });
+        }
+        if (url.endsWith('/aliases/a1') && method === 'PUT') {
+          return new Response(
+            JSON.stringify({ id: 'a1', name: 'noreply', recipients: ['hello@singletonsd.com'] }),
+            { status: 200 },
+          );
+        }
+        return new Response('unexpected', { status: 500 });
+      },
+    });
+    const result = await client.ensureAlias('example.com', 'noreply', ['hello@singletonsd.com']);
+    assert.equal(result.created, false);
+    assert.deepEqual(result.alias.recipients, ['hello@singletonsd.com']);
+    assert.equal(aliasListCalls, 2);
+    assert.ok(methods.some((entry) => entry.startsWith('POST ')));
+    assert.ok(methods.some((entry) => entry.startsWith('PUT ') && entry.endsWith('/aliases/a1')));
+  });
+
   it('aggregates paginated alias lists', async () => {
     const urls: string[] = [];
     const client = new ForwardEmailManagementClient({
