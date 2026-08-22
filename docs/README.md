@@ -26,7 +26,8 @@ docs/
 ├── README.md                 (this file)
 ├── github-source-of-truth.md (engineering lifecycle policy)
 ├── github-project.md         (Project fields, views, labels)
-├── pr-pipelines.md           (CI, hygiene, release, secrets)
+├── pr-pipelines.md           (CI, release, secrets)
+├── email-forward-email.md    (Forward Email runtime + provision CLI)
 └── architecture/
     └── overview.md           (phase-1 system shape)
 ```
@@ -39,3 +40,4 @@ docs/
 | [`github-project.md`](./github-project.md) | PostKit Engineering project fields, views, labels |
 | [`pr-pipelines.md`](./pr-pipelines.md) | PR CI, release, secrets policy |
 | [`architecture/overview.md`](./architecture/overview.md) | Phase-1 architecture: Functions API, EmailProvider, consumers |
+| [`email-forward-email.md`](./email-forward-email.md) | Forward Email provider, DNS, `pnpm email:provision` |

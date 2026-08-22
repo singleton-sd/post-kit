@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "domains": [
+    {
+      "domain": "mail.plattform-kit.poc.singletonsd.com",
+      "zoneDomain": "singletonsd.com",
+      "aliases": [
+        {
+          "name": "noreply",
+          "recipients": ["hello@singletonsd.com"]
+        }
+      ]
+    },
+    {
+      "domain": "mail.inkads.poc.singletonsd.com",
+      "zoneDomain": "singletonsd.com",
+      "aliases": [
+        {
+          "name": "noreply",
+          "recipients": ["inkads-support@singletonsd.com"]
+        }
+      ]
+    }
+  ]
+}

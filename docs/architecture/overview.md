@@ -20,7 +20,7 @@ Consumer app (trusted server)
 PostKit Functions API (apps/api)     -- later epic
         |
         v
-@singleton-sd/post-kit-email         -- later epic
+@singleton-sd/post-kit-email
         |
         +--> EmailProvider (development | forward-email)
         |
@@ -30,9 +30,9 @@ Forward Email  →  per-tenant mail domains
 
 | Piece | Role | Status |
 | --- | --- | --- |
-| **Functions API** (`apps/api`) | Contact/send HTTP surface on Azure Functions Consumption | Planned — not in this bootstrap |
-| **EmailProvider** | Swap development logging vs Forward Email production send | Planned in `post-kit-email` |
-| **Forward Email** | Production delivery + per-tenant mail domain provisioning | Planned |
+| **Functions API** (`apps/api`) | Contact/send HTTP surface on Azure Functions Consumption | Planned |
+| **EmailProvider** | Swap development logging vs Forward Email production send | `@singleton-sd/post-kit-email` |
+| **Forward Email** | Production delivery + per-tenant mail domain provisioning | `pnpm email:provision` |
 | **Public npm packages** | `@singleton-sd/post-kit-*` consumed by trusted apps | First package: `post-kit-email` |
 
 No database is required for email templates. Runtime template content (later)
