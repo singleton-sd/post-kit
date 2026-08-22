@@ -115,7 +115,7 @@ CI reads **Azure App Configuration** `ssd-postkit-appcs-prod-ae` over OIDC
 
 | Env | App Config key | Required |
 | --- | --- | --- |
-| `EMAIL_VALIDATION_DOMAIN` | `app:email:validation:domain` | Yes. If unset (or the store / OIDC is missing), the job skips. |
+| `EMAIL_VALIDATION_DOMAIN` | `app:email:validation:domain` | Yes. If unset (or Azure repository Variables / the store are missing), the job skips. Invalid OIDC federation fails the workflow. |
 | `EMAIL_VALIDATION_DKIM_SELECTOR` | `app:email:validation:dkimSelector` | No (CLI default `fe`) |
 | `EMAIL_VALIDATION_DMARC_POLICY` | `app:email:validation:dmarcPolicy` | No (CLI default `quarantine`) |
 | `EMAIL_VALIDATION_BIMI_SELECTOR` | `app:email:validation:bimiSelector` | No (CLI default `default`) |

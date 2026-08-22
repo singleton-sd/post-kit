@@ -60,8 +60,24 @@ jobs:
             exit 1
           fi
 
+          ENDPOINT="$(az appconfig show --name "$APP_CONFIG_NAME" --query endpoint -o tsv)"
+
           kv() {
-            az appconfig kv show --name "$APP_CONFIG_NAME" --key "$1" --query value -o tsv 2>/dev/null || true
+            local key="$1"
+            local out err
+            set +e
+            out=$(az appconfig kv show --endpoint "$ENDPOINT" --auth-mode login --key "$key" --query value -o tsv 2>&1)
+            local status=$?
+            set -e
+            if [ "$status" -eq 0 ]; then
+              printf '%s' "$out"
+              return 0
+            fi
+            if echo "$out" | grep -qiE 'not found|does not exist|No key-value found|KeyNotFound'; then
+              return 0
+            fi
+            echo "$out" >&2
+            return 1
           }
 
           domain="$(kv 'app:email:validation:domain')"
