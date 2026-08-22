@@ -12,6 +12,13 @@ describe('formatFromHeader', () => {
       '"Plattform KitBcc: evil" <noreply@example.com>',
     );
   });
+
+  it('escapes backslashes in the display name', () => {
+    assert.equal(
+      formatFromHeader('noreply@example.com', 'Ends with \\'),
+      '"Ends with \\\\" <noreply@example.com>',
+    );
+  });
 });
 
 describe('loadEmailRuntimeConfig', () => {
@@ -25,11 +32,22 @@ describe('loadEmailRuntimeConfig', () => {
   });
 
   it('requires explicit production send opt-in', () => {
-    const blocked = loadEmailRuntimeConfig({
-      FORWARD_EMAIL_TOKEN: 'secret',
-      NODE_ENV: 'production',
-    });
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    };
+    let blocked;
+    try {
+      blocked = loadEmailRuntimeConfig({
+        FORWARD_EMAIL_TOKEN: 'secret',
+        NODE_ENV: 'production',
+      });
+    } finally {
+      console.warn = originalWarn;
+    }
     assert.equal(blocked.provider, 'development');
+    assert.match(warnings.join('\n'), /email\.provider\.downgraded/);
 
     const allowed = loadEmailRuntimeConfig({
       FORWARD_EMAIL_TOKEN: 'secret',
@@ -40,11 +58,22 @@ describe('loadEmailRuntimeConfig', () => {
   });
 
   it('requires production send opt-in even when EMAIL_PROVIDER=forward-email', () => {
-    const blocked = loadEmailRuntimeConfig({
-      EMAIL_PROVIDER: 'forward-email',
-      FORWARD_EMAIL_TOKEN: 'secret',
-    });
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    };
+    let blocked;
+    try {
+      blocked = loadEmailRuntimeConfig({
+        EMAIL_PROVIDER: 'forward-email',
+        FORWARD_EMAIL_TOKEN: 'secret',
+      });
+    } finally {
+      console.warn = originalWarn;
+    }
     assert.equal(blocked.provider, 'development');
+    assert.match(warnings.join('\n'), /EMAIL_ALLOW_PRODUCTION_SEND/);
 
     const allowed = loadEmailRuntimeConfig({
       EMAIL_PROVIDER: 'forward-email',
@@ -201,6 +230,35 @@ describe('ForwardEmailProvider', () => {
     assert.equal(attempts, 1);
   });
 
+  it('retries local timeouts then fails as transient', async () => {
+    let attempts = 0;
+    const provider = new ForwardEmailProvider({
+      apiToken: 'test-token',
+      baseUrl: 'https://api.example.test',
+      maxRetries: 1,
+      fetchImpl: async () => {
+        attempts += 1;
+        const error = new Error('The operation was aborted');
+        error.name = 'AbortError';
+        throw error;
+      },
+    });
+    await assert.rejects(
+      () =>
+        provider.send({
+          to: 'hello@singletonsd.com',
+          from: 'noreply@mail.plattform-kit.poc.singletonsd.com',
+          subject: 'Hi',
+          text: 'x',
+        }),
+      (error: unknown) =>
+        error instanceof EmailProviderError &&
+        error.kind === 'transient' &&
+        error.retryable === true,
+    );
+    assert.equal(attempts, 2);
+  });
+
   it('honours cancellation', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -240,6 +298,28 @@ describe('DevelopmentEmailProvider', () => {
     assert.equal(provider.sent.length, 1);
     assert.equal(provider.sent[0]?.replyTo, 'customer@example.com');
     assert.match(String(result.captured?.from), /Plattform Kit/);
+  });
+
+  it('throws EmailProviderError on abort', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const provider = new DevelopmentEmailProvider({ logMetadata: false });
+    await assert.rejects(
+      () =>
+        provider.send(
+          {
+            to: 'hello@singletonsd.com',
+            from: 'noreply@mail.plattform-kit.poc.singletonsd.com',
+            subject: 'Hi',
+            text: 'x',
+          },
+          controller.signal,
+        ),
+      (error: unknown) =>
+        error instanceof EmailProviderError &&
+        error.kind === 'cancelled' &&
+        error.provider === 'development',
+    );
   });
 });
 

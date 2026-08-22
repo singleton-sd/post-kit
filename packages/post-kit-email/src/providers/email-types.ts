@@ -68,7 +68,7 @@ export class EmailProviderError extends Error {
 export function formatFromHeader(from: string, fromName?: string): string {
   const address = sanitizeHeaderValue(from);
   if (!fromName?.trim()) return address;
-  const name = sanitizeHeaderValue(fromName).replace(/"/g, '');
+  const name = sanitizeHeaderValue(fromName).replace(/\\/g, '\\\\').replace(/"/g, '');
   return `"${name}" <${address}>`;
 }
 
@@ -76,20 +76,24 @@ export function sanitizeHeaderValue(value: string): string {
   return value.replace(/[\r\n\0]/g, '').trim();
 }
 
-export function assertSafeEmailHeader(value: string, field: string): string {
+export function assertSafeEmailHeader(
+  value: string,
+  field: string,
+  provider: EmailProviderName,
+): string {
   const cleaned = sanitizeHeaderValue(value);
   if (!cleaned) {
     throw new EmailProviderError({
       message: `${field} is required`,
       kind: 'validation',
-      provider: 'forward-email',
+      provider,
     });
   }
   if (/[\r\n]/.test(value)) {
     throw new EmailProviderError({
       message: `${field} contains invalid control characters`,
       kind: 'validation',
-      provider: 'forward-email',
+      provider,
     });
   }
   return cleaned;

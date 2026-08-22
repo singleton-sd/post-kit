@@ -61,11 +61,14 @@ pnpm --filter @singleton-sd/post-kit-email provision -- --skip-dns --skip-verify
 ```
 
 Flags: `--config`, `--domain`, `--dry-run`, `--skip-dns`, `--skip-verify`,
-`--force-dmarc`, `--hosted-zone-id`.
+`--force-dmarc`, `--hosted-zone-id`. Flag values that are missing or start
+with `--` are rejected.
 
-Dry-run prints the planned Forward Email + Route53 UPSERT batch and does not
-mutate. Verify-records / verify-smtp retry a few times; still-pending DNS
-exits 0 with a clear message.
+Dry-run does not mutate. If the Forward Email domain already exists, dry-run
+prints the planned alias work and the Route53 UPSERT batch. If the domain is
+missing, dry-run prints the domain-creation intent and skips DNS/alias
+planning (those need the API domain payload). Verify-records / verify-smtp
+retry a few times; still-pending DNS exits 0 with a clear message.
 
 Do not log `FORWARD_EMAIL_TOKEN` or Authorization headers.
 

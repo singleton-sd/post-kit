@@ -9,7 +9,7 @@ export type ContactSubject = (typeof CONTACT_SUBJECTS)[number];
 export interface ContactInquiryInput {
   name: string;
   email: string;
-  subject: string;
+  subject: ContactSubject;
   message: string;
 }
 
@@ -81,7 +81,7 @@ export function buildContactEmailRequest(
     correlationId: string;
   },
 ): EmailSendRequest {
-  const subjectLabel = SUBJECT_LABELS[dto.subject as ContactSubject];
+  const subjectLabel = SUBJECT_LABELS[dto.subject] ?? SUBJECT_LABELS.general;
   const text = [
     `New marketing contact inquiry (${subjectLabel})`,
     '',

@@ -4,6 +4,7 @@ import {
   buildContactEmailRequest,
   sendContactInquiryEmail,
   validateContactInquiry,
+  type ContactInquiryInput,
 } from './contact-email';
 import { DevelopmentEmailProvider } from '../providers/development-email.provider';
 
@@ -42,7 +43,7 @@ describe('validateContactInquiry', () => {
 describe('buildContactEmailRequest / sendContactInquiryEmail', () => {
   it('keeps noreply as From and customer as Reply-To', async () => {
     const provider = new DevelopmentEmailProvider({ logMetadata: false });
-    const dto = {
+    const dto: ContactInquiryInput = {
       name: 'Jane Doe',
       email: 'jane@acme.com',
       subject: 'sales',
@@ -73,7 +74,7 @@ describe('buildContactEmailRequest / sendContactInquiryEmail', () => {
 
   it('uses tenant email settings overrides when provided', async () => {
     const provider = new DevelopmentEmailProvider({ logMetadata: false });
-    const dto = {
+    const dto: ContactInquiryInput = {
       name: 'Jane Doe',
       email: 'jane@acme.com',
       subject: 'support',

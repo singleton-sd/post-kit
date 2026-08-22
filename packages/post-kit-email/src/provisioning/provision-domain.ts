@@ -1,8 +1,8 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { ForwardEmailManagementClient, getRequiredDnsRecords } from './forward-email-management';
 import type { EmailDomainConfig } from './email-domains-config';
-import { fqdn, planRoute53Changes } from './route53-plan';
-import { applyChanges, listRecords, lookupHostedZoneId } from './route53-aws';
+import { fqdn, planRoute53Changes, unquoteTxt } from './route53-plan';
+import { applyChanges, listRecords, resolveHostedZoneId } from './route53-aws';
 
 export interface ProvisionOptions {
   dryRun?: boolean;
@@ -39,19 +39,30 @@ export async function provisionDomain(
   }
 
   if (!options.skipDns) {
-    const zoneId = config.hostedZoneId || lookupHostedZoneId(config.zoneDomain);
+    const zoneId = resolveHostedZoneId(config.zoneDomain, config.hostedZoneId);
     console.log(`Using hosted zone ${zoneId} (${config.zoneDomain})`);
-    const required = getRequiredDnsRecords({
+    const recordOptions = {
       domain: config.domain,
       zoneDomain: config.zoneDomain,
       verificationToken: token.replace(/^forward-email-site-verification=/, ''),
       smtpDnsRecords: ensured.domain.smtpDnsRecords,
-    });
+    };
     const names = [
       config.domain,
-      ...required.map((record) => fqdn(record.name, config.zoneDomain)),
+      ...getRequiredDnsRecords(recordOptions).map((record) => fqdn(record.name, config.zoneDomain)),
     ];
     const existingSets = listRecords(zoneId, names);
+    const existingSpf = existingSets
+      .filter(
+        (set) =>
+          set.type === 'TXT' &&
+          set.name.replace(/\.$/, '').toLowerCase() ===
+            config.domain.replace(/\.$/, '').toLowerCase(),
+      )
+      .flatMap((set) => set.values)
+      .map(unquoteTxt)
+      .find((value) => value.toLowerCase().startsWith('v=spf1'));
+    const required = getRequiredDnsRecords({ ...recordOptions, existingSpf });
     const plan = planRoute53Changes({
       domain: config.domain,
       zoneDomain: config.zoneDomain,

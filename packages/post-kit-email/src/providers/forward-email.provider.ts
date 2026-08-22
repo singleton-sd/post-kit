@@ -41,11 +41,15 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
       return;
     }
-    const timer = setTimeout(resolve, ms);
+    let timer: ReturnType<typeof setTimeout>;
     const onAbort = () => {
       clearTimeout(timer);
       reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
     };
+    timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
@@ -94,11 +98,13 @@ export class ForwardEmailProvider implements EmailProvider {
     }
 
     const toList = (Array.isArray(request.to) ? request.to : [request.to]).map((v) =>
-      assertSafeEmailHeader(v, 'to'),
+      assertSafeEmailHeader(v, 'to', this.name),
     );
-    const from = assertSafeEmailHeader(request.from, 'from');
-    const subject = assertSafeEmailHeader(request.subject, 'subject');
-    const replyTo = request.replyTo ? assertSafeEmailHeader(request.replyTo, 'replyTo') : undefined;
+    const from = assertSafeEmailHeader(request.from, 'from', this.name);
+    const subject = assertSafeEmailHeader(request.subject, 'subject', this.name);
+    const replyTo = request.replyTo
+      ? assertSafeEmailHeader(request.replyTo, 'replyTo', this.name)
+      : undefined;
     const fromHeader = formatFromHeader(from, request.fromName);
 
     const body = new URLSearchParams();
@@ -199,15 +205,25 @@ export class ForwardEmailProvider implements EmailProvider {
         if (error instanceof EmailProviderError) {
           if (!error.retryable || attempt >= this.maxRetries) throw error;
           lastError = error;
-        } else if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
+        } else if (signal?.aborted) {
           throw new EmailProviderError({
-            message: 'Forward Email send cancelled or timed out',
-            kind: signal?.aborted ? 'cancelled' : 'transient',
+            message: 'Forward Email send cancelled',
+            kind: 'cancelled',
             provider: this.name,
             correlationId: request.correlationId,
-            retryable: !signal?.aborted,
+            retryable: false,
             cause: error,
           });
+        } else if (error instanceof Error && error.name === 'AbortError') {
+          lastError = new EmailProviderError({
+            message: 'Forward Email send timed out',
+            kind: 'transient',
+            provider: this.name,
+            correlationId: request.correlationId,
+            retryable: true,
+            cause: error,
+          });
+          if (attempt >= this.maxRetries) throw lastError;
         } else {
           lastError = new EmailProviderError({
             message: 'Forward Email send transport failure',

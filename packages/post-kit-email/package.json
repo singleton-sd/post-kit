@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": false,
   "description": "Provider-agnostic transactional email (Forward Email) for PostKit",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "publishConfig": {
     "access": "public"
   },
@@ -20,7 +20,8 @@
   },
   "files": [
     "dist",
-    "config"
+    "config",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -7,7 +7,11 @@ function parseArgs(argv: string[]) {
   const value = (name: string): string | undefined => {
     const index = argv.indexOf(name);
     if (index === -1) return undefined;
-    return argv[index + 1];
+    const next = argv[index + 1];
+    if (next === undefined || next.startsWith('--')) {
+      throw new Error(`Missing value for ${name}`);
+    }
+    return next;
   };
   const configPath =
     value('--config') ?? path.resolve(__dirname, '../../config/email-domains.json');

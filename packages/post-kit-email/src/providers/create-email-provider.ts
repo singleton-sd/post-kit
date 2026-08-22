@@ -19,17 +19,39 @@ function isProductionSendAllowed(env: NodeJS.ProcessEnv): boolean {
   return env.EMAIL_ALLOW_PRODUCTION_SEND === 'true';
 }
 
+function warnProductionSendDowngrade(requested: string): void {
+  console.warn(
+    JSON.stringify({
+      msg: 'email.provider.downgraded',
+      requested,
+      provider: 'development',
+      reason:
+        'EMAIL_ALLOW_PRODUCTION_SEND is not true; mail is captured in memory and not delivered',
+    }),
+  );
+}
+
 export function loadEmailRuntimeConfig(env: NodeJS.ProcessEnv = process.env): EmailRuntimeConfig {
   const explicit = (env.EMAIL_PROVIDER ?? '').trim().toLowerCase();
   let provider: EmailProviderName;
   if (explicit === 'forward-email' || explicit === 'forwardemail') {
-    provider = isProductionSendAllowed(env) ? 'forward-email' : 'development';
+    if (isProductionSendAllowed(env)) {
+      provider = 'forward-email';
+    } else {
+      warnProductionSendDowngrade('forward-email');
+      provider = 'development';
+    }
   } else if (explicit === 'development' || explicit === 'dev') {
     provider = 'development';
   } else if (env.NODE_ENV === 'production') {
-    // Production must opt into Forward Email explicitly via EMAIL_PROVIDER or
-    // by having a token *and* not running a PR preview marker.
-    provider = isProductionSendAllowed(env) ? 'forward-email' : 'development';
+    // Production still requires EMAIL_ALLOW_PRODUCTION_SEND=true; otherwise
+    // keep the development sink so contact mail is not sent live by accident.
+    if (isProductionSendAllowed(env)) {
+      provider = 'forward-email';
+    } else {
+      warnProductionSendDowngrade('forward-email');
+      provider = 'development';
+    }
   } else {
     provider = 'development';
   }

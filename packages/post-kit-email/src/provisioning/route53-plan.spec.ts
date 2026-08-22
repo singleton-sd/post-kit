@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { getRequiredDnsRecords } from './forward-email-management';
-import { planRoute53Changes } from './route53-plan';
+import { formatTxt, planRoute53Changes, unquoteTxt } from './route53-plan';
 
 const records = getRequiredDnsRecords({
   domain: 'mail.example.com',
   zoneDomain: 'example.com',
   verificationToken: 'tok',
+  existingSpf: 'v=spf1 include:_spf.google.com -all',
   smtpDnsRecords: {
     dkim: { name: 'fe._domainkey.mail.example.com', value: 'v=DKIM1; p=AAA' },
     return_path: { name: 'fe-bounces.mail.example.com', value: 'forwardemail.net' },
@@ -31,6 +32,7 @@ describe('planRoute53Changes', () => {
     assert.equal(plan.apexCnameConflict, false);
     const apexTxt = plan.changes.find((c) => c.purpose === 'apex-txt');
     assert.ok(apexTxt?.values.some((v) => v.includes('unrelated=keep')));
+    assert.ok(apexTxt?.values.some((v) => v.includes('include:_spf.google.com')));
     assert.ok(apexTxt?.values.some((v) => v.includes('include:spf.forwardemail.net')));
     assert.ok(apexTxt?.values.some((v) => v.includes('forward-email-site-verification=tok')));
     assert.ok(plan.changes.some((c) => c.type === 'MX' && c.values.length === 2));
@@ -86,5 +88,28 @@ describe('planRoute53Changes', () => {
       forceDmarc: true,
     });
     assert.ok(forced.changes.some((c) => c.purpose === 'dmarc'));
+  });
+
+  it('skips empty apex TXT record sets', () => {
+    const plan = planRoute53Changes({
+      domain: 'mail.example.com',
+      zoneDomain: 'example.com',
+      records: [],
+      existing: [],
+    });
+    assert.equal(
+      plan.changes.some((c) => c.purpose === 'apex-txt'),
+      false,
+    );
+  });
+
+  it('splits TXT values longer than 255 characters', () => {
+    const long = `v=DKIM1; p=${'A'.repeat(300)}`;
+    const formatted = formatTxt(long);
+    assert.equal(formatted.startsWith('"'), true);
+    assert.ok(formatted.includes('" "'));
+    assert.ok([...formatted.matchAll(/"([^"]*)"/g)].every((chunk) => chunk[1].length <= 255));
+    assert.equal(unquoteTxt(formatted), long);
+    assert.equal(unquoteTxt('"part1" "part2"'), 'part1part2');
   });
 });

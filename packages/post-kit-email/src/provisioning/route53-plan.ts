@@ -40,10 +40,33 @@ export function fqdn(relative: string, zoneDomain: string): string {
   return `${cleaned}.${zoneDomain}`;
 }
 
-export function formatTxt(value: string): string {
+const TXT_CHUNK_LIMIT = 255;
+
+export function unquoteTxt(value: string): string {
   const trimmed = value.trim();
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) return trimmed;
-  return `"${trimmed}"`;
+  const chunks: string[] = [];
+  const quoted = /"((?:\\.|[^"\\])*)"/g;
+  let match = quoted.exec(trimmed);
+  if (!match) return trimmed;
+  while (match) {
+    chunks.push(match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+    match = quoted.exec(trimmed);
+  }
+  return chunks.join('');
+}
+
+export function formatTxt(value: string): string {
+  const raw = unquoteTxt(value);
+  if (raw.length === 0) return '""';
+  const chunks: string[] = [];
+  for (let i = 0; i < raw.length; i += TXT_CHUNK_LIMIT) {
+    const piece = raw
+      .slice(i, i + TXT_CHUNK_LIMIT)
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"');
+    chunks.push(`"${piece}"`);
+  }
+  return chunks.join(' ');
 }
 
 export function formatMx(priority: number, host: string): string {
@@ -90,14 +113,16 @@ export function planRoute53Changes(input: PlanRoute53Input): Route53Plan {
       ...(spf ? [spf.value] : []),
       ...(verification ? [verification.value] : []),
     ];
-    changes.push({
-      action: 'UPSERT',
-      name: apex,
-      type: 'TXT',
-      ttl,
-      values: desiredTxt.map(formatTxt),
-      purpose: 'apex-txt',
-    });
+    if (desiredTxt.length > 0) {
+      changes.push({
+        action: 'UPSERT',
+        name: apex,
+        type: 'TXT',
+        ttl,
+        values: desiredTxt.map(formatTxt),
+        purpose: 'apex-txt',
+      });
+    }
 
     if (mx.length > 0) {
       changes.push({
@@ -166,12 +191,4 @@ function relativeName(domain: string, zoneDomain: string): string {
 
 function normalizeName(name: string): string {
   return name.replace(/\.$/, '').toLowerCase();
-}
-
-function unquoteTxt(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
 }

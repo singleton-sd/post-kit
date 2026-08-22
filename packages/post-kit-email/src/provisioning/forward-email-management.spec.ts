@@ -54,6 +54,16 @@ describe('getRequiredDnsRecords', () => {
     assert.ok(records.some((r) => r.purpose === 'dmarc'));
     assert.equal(records.filter((r) => r.purpose === 'mx').length, 2);
   });
+
+  it('allows an apex sending domain', () => {
+    const records = getRequiredDnsRecords({
+      domain: 'example.com',
+      zoneDomain: 'example.com',
+      verificationToken: 'apex',
+    });
+    assert.ok(records.some((r) => r.name === '@' && r.purpose === 'verification'));
+    assert.ok(records.some((r) => r.name === '@' && r.purpose === 'spf'));
+  });
 });
 
 describe('ForwardEmailManagementClient idempotency', () => {
@@ -120,5 +130,37 @@ describe('ForwardEmailManagementClient idempotency', () => {
     assert.equal(created.created, true);
     const again = await client.ensureAlias('example.com', 'noreply', ['hello@singletonsd.com']);
     assert.equal(again.created, false);
+  });
+
+  it('aggregates paginated alias lists', async () => {
+    const urls: string[] = [];
+    const client = new ForwardEmailManagementClient({
+      apiToken: 'token',
+      baseUrl: 'https://api.example.test',
+      fetchImpl: async (input) => {
+        const url = String(input);
+        urls.push(url);
+        if (url.includes('page=1')) {
+          return new Response(
+            JSON.stringify([{ id: 'a1', name: 'one', recipients: ['a@example.com'] }]),
+            { status: 200, headers: { 'X-Page-Count': '2', 'X-Page-Current': '1' } },
+          );
+        }
+        if (url.includes('page=2')) {
+          return new Response(
+            JSON.stringify([{ id: 'a2', name: 'noreply', recipients: ['hello@singletonsd.com'] }]),
+            { status: 200, headers: { 'X-Page-Count': '2', 'X-Page-Current': '2' } },
+          );
+        }
+        return new Response('unexpected', { status: 500 });
+      },
+    });
+    const aliases = await client.listAliases('example.com');
+    assert.deepEqual(
+      aliases.map((a) => a.name),
+      ['one', 'noreply'],
+    );
+    assert.ok(urls.every((url) => url.includes('paginate=true')));
+    assert.equal(urls.length, 2);
   });
 });

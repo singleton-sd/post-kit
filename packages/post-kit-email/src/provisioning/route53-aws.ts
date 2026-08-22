@@ -14,6 +14,52 @@ export function awsCli(args: string[]): string {
   return result.stdout;
 }
 
+export interface Route53HostedZoneInfo {
+  Id?: string;
+  Name?: string;
+  Config?: { PrivateZone?: boolean };
+}
+
+function canonicalZoneName(name: string): string {
+  return `${name.replace(/\.$/, '')}.`.toLowerCase();
+}
+
+export function selectPublicHostedZoneId(
+  zones: Route53HostedZoneInfo[],
+  zoneDomain: string,
+): string {
+  const want = canonicalZoneName(zoneDomain);
+  const matches = zones.filter(
+    (item) => canonicalZoneName(item.Name ?? '') === want && item.Config?.PrivateZone !== true,
+  );
+  if (matches.length === 0) {
+    throw new Error(`No public Route53 hosted zone found for ${zoneDomain}`);
+  }
+  if (matches.length > 1) {
+    throw new Error(`Multiple public Route53 hosted zones found for ${zoneDomain}`);
+  }
+  const id = matches[0]?.Id;
+  if (!id) {
+    throw new Error(`No public Route53 hosted zone found for ${zoneDomain}`);
+  }
+  return id.replace(/^\/hostedzone\//, '');
+}
+
+export function assertHostedZoneMatchesDomain(
+  zone: Route53HostedZoneInfo,
+  zoneDomain: string,
+  zoneId: string,
+): void {
+  if (zone.Config?.PrivateZone === true) {
+    throw new Error(`Hosted zone ${zoneId} is private; refusing to provision public email DNS`);
+  }
+  if (canonicalZoneName(zone.Name ?? '') !== canonicalZoneName(zoneDomain)) {
+    throw new Error(
+      `Hosted zone ${zoneId} name ${zone.Name ?? '(unknown)'} does not match ${zoneDomain}`,
+    );
+  }
+}
+
 export function lookupHostedZoneId(zoneDomain: string): string {
   const raw = awsCli([
     'route53',
@@ -23,15 +69,19 @@ export function lookupHostedZoneId(zoneDomain: string): string {
     '--output',
     'json',
   ]);
-  const parsed = JSON.parse(raw) as {
-    HostedZones?: { Id?: string; Name?: string }[];
-  };
-  const want = `${zoneDomain}.`.toLowerCase();
-  const zone = (parsed.HostedZones ?? []).find((item) => (item.Name ?? '').toLowerCase() === want);
-  if (!zone?.Id) {
-    throw new Error(`No Route53 hosted zone found for ${zoneDomain}`);
+  const parsed = JSON.parse(raw) as { HostedZones?: Route53HostedZoneInfo[] };
+  return selectPublicHostedZoneId(parsed.HostedZones ?? [], zoneDomain);
+}
+
+export function resolveHostedZoneId(zoneDomain: string, hostedZoneId?: string): string {
+  if (!hostedZoneId) return lookupHostedZoneId(zoneDomain);
+  const raw = awsCli(['route53', 'get-hosted-zone', '--id', hostedZoneId, '--output', 'json']);
+  const parsed = JSON.parse(raw) as { HostedZone?: Route53HostedZoneInfo };
+  if (!parsed.HostedZone) {
+    throw new Error(`No Route53 hosted zone found for id ${hostedZoneId}`);
   }
-  return zone.Id.replace(/^\/hostedzone\//, '');
+  assertHostedZoneMatchesDomain(parsed.HostedZone, zoneDomain, hostedZoneId);
+  return hostedZoneId.replace(/^\/hostedzone\//, '');
 }
 
 export function listRecords(zoneId: string, names: string[]): Route53RecordSet[] {

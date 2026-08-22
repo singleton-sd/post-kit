@@ -82,7 +82,7 @@ export class ForwardEmailManagementClient {
     method: string,
     path: string,
     body?: URLSearchParams,
-  ): Promise<{ status: number; data: T; rawText: string }> {
+  ): Promise<{ status: number; data: T; rawText: string; headers: Headers }> {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
       headers: {
@@ -100,22 +100,51 @@ export class ForwardEmailManagementClient {
         data = { message: rawText } as T;
       }
     }
-    return { status: response.status, data, rawText };
+    return { status: response.status, data, rawText, headers: response.headers };
+  }
+
+  private async listPages<T>(
+    path: string,
+    mapRow: (row: unknown) => T,
+    errorLabel: string,
+  ): Promise<T[]> {
+    const results: T[] = [];
+    const limit = 50;
+    const joiner = path.includes('?') ? '&' : '?';
+    let page = 1;
+    for (;;) {
+      const { status, data, rawText, headers } = await this.request<unknown>(
+        'GET',
+        `${path}${joiner}paginate=true&limit=${limit}&page=${page}`,
+      );
+      if (status >= 400) {
+        throw new Error(`Forward Email ${errorLabel} failed (${status})`);
+      }
+      if (!Array.isArray(data)) {
+        if (rawText) {
+          throw new Error(`Forward Email ${errorLabel} returned unexpected payload`);
+        }
+        break;
+      }
+      results.push(...data.map(mapRow));
+      const pageCountHeader = headers.get('x-page-count');
+      const pageCount = pageCountHeader ? Number(pageCountHeader) : Number.NaN;
+      if (Number.isFinite(pageCount) && page >= pageCount) break;
+      if (!Number.isFinite(pageCount) && data.length < limit) break;
+      page += 1;
+      if (page > 100) {
+        throw new Error(`Forward Email ${errorLabel} exceeded pagination limit`);
+      }
+    }
+    return results;
   }
 
   async listDomains(): Promise<ForwardEmailDomainSummary[]> {
-    const { status, data, rawText } = await this.request<unknown>(
-      'GET',
-      '/v1/domains?paginate=true&limit=50',
+    return this.listPages(
+      '/v1/domains',
+      (row) => mapDomain(row as Record<string, unknown>),
+      'list domains',
     );
-    if (status >= 400) {
-      throw new Error(`Forward Email list domains failed (${status})`);
-    }
-    const rows = Array.isArray(data) ? data : [];
-    if (!Array.isArray(data) && rawText) {
-      throw new Error('Forward Email list domains returned unexpected payload');
-    }
-    return rows.map((row) => mapDomain(row as Record<string, unknown>));
   }
 
   async getDomain(domain: string): Promise<ForwardEmailDomainSummary | null> {
@@ -158,27 +187,23 @@ export class ForwardEmailManagementClient {
   }
 
   async listAliases(domain: string): Promise<ForwardEmailAliasSummary[]> {
-    const { status, data } = await this.request<unknown>(
-      'GET',
-      `/v1/domains/${encodeURIComponent(domain)}/aliases?pagination=true&limit=50`,
+    return this.listPages(
+      `/v1/domains/${encodeURIComponent(domain)}/aliases`,
+      (row) => {
+        const r = row as Record<string, unknown>;
+        const recipients = Array.isArray(r.recipients)
+          ? r.recipients.map(String)
+          : typeof r.recipients === 'string'
+            ? [r.recipients]
+            : [];
+        return {
+          id: String(r.id ?? ''),
+          name: String(r.name ?? ''),
+          recipients,
+        };
+      },
+      'list aliases',
     );
-    if (status >= 400) {
-      throw new Error(`Forward Email list aliases failed (${status})`);
-    }
-    const rows = Array.isArray(data) ? data : [];
-    return rows.map((row) => {
-      const r = row as Record<string, unknown>;
-      const recipients = Array.isArray(r.recipients)
-        ? r.recipients.map(String)
-        : typeof r.recipients === 'string'
-          ? [r.recipients]
-          : [];
-      return {
-        id: String(r.id ?? ''),
-        name: String(r.name ?? ''),
-        recipients,
-      };
-    });
   }
 
   async ensureAlias(
@@ -284,10 +309,14 @@ export function getRequiredDnsRecords(options: {
   existingSpf?: string | null;
 }): ForwardEmailDnsRecord[] {
   const { domain, zoneDomain, verificationToken, smtpDnsRecords, existingSpf } = options;
-  if (!domain.endsWith(`.${zoneDomain}`)) {
+  let relative: string;
+  if (domain === zoneDomain) {
+    relative = '@';
+  } else if (domain.endsWith(`.${zoneDomain}`)) {
+    relative = domain.slice(0, -(zoneDomain.length + 1));
+  } else {
     throw new Error(`Domain ${domain} is not under zone ${zoneDomain}`);
   }
-  const relative = domain.slice(0, -(zoneDomain.length + 1));
 
   const records: ForwardEmailDnsRecord[] = [
     {

@@ -1,5 +1,5 @@
 import type { EmailProvider, EmailSendRequest, EmailSendResult } from './email-types';
-import { assertSafeEmailHeader, formatFromHeader } from './email-types';
+import { assertSafeEmailHeader, EmailProviderError, formatFromHeader } from './email-types';
 
 export interface DevelopmentEmailProviderOptions {
   /** When true, logs metadata only (never full message bodies). Default true. */
@@ -28,14 +28,20 @@ export class DevelopmentEmailProvider implements EmailProvider {
 
   async send(request: EmailSendRequest, signal?: AbortSignal): Promise<EmailSendResult> {
     if (signal?.aborted) {
-      throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+      throw new EmailProviderError({
+        message: 'Development email send cancelled',
+        kind: 'cancelled',
+        provider: this.name,
+        retryable: false,
+        cause: signal.reason,
+      });
     }
 
     const to = Array.isArray(request.to) ? request.to : [request.to];
-    to.forEach((v) => assertSafeEmailHeader(v, 'to'));
-    assertSafeEmailHeader(request.from, 'from');
-    assertSafeEmailHeader(request.subject, 'subject');
-    if (request.replyTo) assertSafeEmailHeader(request.replyTo, 'replyTo');
+    to.forEach((v) => assertSafeEmailHeader(v, 'to', this.name));
+    assertSafeEmailHeader(request.from, 'from', this.name);
+    assertSafeEmailHeader(request.subject, 'subject', this.name);
+    if (request.replyTo) assertSafeEmailHeader(request.replyTo, 'replyTo', this.name);
 
     const captured: EmailSendRequest = {
       ...request,
