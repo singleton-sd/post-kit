@@ -51,16 +51,18 @@ anywhere on any OS. Do not create `post-kit-wt-*` siblings next to other project
 
 1. Open the repo → **Settings** → **Rules** → **Rulesets**.
 2. **Protect `main`:** as above (CI + human merge; no required approvals).
-3. **Optional branch-name pattern:** New ruleset with **separate** targets
-   `refs/heads/feat/*`, `refs/heads/fix/*`, `refs/heads/docs/*`,
-   `refs/heads/chore/*`, `refs/heads/refactor/*`, and `refs/heads/test/*`
-   (GitHub ruleset fnmatch does not expand `{feat,fix,...}`). Those targets
-   only protect matching branches; they do **not** reject other names.
-   This is a limited safety net, not all-branch enforcement, and it
-   constrains **which branches exist**, not pull-request source names.
-   Do **not** add a GitHub Actions workflow just to validate
-   `github.head_ref` — agents follow `AGENTS.md`; humans merge. A ruleset
-   is not a required check.
+3. **Optional branch-name restriction (all branches):** New ruleset whose
+   target is **All branches**, not `refs/heads/feat/*` (that include list
+   only applies rules to matching names; it never rejects `foo/bar`).
+   Enable **Restrict branch names** → **Must match a given regex pattern**:
+
+   ```text
+   ^(main|(feat|fix|docs|chore|refactor|test)/[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*)$
+   ```
+
+   That permits `main` and `<type>/<issue-number>-<kebab-title>` and blocks
+   other names at create/rename. Do **not** add a GitHub Actions workflow
+   to validate `github.head_ref` — agents follow `AGENTS.md`; humans merge.
 4. Ensure PRs into `main` come from those branches only (agents never merge; humans merge).
 
 ## 2. GitHub Issues
