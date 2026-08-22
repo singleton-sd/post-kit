@@ -40,4 +40,4 @@ docs/
 | [`github-project.md`](./github-project.md) | PostKit Engineering project fields, views, labels |
 | [`pr-pipelines.md`](./pr-pipelines.md) | PR CI, release, secrets policy |
 | [`architecture/overview.md`](./architecture/overview.md) | Phase-1 architecture: Functions API, EmailProvider, consumers |
-| [`email-forward-email.md`](./email-forward-email.md) | Forward Email provider, DNS, `pnpm email:provision` |
+| [`email-forward-email.md`](./email-forward-email.md) | Forward Email provider, DNS, `pnpm email:provision`, Function contact |

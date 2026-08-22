@@ -17,7 +17,7 @@ technical knowledge. For the full list of docs, see
 Consumer app (trusted server)
         |
         v
-PostKit Functions API (apps/api)     -- later epic
+PostKit Functions API (apps/api)
         |
         v
 @singleton-sd/post-kit-email
@@ -30,7 +30,7 @@ Forward Email  →  per-tenant mail domains
 
 | Piece | Role | Status |
 | --- | --- | --- |
-| **Functions API** (`apps/api`) | Contact/send HTTP surface on Azure Functions Consumption | Planned |
+| **Functions API** (`apps/api`) | Contact/send HTTP surface on Azure Functions Consumption | `ssd-postkit-api-prod-ae` |
 | **EmailProvider** | Swap development logging vs Forward Email production send | `@singleton-sd/post-kit-email` |
 | **Forward Email** | Production delivery + per-tenant mail domain provisioning | `pnpm email:provision` |
 | **Public npm packages** | `@singleton-sd/post-kit-*` consumed by trusted apps | First package: `post-kit-email` |
@@ -56,12 +56,13 @@ Not in this bootstrap:
 - **Client** — trusted-consumer SDK (`post-kit-client`)
 - **Editor** — EmailBuilder.js wrapper (`post-kit-editor`)
 
-## Deployment (planned)
+## Deployment
 
 | Component | Host | Notes |
 | --- | --- | --- |
 | API | Azure Function App `ssd-postkit-api-prod-ae` | Plan `ssd-postkit-plan-prod-ae` (Y1 Consumption) |
 | Storage | `ssdpostkitstprodae` | Function App storage |
+| App configuration | `ssd-postkit-appcs-prod-ae` | Free SKU; non-secret settings + KV refs |
 | Secrets | Key Vault `ssd-global-kv-prod-ae` | Subscription `01c0bb8b-3770-4765-979a-cb13ae7e3dd2`, RG `rg-ssd-global` |
 | Packages | npmjs public `@singleton-sd/post-kit-*` | Root workspace is private and not published |
 
