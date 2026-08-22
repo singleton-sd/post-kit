@@ -36,7 +36,7 @@ body:
     attributes:
       label: Acceptance criteria
       description: Checklist of "done when" conditions. An implementer should be able to verify each item without guessing intent.
-      value: |
+      placeholder: |
         - [ ]
         - [ ]
     validations:
@@ -80,7 +80,12 @@ body:
       description: All boxes should be true before this issue is labeled `agent-ready` and moved to the Ready for Agent view.
       options:
         - label: Goal/problem statement is clear
+          required: true
         - label: Scope is sufficient to start work without further business clarification
+          required: true
         - label: Acceptance criteria are explicit
+          required: true
         - label: Relevant constraints are stated
+          required: true
         - label: No unresolved blocking dependency (`Depends on`)
+          required: true

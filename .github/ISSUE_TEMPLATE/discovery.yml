@@ -49,7 +49,7 @@ body:
     attributes:
       label: Definition of done
       description: What does resolving this discovery produce — e.g. "a Feature issue with goal/scope/acceptance criteria filed and linked here", or "a documented decision in this issue".
-      value: |
+      placeholder: |
         - [ ]
     validations:
       required: true

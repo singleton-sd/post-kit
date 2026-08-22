@@ -54,10 +54,13 @@ anywhere on any OS. Do not create `post-kit-wt-*` siblings next to other project
 3. **Optional branch-name pattern:** New ruleset with **separate** targets
    `refs/heads/feat/*`, `refs/heads/fix/*`, `refs/heads/docs/*`,
    `refs/heads/chore/*`, `refs/heads/refactor/*`, and `refs/heads/test/*`
-   (GitHub ruleset fnmatch does not expand `{feat,fix,...}`). This constrains
-   **which branches exist**, not pull-request source names. Do **not** add a
-   GitHub Actions workflow just to validate `github.head_ref` — agents follow
-   `AGENTS.md`; humans merge. A ruleset is a safety net, not a required check.
+   (GitHub ruleset fnmatch does not expand `{feat,fix,...}`). Those targets
+   only protect matching branches; they do **not** reject other names.
+   This is a limited safety net, not all-branch enforcement, and it
+   constrains **which branches exist**, not pull-request source names.
+   Do **not** add a GitHub Actions workflow just to validate
+   `github.head_ref` — agents follow `AGENTS.md`; humans merge. A ruleset
+   is not a required check.
 4. Ensure PRs into `main` come from those branches only (agents never merge; humans merge).
 
 ## 2. GitHub Issues

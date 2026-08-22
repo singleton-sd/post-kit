@@ -55,7 +55,7 @@ body:
     attributes:
       label: Acceptance criteria
       description: What must be true for this bug to be considered fixed?
-      value: |
+      placeholder: |
         - [ ]
         - [ ]
     validations:
@@ -89,6 +89,10 @@ body:
       label: Agent-ready checklist (docs/github-source-of-truth.md, section 4)
       options:
         - label: Reproduction steps are reliable
+          required: true
         - label: Expected vs. actual behavior is unambiguous
+          required: true
         - label: Acceptance criteria are explicit
+          required: true
         - label: No unresolved blocking dependency (`Depends on`)
+          required: true
