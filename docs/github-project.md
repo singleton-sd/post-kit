@@ -10,13 +10,15 @@ wins — this file only adds configuration detail.
 
 ## Current status
 
-<!-- project URL filled after Wave B1 -->
-
-The live organization Project (create/link may happen in parallel with this
-bootstrap) is **PostKit Engineering**. Once created, link it to
-`singleton-sd/post-kit` and enable the built-in `Item added to project`,
-`Item closed`, `Pull request linked to issue`, and `Pull request merged`
-workflows.
+The live organization Project is
+[PostKit Engineering](https://github.com/orgs/singleton-sd/projects/2)
+(project number **2**). It is linked to `singleton-sd/post-kit`. Status
+options are `Backlog`, `Ready for Agent`, `In Progress`, `In Review`, and
+`Done`. Area options are `API`, `Packages`, `Infra/CI`, `Docs`,
+`Cross-cutting`. Enable the built-in `Item added to project`, `Item closed`,
+`Pull request linked to issue`, and `Pull request merged` workflows in the
+Project UI if they are not already on. Views (Backlog / Ready for Agent /
+In Progress / In Review / Roadmap / Done) are configured in the Project UI.
 
 ## Project fields
 
