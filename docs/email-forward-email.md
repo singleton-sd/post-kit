@@ -31,7 +31,7 @@ Trusted consumer / contact form
 | Domain / alias / verify | `ForwardEmailManagementClient` + `pnpm email:provision` |
 | DNS (MX / SPF / DKIM / DMARC / Return-Path) | AWS Route53; credentials from **pc-provision**, not this repo |
 | Secret storage | Azure Key Vault `ssd-global-kv-prod-ae` name **`forwardemail-api-key`** |
-| Runtime Function App | Later epic (`apps/api`); this package is the library only |
+| Runtime Function App | `apps/api` on `ssd-postkit-api-prod-ae`; `CONTACT_EMAIL_PROFILES_BY_HOST` is an app setting |
 
 ## Configuration
 
@@ -43,7 +43,7 @@ Trusted consumer / contact form
 | `EMAIL_ALLOW_PRODUCTION_SEND` | Must be `true` with `EMAIL_PROVIDER=forward-email` |
 | `EMAIL_FROM_ADDRESS` / `EMAIL_FROM_NAME` | Default sender |
 | `CONTACT_INBOX_ADDRESS` | Contact form destination |
-| `CONTACT_EMAIL_PROFILES_BY_HOST` | Optional JSON map of host → sender/inbox |
+| `CONTACT_EMAIL_PROFILES_BY_HOST` | JSON map of host → sender/inbox; set on the Function App (bicep param `contactEmailProfilesByHost`) |
 
 AWS credentials for DNS are **not** stored here. Load them from pc-provision
 Key Vault `ssd-devtools-kv-prod-ae` (`aws-access-key-id` /

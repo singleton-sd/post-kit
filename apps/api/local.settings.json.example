@@ -1,0 +1,17 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "ORIGINS": "*.poc.singletonsd.com,localhost:4321",
+    "EMAIL_PROVIDER": "development",
+    "EMAIL_FROM_ADDRESS": "noreply@mail.plattform-kit.poc.singletonsd.com",
+    "EMAIL_FROM_NAME": "Plattform Kit",
+    "CONTACT_INBOX_ADDRESS": "hello@singletonsd.com",
+    "CONTACT_EMAIL_PROFILES_BY_HOST": "{\"inkads.poc.singletonsd.com\":{\"fromAddress\":\"noreply@mail.inkads.poc.singletonsd.com\",\"fromName\":\"InkAds\",\"contactInboxAddress\":\"inkads-support@singletonsd.com\"},\"plattform-kit.poc.singletonsd.com\":{\"fromAddress\":\"noreply@mail.plattform-kit.poc.singletonsd.com\",\"fromName\":\"Plattform Kit\",\"contactInboxAddress\":\"hello@singletonsd.com\"}}",
+    "FORWARD_EMAIL_TOKEN": "",
+    "FORWARD_EMAIL_BASE_URL": "https://api.forwardemail.net",
+    "EMAIL_ALLOW_PRODUCTION_SEND": "",
+    "CONTACT_RATE_LIMIT_PER_MIN": "5"
+  }
+}

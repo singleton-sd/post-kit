@@ -1,0 +1,24 @@
+{
+  "name": "@singleton-sd/post-kit-api",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "pnpm --filter @singleton-sd/post-kit-email run build && tsc -p tsconfig.json",
+    "lint": "echo \"lint:api — covered by root eslint on staged files\"",
+    "test": "pnpm --filter @singleton-sd/post-kit-email run build && pnpm build && node --import tsx --test src/**/*.spec.ts",
+    "start": "func start"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.6.0",
+    "@singleton-sd/post-kit-email": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

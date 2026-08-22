@@ -1,0 +1,117 @@
+# PostKit Function App — Linux Consumption in rg-ssd-global.
+# Secrets: NEVER in GitHub Secrets. OIDC → Key Vault `forwardemail-api-key`.
+# Required Variables: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
+# If OIDC Variables are missing, deploy steps SKIP (job succeeds).
+name: Deploy API (Function)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'packages/post-kit-email/**'
+      - 'infra/function-app.bicep'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api-production
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: rg-ssd-global
+  AZURE_FUNCTIONAPP_NAME: ssd-postkit-api-prod-ae
+  AZURE_KEY_VAULT_NAME: ssd-global-kv-prod-ae
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    name: Build + Function App
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Test API
+        run: pnpm --filter @singleton-sd/post-kit-api run test
+
+      - name: Check OIDC
+        id: cfg
+        run: |
+          set -euo pipefail
+          if [ -z "${{ vars.AZURE_CLIENT_ID }}" ] || [ -z "${{ vars.AZURE_TENANT_ID }}" ] || [ -z "${{ vars.AZURE_SUBSCRIPTION_ID }}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "OIDC Variables not set — skipping Function App deploy."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Azure login (OIDC)
+        if: steps.cfg.outputs.configured == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Assert KV secret exists
+        if: steps.cfg.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          az keyvault secret show \
+            --vault-name "$AZURE_KEY_VAULT_NAME" \
+            --name forwardemail-api-key \
+            --query name -o tsv >/dev/null
+
+      - name: Deploy Function App infra
+        if: steps.cfg.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/function-app.bicep \
+            --name "postkit-api-${GITHUB_RUN_ID}"
+
+      - name: Stage zip
+        if: steps.cfg.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          pnpm --filter @singleton-sd/post-kit-email run build
+          pnpm --filter @singleton-sd/post-kit-api run build
+          STAGE=$(mktemp -d)
+          cp apps/api/host.json "$STAGE/"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('apps/api/package.json','utf8'));
+            delete pkg.dependencies['@singleton-sd/post-kit-email'];
+            fs.writeFileSync(process.argv[1] + '/package.json', JSON.stringify(pkg, null, 2));
+          " "$STAGE"
+          cp -r apps/api/dist "$STAGE/dist"
+          (cd "$STAGE" && npm install --omit=dev --package-lock=false)
+          mkdir -p "$STAGE/node_modules/@singleton-sd/post-kit-email"
+          cp packages/post-kit-email/package.json "$STAGE/node_modules/@singleton-sd/post-kit-email/"
+          cp -r packages/post-kit-email/dist "$STAGE/node_modules/@singleton-sd/post-kit-email/dist"
+          test -f "$STAGE/node_modules/@singleton-sd/post-kit-email/dist/index.js"
+          (cd "$STAGE" && zip -r "$GITHUB_WORKSPACE/post-kit-api.zip" .)
+
+      - name: Zip deploy Function App
+        if: steps.cfg.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          az functionapp deployment source config-zip \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_FUNCTIONAPP_NAME" \
+            --src post-kit-api.zip
