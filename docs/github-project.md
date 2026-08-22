@@ -129,20 +129,16 @@ on its own:
 | `blocked` | Issue has an unresolved `Depends on:` line ([section 5](./github-source-of-truth.md#5-issue-dependency-semantics-and-parallel-execution)) | When `Depends on` is added, or the referenced issue is still open | When every `Depends on` issue is closed |
 | `needs-requirements` | Goal, scope, or acceptance criteria are not yet resolved — refinement work remains | Applied by default on `Discovery` issues; also usable to flag an under-specified Feature/Bug | Once goal/scope/acceptance criteria are filled in |
 
-`.github/workflows/bootstrap-issue-labels.yml` ensures these three labels
-exist in the repository (idempotent — same `ensure()` pattern already used by
-`.github/workflows/pr-hygiene.yml` for its CI/conflict labels). It does not
-toggle them on any issue: whether an issue clears the agent-ready bar is a
-judgment call for whoever triages it (human or agent), not something CI can
-infer from issue text.
+Create these three labels once with `gh label create` if they are missing.
+There is **no** Actions workflow that bootstraps or toggles them. Whether an
+issue clears the agent-ready bar is a judgment call for whoever triages it
+(human or agent), not something CI infers from issue text.
 
-Hygiene labels (`needs-rebase`, `ci-failed`, `has-feedback`,
-`ready-for-human`) are owned by `.github/workflows/pr-hygiene.yml` — see
-[`docs/pr-pipelines.md`](./pr-pipelines.md). `preview-blocked` is created
-but never set in v1 (no preview environments).
+There are no PR-hygiene labels (`needs-rebase`, `ci-failed`, `has-feedback`,
+`ready-for-human`) in this repository's automation.
 
-These are intentionally the only new issue-lifecycle labels. Everything else
-— issue type, priority, area, status — is a Project field or a native GitHub
+These are intentionally the only issue-lifecycle labels. Everything else —
+issue type, priority, area, status — is a Project field or a native GitHub
 field.
 
 ## Agent-deterministic query/update

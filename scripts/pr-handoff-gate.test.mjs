@@ -14,16 +14,13 @@ assert.deepEqual(parsePaginatedGhApiOutput('[[{"id":1}],[{"id":2}]]'), [{ id: 1 
 assert.deepEqual(parsePaginatedGhApiOutput('[{"id":1}]\n[{"id":2}]'), [{ id: 1 }, { id: 2 }]);
 assert.deepEqual(parsePaginatedGhApiOutput(''), []);
 
-assert.deepEqual(expectedChecks(['apps/api/src/index.ts']), [
-  'conflict-on-pr',
-  'Lint / test / build',
+assert.deepEqual(expectedChecks(['apps/api/src/index.ts']), ['Lint / test / build']);
+assert.deepEqual(expectedChecks(['package.json']), ['Lint / test / build']);
+assert.deepEqual(expectedChecks(['packages/post-kit-email/src/index.ts']), ['Lint / test / build']);
+assert.deepEqual(expectedChecks(['README.md']), ['Lint / test / build']);
+assert.deepEqual(parsePaginatedGhApiOutput('[{"login":"github-actions[bot]"}]'), [
+  { login: 'github-actions[bot]' },
 ]);
-assert.deepEqual(expectedChecks(['package.json']), ['conflict-on-pr', 'Lint / test / build']);
-assert.deepEqual(expectedChecks(['packages/post-kit-email/src/index.ts']), [
-  'conflict-on-pr',
-  'Lint / test / build',
-]);
-assert.deepEqual(expectedChecks(['README.md']), ['conflict-on-pr', 'Lint / test / build']);
 
 const now = Date.now();
 const base = {
@@ -87,11 +84,8 @@ assert.match(blockerAction('check failed: CI (FAILURE)'), /Open the failed check
 const pr101Result = evaluateSnapshot(
   {
     ...base,
-    expected: ['Lint / test / build', 'conflict-on-pr'],
-    checks: [
-      { name: 'Lint / test / build', status: 'IN_PROGRESS', conclusion: '' },
-      { name: 'conflict-on-pr', status: 'COMPLETED', conclusion: 'CANCELLED' },
-    ],
+    expected: ['Lint / test / build'],
+    checks: [{ name: 'Lint / test / build', status: 'IN_PROGRESS', conclusion: '' }],
   },
   now,
   90_000,
@@ -99,7 +93,6 @@ const pr101Result = evaluateSnapshot(
 const report = formatGateReport({ pr: 101, snapshot: base, result: pr101Result });
 assert.match(report, /PR #101 handoff gate/);
 assert.match(report, /checks pending: Lint \/ test \/ build/);
-assert.match(report, /Re-run the cancelled checks/);
 assert.match(report, /What to do/);
 
 const mixedFailures = evaluateSnapshot(

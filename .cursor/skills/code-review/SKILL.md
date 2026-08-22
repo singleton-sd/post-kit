@@ -77,14 +77,14 @@ Example payload:
      inline comments, and one-line verdict. Do **not** paste the full findings
      into chat.
 
-3. Still run PR hygiene checks (`mergeable`, required checks, existing review
-   threads) so the review is grounded in current PR state.
+3. Still check `mergeable`, required checks, and existing review threads so
+   the review is grounded in current PR state.
 
 ## Issue shape (for GitHub comments)
 
 For each finding:
 
-```
+```text
 **[severity]** <what is wrong>
 
 **Suggestion:** <how to fix it>

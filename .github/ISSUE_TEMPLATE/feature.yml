@@ -11,6 +11,10 @@ body:
         section 5 defines the `Depends on` / `Blocks` / `Parent` convention this
         form uses.
 
+        This repository is public. Do not include secrets, credentials, customer-private
+        data, contracts, pricing negotiations, or other commercially sensitive detail
+        in scope, constraints, or technical references.
+
   - type: textarea
     id: goal
     attributes:

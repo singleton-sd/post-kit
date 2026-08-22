@@ -1,13 +1,14 @@
 # PR pipelines
 
-## Path filters
+## Workflows
 
-| Workflow | Triggers when paths change | Checks |
+| Workflow | Triggers | Checks |
 | --- | --- | --- |
-| `ci.yml` | `apps/**`, `packages/**`, `scripts/**`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.prettierrc`, `.prettierignore`, `eslint.config.js`, `.github/workflows/ci.yml` | prettier check, eslint, worktree-path tests, PR automation tests, recursive package test/build |
+| `ci.yml` | every pull request; every push to `main` | prettier check, eslint, worktree-path tests, PR automation tests, recursive package test/build |
 | `release.yml` | push to **`main`** (skipped for `chore: Release` commits) | Path-aware bumps; commit + tags for `@singleton-sd/post-kit-*` packages |
-| `pr-hygiene.yml` | PR events, `main` pushes, `workflow_run` of `CI`, review comments | Labels only (`needs-rebase`, `ci-failed`, `has-feedback`, `ready-for-human`) |
-| `bootstrap-issue-labels.yml` | push of that workflow on `main`, or `workflow_dispatch` | Ensures `agent-ready` / `blocked` / `needs-requirements` exist |
+
+There is **no** `pr-hygiene.yml` or `bootstrap-issue-labels.yml`. Do not add
+label-only GitHub Actions for this repository.
 
 There are **no preview environments in v1**. Do not add SWA/ACA/Chromatic
 preview workflows until a later epic owns them.
@@ -61,37 +62,22 @@ pnpm format
 pnpm lint           # recursive package lint (no-op if empty) + root ESLint
 pnpm test           # worktree-path + PR automation tests, then recursive package test
 pnpm build          # recursive package build (no-op if empty)
-pnpm pr:gate -- --pr <n>
 ```
 
-## PR hygiene (conflicts, CI, feedback)
+## PR readiness (no label pipeline)
 
-Hygiene workflows set **labels only**. They do not post “fix this” comments.
-
-| Label | Meaning | Cleared when | Agent action |
-| --- | --- | --- | --- |
-| `needs-rebase` | Merge conflicts with base (`mergeable_state=dirty`) | Mergeability is known and not `dirty` (never cleared while `unknown`) | `git merge origin/main` → take main's lockfile → `pnpm install` → hand-fix leftovers → push → re-check CI |
-| `ci-failed` | Required CI job failed (`Lint / test / build`) | That job is no longer `FAILURE` | Fix the required CI cause and push |
-| `has-feedback` | Bugbot, Copilot, or human (non-author) comment | PR `synchronize` when no unresolved threads remain | Fetch issue + review comments; address with a threaded reply |
-| `preview-blocked` | Reserved; never set in v1 | — | Ignore |
-| `ready-for-human` | Mergeable + required CI green + no open feedback | Any of `needs-rebase` / `ci-failed` / `has-feedback` is (re-)added | Nothing — applied by `pnpm pr:gate -- --pr <n>` once the PR clears the other three labels |
+A PR is ready for human merge when it is mergeable, `Lint / test / build` is
+green, and there are no unresolved review threads. Poll that with `gh`:
 
 ```bash
-gh pr list --label needs-rebase
-gh pr list --label ci-failed
-gh pr list --label has-feedback
-gh pr list --label ready-for-human
 gh pr view <n> --json mergeable,mergeStateStatus,statusCheckRollup
+gh pr checks <n>
 ```
 
-Triggers: PR opened/synchronize (dirty check + clear `has-feedback` on sync),
-push to `main` (scan open PRs), completed `workflow_run` for `CI` (set/clear
-`ci-failed`), issue/review comments from Bugbot/Copilot/collaborators.
-Usage-limit and `github-actions` comments are ignored.
-
-A PR is ready for human merge only when mergeable, required lint/test/build
-checks are green, and there is no open actionable feedback — signalled by the
-`ready-for-human` label.
+Conflicts: follow the playbook below. Failed CI: fix and push. Review
+comments: reply in-thread after the fix is on the branch. Do not add
+Actions that set `needs-rebase` / `ci-failed` / `has-feedback` /
+`ready-for-human`.
 
 ## Shared hub conflicts (agent playbook)
 
@@ -126,29 +112,10 @@ a human merging the PR closes the linked issue automatically. Do not add
 automation that mirrors GitHub issue/PR state back into a second system
 (source-of-truth policy section 2).
 
-## Enforced PR handoff gate
+## Optional local handoff check
 
-A PR is ready for human review/merge only once it is mergeable, required CI
-is green, and there is no open actionable feedback. The gate applies the
-GitHub-native `ready-for-human` label:
-
-```bash
-pnpm pr:gate -- --pr <pr-number>
-```
-
-(`pnpm pr:gate` runs `scripts/pr-handoff-gate.mjs`.) The gate pins the PR head
-SHA, requires **required** CI (`Lint / test / build`, `conflict-on-pr`) to
-appear and finish successfully, requires a mergeable/non-dirty PR, rejects
-`ci-failed` / `has-feedback` / `needs-rebase`, and rejects unresolved review
-threads. `preview-blocked` does not fail the gate. Empty check lists and
-`UNKNOWN` mergeability fail closed. A reviewer quiet period is optional
-(`PR_GATE_QUIET_SECONDS`, default `0`). Override polling with
-`PR_GATE_TIMEOUT_SECONDS` and `PR_GATE_POLL_SECONDS`. Pass `--no-label` (or
-set `PR_GATE_NO_LABEL=1`) to run the gate as a pure readiness check without
-touching the `ready-for-human` label.
-
-Run it after opening the PR and again after every push, before considering
-the implementation done. On success it adds `ready-for-human` (creating the
-label if needed); on failure/timeout it removes the label and reports the
-blockers. There is **no** GitHub `pr-handoff-gate` commit status — do not add
-it to the `main` branch protection ruleset; the label is the signal.
+`pnpm pr:gate -- --pr <n>` is an optional local readiness check
+(`scripts/pr-handoff-gate.mjs`). It is **not** part of required CI and does
+not apply labels in the default agent workflow. Prefer `gh pr checks` and
+unresolved-thread inspection. Do not add a `pr-handoff-gate` required status
+on `main`.

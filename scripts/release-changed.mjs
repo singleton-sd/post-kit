@@ -58,12 +58,7 @@ function run(file, args, options = {}) {
  * @returns {{ name: string, path: string, version: string }[]}
  */
 function listWorkspacePackages() {
-  let raw = '[]';
-  try {
-    raw = sh('pnpm m ls --json -r --depth -1');
-  } catch {
-    return [];
-  }
+  const raw = sh('pnpm m ls --json -r --depth -1');
   /** @type {unknown} */
   const parsed = JSON.parse(raw || '[]');
   const list = Array.isArray(parsed) ? parsed : [parsed];

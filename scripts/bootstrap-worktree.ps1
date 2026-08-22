@@ -53,6 +53,7 @@ try {
 
   Write-Step "Installing workspace dependencies"
   & pnpm install --frozen-lockfile
+  if ($LASTEXITCODE -ne 0) { throw "pnpm install --frozen-lockfile failed (exit $LASTEXITCODE)." }
 
   if ($QuickCheck) {
     Write-Step "Running quick readiness check"

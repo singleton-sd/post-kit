@@ -26,7 +26,7 @@ require approving reviews.
 
 **Convention (primary — agents follow the "GitHub-native engineering workflow" section of `AGENTS.md`):**
 
-```
+```text
 <type>/<issue-number>-<kebab-title>
 ```
 
@@ -52,8 +52,10 @@ anywhere on any OS. Do not create `post-kit-wt-*` siblings next to other project
 1. Open the repo → **Settings** → **Rules** → **Rulesets**.
 2. **Protect `main`:** as above (CI + human merge; no required approvals).
 3. **Optional branch-name pattern:** New ruleset targeting
-   `refs/heads/{feat,fix,docs,chore,refactor,test}/*`. Prefer documenting the
-   convention in `AGENTS.md` and using rulesets as a safety net.
+   `refs/heads/{feat,fix,docs,chore,refactor,test}/*`. This constrains
+   **which branches exist**, not pull-request source names. Do **not** add a
+   GitHub Actions workflow just to validate `github.head_ref` — agents follow
+   `AGENTS.md`; humans merge. A ruleset is a safety net, not a required check.
 4. Ensure PRs into `main` come from those branches only (agents never merge; humans merge).
 
 ## 2. GitHub Issues
@@ -69,16 +71,15 @@ engineering work in ClickUp.
 ## 3. Agent automations
 
 - [ ] Implementer: pick an agent-ready GitHub Issue → branch/worktree + open PR
-      (`Closes #N`) is the claim → **PR hygiene** (CI + mergeable + feedback
-      labels) → `pnpm pr:gate -- --pr <n>` applies `ready-for-human`
+      (`Closes #N`) is the claim. Required CI is `Lint / test / build`.
 - [ ] Review bots: inspect open PRs and leave findings on GitHub; agents do
-      not review other agents' work
+      not review other agents' work. Agents address comments on their own PRs.
 - [ ] Human: follow the PR test plan, leave feedback, and merge only after CI
       and actionable bot findings are resolved — merging closes the linked
       issue automatically
-- [ ] PR hygiene labels (`needs-rebase`, `ci-failed`, `has-feedback`,
-      `ready-for-human`) from `.github/workflows/pr-hygiene.yml` — see
-      `docs/pr-pipelines.md` / `AGENTS.md`
+- There is **no** PR-hygiene or issue-label bootstrap workflow. Lifecycle
+  labels (`agent-ready`, `blocked`, `needs-requirements`) are created once
+  by a human/`gh` if missing; they are not toggled by Actions.
 
 ## 4. Azure (document only — do not provision in this PR)
 
@@ -99,7 +100,7 @@ engineering work in ClickUp.
 | Layer | Store | Rule |
 | --- | --- | --- |
 | **Secrets** | Azure Key Vault `ssd-global-kv-prod-ae` | Tokens, connection strings. Never in git or GitHub Actions secrets. |
-| **CI/CD** | GitHub Actions **OIDC** → Azure | Workflows log in with federated creds, then `az keyvault secret show` at **job runtime**. |
+| **CI/CD** | GitHub Actions **OIDC** → Azure | Workflows log in with federated creds, then at job runtime: `SECRET_VALUE=$(az keyvault secret show --name <name> --vault-name ssd-global-kv-prod-ae --query value -o tsv)`, immediately `echo "::add-mask::$SECRET_VALUE"`, never print the raw value. |
 
 **GitHub Actions — allowed identifiers only (repository Variables, not Secrets):**
 

@@ -10,6 +10,10 @@ body:
         before filing — section 3 explains how an idea "crosses the engineering
         boundary" into a Feature/Bug issue once this discovery resolves it.
 
+        This repository is public. Do not include secrets, credentials, customer-private
+        data, contracts, pricing negotiations, or other commercially sensitive detail
+        in investigation notes or references.
+
         Discovery issues are pre-implementation: they resolve into a Feature or
         Bug issue (or are closed as "not planned" if the question turns out to
         need no engineering change). They are not themselves agent-ready

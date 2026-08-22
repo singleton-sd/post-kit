@@ -3,7 +3,7 @@
 <!-- Required — use a GitHub closing keyword so merging auto-closes the issue.
      See docs/github-source-of-truth.md, section 6 ("PR linking"). -->
 
-Closes #
+Closes #<issue-number>
 
 ## Summary
 

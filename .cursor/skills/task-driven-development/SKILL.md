@@ -58,17 +58,15 @@ When planning an issue, every **Out of scope** item that is real follow-up work 
      (or leave an issue comment) so the issue reads as available again.
    - **Handoff:** open (or update) the PR with `Closes #<n>` in the body. That is the entire
      handoff — merging the PR closes the issue automatically. There is no separate status
-     transition to perform.
-   - **Automated review:** Cursor Bugbot, ChatGPT Codex Connector, and similar GitHub bots review
-     the PR once it's open. Agents must not pick up another agent's open PR to review it — that is
-     the bots' and humans' job. Agents may address bot or human feedback on their own PR directly.
+     transition, label pipeline, or `pr:gate` step.
+   - **Automated review:** connected GitHub bots review the PR once it's open. Agents must not
+     pick up another agent's open PR to review it. Agents may address bot or human feedback on
+     their own PR directly (fetch comments, fix or reply in-thread, push).
    - **Steward:** when asked to check open PRs, re-poll mergeable state / required CI / new
      comments for each. Push a fix or reply directly on the PR when actionable.
-   - Labels to watch (if the repository defines them via its GitHub Actions/PR hygiene setup):
-     `needs-rebase`, `ci-failed`, `has-feedback`.
-   - **Dirty PR / `needs-rebase`:** follow `AGENTS.md`'s "Shared hub files / conflict playbook"
-     section. Prefer `git merge origin/main`. Do not hand-merge `pnpm-lock.yaml` — take main's
-     lockfile then `pnpm install`.
+   - **Dirty PR:** follow `AGENTS.md`'s "Shared hub files / conflict playbook" section. Prefer
+     `git merge origin/main`. Do not hand-merge `pnpm-lock.yaml` — take main's lockfile then
+     `pnpm install`.
    - **Hub ownership:** do not edit `.cursor/skills/**`, root `package.json`,
      `AGENTS.md` / `SETUP.md` / `docs/pr-pipelines.md`, or workflows unless the issue requires it.
    - When the implementation is finished, do **not** close the issue yourself. Opening the PR
@@ -119,7 +117,7 @@ When planning an issue, every **Out of scope** item that is real follow-up work 
 When an issue is implemented and staged, report:
 
 ```text
-Completed #<issue-number>: [issue title]
+Implementation staged for #<issue-number>: [issue title]
 
 Staged files:
 - path/to/file

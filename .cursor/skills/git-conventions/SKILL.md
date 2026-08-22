@@ -36,13 +36,13 @@ Create them with
 
 ## Commit message format
 
-```
+```text
 type: #<issue-number> Description in sentence case
 ```
 
 Example:
 
-```
+```text
 feat: #1 Bootstrap monorepo foundations
 ```
 
@@ -71,17 +71,18 @@ the `Closes #<issue-number>` line in the **PR body**
 When the commit has a **body** (paragraphs or bullet list):
 
 - **Every** body line must be **≤ 72 characters** (count spaces and punctuation).
-- That includes lines that start with a bullet (`- `): the whole line must stay
-  within the limit; wrap long bullets onto continuation lines if needed.
+- That includes lines that start with a bullet (`-` plus a space): the whole
+  line must stay within the limit; wrap long bullets onto continuation lines
+  if needed.
 - Prefer breaking at natural phrase boundaries, not mid-word.
 
 Example (subject obeys 50-character limit; each body line ≤ 72):
 
-```
+```text
 feat: #1 Bootstrap monorepo foundations
 
 - Root pnpm workspace, ESLint, Prettier, and Husky
-- GitHub-native worktree helpers and PR hygiene
+- GitHub-native worktree helpers and CI
 - Docs for GitHub Issues as the engineering tracker
 ```
 

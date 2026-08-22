@@ -15,7 +15,7 @@ const terminalConclusions = new Set(['NEUTRAL', 'SKIPPED', 'SUCCESS']);
 const REQUIRED_CI = 'Lint / test / build';
 
 export function expectedChecks() {
-  return ['conflict-on-pr', REQUIRED_CI];
+  return [REQUIRED_CI];
 }
 
 /** Keep the newest rollup entry per check name (GitHub may list superseded runs). */
@@ -125,7 +125,10 @@ export function formatGateReport({ pr, snapshot, result }) {
 
 function gh(args, options = {}) {
   const result = spawnSync('gh', args, { encoding: 'utf8', ...options });
-  if (result.status !== 0) throw new Error(result.stderr.trim() || `gh ${args.join(' ')} failed`);
+  if (result.error) throw new Error(result.error.message);
+  if (result.status !== 0) {
+    throw new Error((result.stderr ?? '').trim() || `gh ${args.join(' ')} failed`);
+  }
   return result.stdout;
 }
 
@@ -217,8 +220,26 @@ export function parsePaginatedGhApiOutput(raw) {
   const items = [];
   let depth = 0;
   let start = -1;
+  let inString = false;
+  let escaped = false;
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
     if (ch === '[') {
       if (depth === 0) start = i;
       depth += 1;
@@ -261,12 +282,10 @@ function externalActivityMs(pr, author) {
       ['OWNER', 'MEMBER', 'COLLABORATOR', 'CONTRIBUTOR'].includes(item.author_association)
     );
   });
-  return Math.max(
-    0,
-    ...interesting.map((item) =>
-      Date.parse(item.updated_at ?? item.submitted_at ?? item.created_at),
-    ),
-  );
+  const times = interesting
+    .map((item) => Date.parse(item.updated_at ?? item.submitted_at ?? item.created_at))
+    .filter(Number.isFinite);
+  return times.length === 0 ? 0 : Math.max(...times);
 }
 
 function unresolvedThreads(pr) {
@@ -386,14 +405,28 @@ function parseArgs(argv) {
     const index = argv.indexOf(name);
     return index === -1 ? fallback : argv[index + 1];
   };
+  const finite = (raw, name) => {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) throw new Error(`${name} must be a finite number`);
+    return n;
+  };
   const pr = Number(value('--pr', process.env.PR_NUMBER));
   if (!Number.isInteger(pr) || pr <= 0) throw new Error('--pr is required');
   return {
     pr,
-    quietMs: Number(value('--quiet-seconds', process.env.PR_GATE_QUIET_SECONDS ?? '0')) * 1000,
+    quietMs:
+      finite(
+        value('--quiet-seconds', process.env.PR_GATE_QUIET_SECONDS ?? '0'),
+        '--quiet-seconds',
+      ) * 1000,
     timeoutMs:
-      Number(value('--timeout-seconds', process.env.PR_GATE_TIMEOUT_SECONDS ?? '1800')) * 1000,
-    pollMs: Number(value('--poll-seconds', process.env.PR_GATE_POLL_SECONDS ?? '10')) * 1000,
+      finite(
+        value('--timeout-seconds', process.env.PR_GATE_TIMEOUT_SECONDS ?? '1800'),
+        '--timeout-seconds',
+      ) * 1000,
+    pollMs:
+      finite(value('--poll-seconds', process.env.PR_GATE_POLL_SECONDS ?? '10'), '--poll-seconds') *
+      1000,
     once: argv.includes('--once'),
     reportFile: value('--report-file', process.env.PR_GATE_REPORT_FILE),
     label: !argv.includes('--no-label') && process.env.PR_GATE_NO_LABEL !== '1',

@@ -38,12 +38,13 @@ this is the "how" for day-to-day agent execution.
    from it.
 3. **Claiming is implicit and exclusive by construction:** an agent claims an
    issue simply by creating a branch/worktree for it and opening a PR against
-   it. There is no separate claim-token step. Before starting, check the
-   issue for an existing linked open PR (search `is:pr is:open <issue-number>
-   in:body` or look for "linked pull requests" on the issue page) — if one
-   exists, that work is already claimed; do not start a second, competing
-   implementation. If you must abandon claimed work, close your PR (or leave
-   a comment saying so) so the issue reads as unclaimed again.
+   it. There is no separate claim-token step. **First linked open PR wins.**
+   Before starting, search `is:pr is:open <issue-number> in:body` (and the
+   issue's "linked pull requests"). If a linked open PR already exists, stop
+   immediately — do not create a second branch, worktree, or PR. If two
+   agents race, the later agent closes its PR with a comment pointing at the
+   first PR. If you must abandon claimed work, close your PR (or leave a
+   comment saying so) so the issue reads as unclaimed again.
 4. Check `Depends on:` / `Blocks:` / `Parent:` lines on the issue (see
    `docs/github-source-of-truth.md` section 5):
    - An unresolved `Depends on: #N` (issue `#N` not yet closed) means **do
@@ -160,28 +161,19 @@ Connected review bots (e.g. Cursor Bugbot, ChatGPT Codex Connector) review
 PRs on GitHub; humans may also comment.
 
 1. After pushing, watch required CI in-session (`gh pr checks --watch`).
-2. `pr-hygiene.yml` reactively labels the PR: `needs-rebase` (merge
-   conflict), `ci-failed` (required lint/test/build failed), `has-feedback`
-   (Bugbot/Copilot/human comment). Filter with `gh pr list --label <name>`.
-3. Address `needs-rebase` via the conflict playbook, `ci-failed` by fixing
-   and pushing, `has-feedback` by fetching issue + review comments and
-   replying in-thread once resolved.
-4. Once none of those three labels apply, run the handoff gate to confirm
-   and mark readiness:
-
-   ```bash
-   pnpm pr:gate -- --pr <pr-number>
-   ```
-
-   This applies the `ready-for-human` label when the PR is truly mergeable,
-   required CI is green, and there are no unresolved review threads (see
-   the "Enforced PR handoff gate" section of
-   [`docs/pr-pipelines.md`](docs/pr-pipelines.md)). It removes the label if
-   any blocker reappears.
+   Required check: `Lint / test / build`.
+2. There is **no** PR-hygiene or issue-label GitHub Actions workflow. Poll
+   mergeability, CI, and review comments with `gh` (`gh pr view`, `gh pr
+   checks`, GraphQL review threads).
+3. Conflicts: follow the conflict playbook. Failed CI: fix and push.
+   Review comments: fetch issue + review comments and reply in-thread once
+   resolved (or after the fix is pushed).
+4. A PR is ready for human merge when it is mergeable, `Lint / test / build`
+   is green, and there are no unresolved review threads. Do not wait on a
+   `ready-for-human` label — that pipeline is not used here.
 5. Bot or human feedback that requires code changes: fetch the PR tip and
-   all feedback, make the change, push, and re-run the gate. There is no
-   separate ticket status to move — the labels and the PR itself are the
-   state.
+   all feedback, make the change, push. There is no separate ticket status
+   to move — the PR itself is the state.
 
 ### Completion
 
@@ -293,19 +285,18 @@ detail out of this public repository. Write GitHub Issues in generic terms.
 
 ## PR pipelines
 
-Path-filtered GitHub Actions (see `docs/pr-pipelines.md` / `SETUP.md`):
+GitHub Actions (see `docs/pr-pipelines.md` / `SETUP.md`):
 
 | Change set | CI | Preview | Production (`main`) |
 | --- | --- | --- | --- |
-| `apps/**`, `packages/**`, `scripts/**`, root toolchain | `ci.yml` (`Lint / test / build`) | None in v1 | `release.yml` bumps public packages |
+| Any PR / push to `main` | `ci.yml` (`Lint / test / build`) | None in v1 | `release.yml` bumps public packages |
 
 - Local checks: pre-commit runs Prettier + ESLint on staged files only via
   `lint-staged` (never bypass with `--no-verify` for format/lint). Full-repo
   `pnpm format:check` / `pnpm lint` remain for humans/CI; also `pnpm test`,
   `pnpm build`. Manual staged check: `pnpm lint:staged`.
-- Humans only merge; agents open PRs linking their GitHub issue (`Closes #N`)
-  and run `pnpm pr:gate -- --pr <n>` to apply the `ready-for-human` label
-  once mergeable/CI-green/feedback-clear.
+- Humans only merge; agents open PRs linking their GitHub issue (`Closes #N`).
+  There is no hygiene/label pipeline and no `pr:gate` handoff step.
 
 ## Skills
 
