@@ -1,0 +1,67 @@
+# Path-aware release-it: bump workspace package versions on main.
+# Skips when the push is already a release commit (avoids loops).
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: "${{ !startsWith(github.event.head_commit.message, 'chore: Release') }}"
+    runs-on: ubuntu-latest
+    name: Bump package versions
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure git identity
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Release changed packages
+        id: release
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp)
+          set +e
+          pnpm release:ci 2>&1 | tee "$tmp"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+          if grep -q 'Nothing to release' "$tmp"; then
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if grep -q 'Release commit and tags pushed' "$tmp"; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error::Unexpected release:ci output (no release push and not empty)."
+          exit 1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

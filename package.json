@@ -1,0 +1,42 @@
+{
+  "name": "post-kit",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r --if-present run build",
+    "lint": "pnpm -r --if-present run lint && pnpm exec eslint .",
+    "lint:staged": "lint-staged",
+    "test": "pnpm test:worktree-paths && pnpm test:pr-automation && pnpm -r --if-present run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "release": "node ./scripts/release-changed.mjs",
+    "release:ci": "node ./scripts/release-changed.mjs --ci",
+    "prepare": "husky",
+    "pr:gate": "node scripts/pr-handoff-gate.mjs",
+    "test:pr-automation": "node scripts/pr-handoff-gate.test.mjs && node --test scripts/invoke-ps1.test.mjs",
+    "sync:skills": "npx --yes skills add singleton-sd/ai-plattform-skills --skill task-driven-development --skill \"Task-Driven Development\" --skill backend --skill frontend -a cursor -a claude-code -a grok -a codex --copy -y",
+    "bootstrap:worktree": "node ./scripts/invoke-bootstrap-worktree.mjs",
+    "bootstrap:worktree:quick": "node ./scripts/invoke-bootstrap-worktree.mjs --quick-check",
+    "worktree:add": "node ./scripts/invoke-worktree-add.mjs",
+    "test:worktree-paths": "node scripts/worktree-paths.test.mjs"
+  },
+  "lint-staged": {
+    "*": "prettier --write --ignore-unknown",
+    "*.{js,mjs,cjs,ts,tsx}": "eslint --fix --max-warnings=0 --no-warn-ignored"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "@release-it/conventional-changelog": "^10.0.0",
+    "eslint": "^9.22.0",
+    "globals": "^16.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.5.3",
+    "release-it": "^18.0.0",
+    "semver": "^7.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
