@@ -17,8 +17,12 @@ export {
 } from '@singleton-sd/post-kit-email';
 
 /**
- * Resolve a trusted marketing-site host from Origin using the ORIGINS allowlist.
+ * Resolve a marketing-site host from Origin using the ORIGINS allowlist.
  * Untrusted or missing Origin values return null so host-profile overrides are skipped.
+ *
+ * Phase 1 tenant routing is this host-profile map (issue #8); authenticated
+ * tenant resolution is later work on epic #2. Origin is a routing hint, not proof
+ * of the caller — CORS does not stop a direct request that spoofs an allowlisted host.
  */
 export function resolveTrustedContactHost(
   requestOrigin: string | null | undefined,

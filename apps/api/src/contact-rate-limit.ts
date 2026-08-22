@@ -5,6 +5,8 @@ export interface RateLimitResult {
   retryAfterSec: number;
 }
 
+const MAX_KEYS = 10_000;
+
 export class SlidingWindowRateLimiter {
   private readonly hits = new Map<string, number[]>();
 
@@ -14,6 +16,7 @@ export class SlidingWindowRateLimiter {
   ) {}
 
   tryConsume(key: string, now = Date.now()): RateLimitResult {
+    this.pruneExpired(now);
     const cutoff = now - this.windowMs;
     const recent = (this.hits.get(key) ?? []).filter((t) => t > cutoff);
     if (recent.length >= this.maxHits) {
@@ -21,6 +24,10 @@ export class SlidingWindowRateLimiter {
       const retryAfterSec = Math.max(1, Math.ceil((oldest + this.windowMs - now) / 1000));
       this.hits.set(key, recent);
       return { allowed: false, retryAfterSec };
+    }
+    if (!this.hits.has(key) && this.hits.size >= MAX_KEYS) {
+      const oldestKey = this.hits.keys().next().value;
+      if (oldestKey !== undefined) this.hits.delete(oldestKey);
     }
     recent.push(now);
     this.hits.set(key, recent);
@@ -30,6 +37,20 @@ export class SlidingWindowRateLimiter {
   /** Test helper — clear all buckets. */
   reset(): void {
     this.hits.clear();
+  }
+
+  /** Test helper — number of tracked keys after prune. */
+  get size(): number {
+    return this.hits.size;
+  }
+
+  private pruneExpired(now: number): void {
+    const cutoff = now - this.windowMs;
+    for (const [tracked, times] of this.hits) {
+      const recent = times.filter((t) => t > cutoff);
+      if (recent.length === 0) this.hits.delete(tracked);
+      else this.hits.set(tracked, recent);
+    }
   }
 }
 
@@ -42,7 +63,10 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-/** Shared limiter for the Function process (resets on cold start / scale-out). */
+/**
+ * Process-local limiter (resets on cold start / scale-out). A shared store
+ * is out of scope for this Y1 PoC; CONTACT_RATE_LIMIT_PER_MIN is best-effort.
+ */
 export const contactRateLimiter = new SlidingWindowRateLimiter(
   parsePositiveInt(process.env.CONTACT_RATE_LIMIT_PER_MIN, DEFAULT_MAX),
   parsePositiveInt(process.env.CONTACT_RATE_LIMIT_WINDOW_MS, DEFAULT_WINDOW_MS),

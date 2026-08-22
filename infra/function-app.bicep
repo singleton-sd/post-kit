@@ -81,7 +81,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
     reserved: true
     httpsOnly: true
     siteConfig: {
-      linuxFxVersion: 'Node|24'
+      linuxFxVersion: 'Node|22'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       appSettings: [
@@ -111,7 +111,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'WEBSITE_NODE_DEFAULT_VERSION'
-          value: '~24'
+          value: '~22'
         }
         {
           name: 'ORIGINS'

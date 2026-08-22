@@ -180,4 +180,12 @@ describe('SlidingWindowRateLimiter', () => {
     const headers = new Map([['x-forwarded-for', '203.0.113.9, 10.0.0.1']]);
     assert.equal(clientIpFromHeaders({ get: (n) => headers.get(n) ?? null }), '203.0.113.9');
   });
+
+  it('evicts inactive buckets after the window', () => {
+    const limiter = new SlidingWindowRateLimiter(1, 1_000);
+    assert.equal(limiter.tryConsume('stale', 1).allowed, true);
+    assert.equal(limiter.size, 1);
+    assert.equal(limiter.tryConsume('fresh', 2_000).allowed, true);
+    assert.equal(limiter.size, 1);
+  });
 });

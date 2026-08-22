@@ -56,7 +56,7 @@ Not in this bootstrap:
 - **Client** — trusted-consumer SDK (`post-kit-client`)
 - **Editor** — EmailBuilder.js wrapper (`post-kit-editor`)
 
-## Deployment (planned)
+## Deployment
 
 | Component | Host | Notes |
 | --- | --- | --- |

@@ -7,7 +7,7 @@ Bicep for the PostKit Function App in `rg-ssd-global` (subscription
 | --- | --- | --- |
 | Plan | `ssd-postkit-plan-prod-ae` | Y1 Linux Consumption |
 | Storage | `ssdpostkitstprodae` | Standard_LRS |
-| Function App | `ssd-postkit-api-prod-ae` | Node 24 |
+| Function App | `ssd-postkit-api-prod-ae` | Node 22 |
 | Key Vault | existing `ssd-global-kv-prod-ae` | secret `forwardemail-api-key` |
 
 `CONTACT_EMAIL_PROFILES_BY_HOST` is an app setting (JSON). Update the
