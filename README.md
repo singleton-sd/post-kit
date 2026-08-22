@@ -22,7 +22,7 @@ org-wide. This repository has **no** ClickUp engineering integration.
 | --- | --- |
 | API | Azure Functions (`apps/api`, later epic) |
 | Packages | Public npm `@singleton-sd/post-kit-*` |
-| Email | EmailProvider + Forward Email (package lands later) |
+| Email | `@singleton-sd/post-kit-email` (Forward Email + development provider) |
 | Secrets | Azure Key Vault `ssd-global-kv-prod-ae` |
 | CI | GitHub Actions — single `CI` workflow (`Lint / test / build`) |
 | Release | Path-aware bumps via `scripts/release-changed.mjs` |
