@@ -230,7 +230,7 @@ describe('ForwardEmailProvider', () => {
     assert.equal(attempts, 1);
   });
 
-  it('retries local timeouts then fails as transient', async () => {
+  it('does not retry local timeouts', async () => {
     let attempts = 0;
     const provider = new ForwardEmailProvider({
       apiToken: 'test-token',
@@ -254,9 +254,9 @@ describe('ForwardEmailProvider', () => {
       (error: unknown) =>
         error instanceof EmailProviderError &&
         error.kind === 'transient' &&
-        error.retryable === true,
+        error.retryable === false,
     );
-    assert.equal(attempts, 2);
+    assert.equal(attempts, 1);
   });
 
   it('honours cancellation', async () => {

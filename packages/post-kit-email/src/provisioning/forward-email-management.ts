@@ -214,7 +214,37 @@ export class ForwardEmailManagementClient {
     const existing = (await this.listAliases(domain)).find(
       (a) => a.name.toLowerCase() === aliasName.toLowerCase(),
     );
-    if (existing) return { alias: existing, created: false };
+    if (existing) {
+      if (sameRecipients(existing.recipients, recipients)) {
+        return { alias: existing, created: false };
+      }
+      if (!existing.id) {
+        throw new Error(
+          `Forward Email alias ${aliasName} is missing an id; cannot update recipients`,
+        );
+      }
+      const update = new URLSearchParams();
+      for (const recipient of recipients) update.append('recipients', recipient);
+      const { status, data } = await this.request<Record<string, unknown>>(
+        'PUT',
+        `/v1/domains/${encodeURIComponent(domain)}/aliases/${encodeURIComponent(existing.id)}`,
+        update,
+      );
+      if (status >= 400) {
+        throw new Error(`Forward Email update alias failed (${status})`);
+      }
+      const recipientsOut = Array.isArray(data.recipients)
+        ? data.recipients.map(String)
+        : recipients;
+      return {
+        alias: {
+          id: String(data.id ?? existing.id),
+          name: String(data.name ?? aliasName),
+          recipients: recipientsOut,
+        },
+        created: false,
+      };
+    }
 
     const body = new URLSearchParams();
     body.set('name', aliasName);
@@ -394,11 +424,22 @@ export function mergeSpfInclude(
   if (!trimmed.toLowerCase().startsWith('v=spf1')) {
     return `v=spf1 ${include} -all`;
   }
-  if (trimmed.includes(include)) return trimmed;
+  const hasInclude = trimmed
+    .split(/\s+/)
+    .some((term) => term.toLowerCase() === include.toLowerCase());
+  if (hasInclude) return trimmed;
   if (/\s(-all|~all|\?all|\+all)\s*$/i.test(trimmed)) {
     return trimmed.replace(/\s(-all|~all|\?all|\+all)\s*$/i, ` ${include} $1`);
   }
   return `${trimmed} ${include} -all`;
+}
+
+function sameRecipients(left: string[], right: string[]): boolean {
+  const normalize = (values: string[]) =>
+    [...values].map((value) => value.trim().toLowerCase()).sort();
+  const a = normalize(left);
+  const b = normalize(right);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function stripZoneSuffix(name: string, zoneDomain: string): string {

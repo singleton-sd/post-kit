@@ -25,6 +25,11 @@ describe('mergeSpfInclude', () => {
     const value = 'v=spf1 include:spf.forwardemail.net -all';
     assert.equal(mergeSpfInclude(value, 'spf.forwardemail.net'), value);
   });
+
+  it('treats INCLUDE as case-insensitive', () => {
+    const value = 'v=spf1 INCLUDE:spf.forwardemail.net -all';
+    assert.equal(mergeSpfInclude(value, 'spf.forwardemail.net'), value);
+  });
 });
 
 describe('getRequiredDnsRecords', () => {
@@ -130,6 +135,36 @@ describe('ForwardEmailManagementClient idempotency', () => {
     assert.equal(created.created, true);
     const again = await client.ensureAlias('example.com', 'noreply', ['hello@singletonsd.com']);
     assert.equal(again.created, false);
+  });
+
+  it('updates an existing alias when recipients change', async () => {
+    const methods: string[] = [];
+    const client = new ForwardEmailManagementClient({
+      apiToken: 'token',
+      baseUrl: 'https://api.example.test',
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+        const method = init?.method ?? 'GET';
+        methods.push(`${method} ${url}`);
+        if (url.includes('/aliases') && method === 'GET') {
+          return new Response(
+            JSON.stringify([{ id: 'a1', name: 'noreply', recipients: ['old@example.com'] }]),
+            { status: 200 },
+          );
+        }
+        if (url.endsWith('/aliases/a1') && method === 'PUT') {
+          return new Response(
+            JSON.stringify({ id: 'a1', name: 'noreply', recipients: ['hello@singletonsd.com'] }),
+            { status: 200 },
+          );
+        }
+        return new Response('unexpected', { status: 500 });
+      },
+    });
+    const updated = await client.ensureAlias('example.com', 'noreply', ['hello@singletonsd.com']);
+    assert.equal(updated.created, false);
+    assert.deepEqual(updated.alias.recipients, ['hello@singletonsd.com']);
+    assert.ok(methods.some((entry) => entry.startsWith('PUT ') && entry.endsWith('/aliases/a1')));
   });
 
   it('aggregates paginated alias lists', async () => {

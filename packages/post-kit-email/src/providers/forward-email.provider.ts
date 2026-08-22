@@ -215,15 +215,14 @@ export class ForwardEmailProvider implements EmailProvider {
             cause: error,
           });
         } else if (error instanceof Error && error.name === 'AbortError') {
-          lastError = new EmailProviderError({
+          throw new EmailProviderError({
             message: 'Forward Email send timed out',
             kind: 'transient',
             provider: this.name,
             correlationId: request.correlationId,
-            retryable: true,
+            retryable: false,
             cause: error,
           });
-          if (attempt >= this.maxRetries) throw lastError;
         } else {
           lastError = new EmailProviderError({
             message: 'Forward Email send transport failure',
