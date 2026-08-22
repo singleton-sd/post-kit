@@ -1,0 +1,82 @@
+name: Feature
+description: New engineering capability or enhancement, ready to be scoped and implemented.
+title: '[Feature] '
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read [`docs/github-source-of-truth.md`](../../docs/github-source-of-truth.md)
+        before filing — section 4 defines when an issue is **agent-ready** and
+        section 5 defines the `Depends on` / `Blocks` / `Parent` convention this
+        form uses.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What problem does this solve? One or two sentences.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is in scope? What is explicitly out of scope?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: Checklist of "done when" conditions. An implementer should be able to verify each item without guessing intent.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: >
+        Greppable lines per docs/github-source-of-truth.md, section 5. Leave blank if this
+        issue has no dependencies. An unresolved `Depends on` means this issue is
+        not agent-ready regardless of how well-specified it otherwise is.
+      placeholder: |
+        Depends on: #123
+        Blocks: #456
+        Parent: #100
+    validations:
+      required: false
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Architecture, security, performance, compatibility, or other constraints that bound the solution space.
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Technical references
+      description: Linked docs, related code, related issues.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: agent-ready-checklist
+    attributes:
+      label: Agent-ready checklist (docs/github-source-of-truth.md, section 4)
+      description: All boxes should be true before this issue is labeled `agent-ready` and moved to the Ready for Agent view.
+      options:
+        - label: Goal/problem statement is clear
+        - label: Scope is sufficient to start work without further business clarification
+        - label: Acceptance criteria are explicit
+        - label: Relevant constraints are stated
+        - label: No unresolved blocking dependency (`Depends on`)

@@ -1,0 +1,70 @@
+name: CI
+
+# Path filters include this workflow file so edits re-run CI on PRs.
+on:
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.prettierrc'
+      - '.prettierignore'
+      - 'eslint.config.js'
+      - '.github/workflows/ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.prettierrc'
+      - '.prettierignore'
+      - 'eslint.config.js'
+      - '.github/workflows/ci.yml'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Lint / test / build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Worktree path tests
+        run: pnpm test:worktree-paths
+
+      - name: PR automation tests
+        run: pnpm test:pr-automation
+
+      - name: Prettier check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm exec eslint .
+
+      - name: Test (workspace packages)
+        run: pnpm -r --if-present run test
+
+      - name: Build (workspace packages)
+        run: pnpm -r --if-present run build

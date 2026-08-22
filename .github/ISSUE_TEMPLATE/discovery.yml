@@ -1,0 +1,73 @@
+name: Discovery
+description: Open question, spike, or design decision that must be resolved before engineering work can be scoped.
+title: '[Discovery] '
+labels: ['needs-requirements']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read [`docs/github-source-of-truth.md`](../../docs/github-source-of-truth.md)
+        before filing — section 3 explains how an idea "crosses the engineering
+        boundary" into a Feature/Bug issue once this discovery resolves it.
+
+        Discovery issues are pre-implementation: they resolve into a Feature or
+        Bug issue (or are closed as "not planned" if the question turns out to
+        need no engineering change). They are not themselves agent-ready
+        implementation work, which is why this template applies
+        `needs-requirements` by default.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question / unknown
+      description: What do we not yet know that blocks scoping a Feature or Bug issue?
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why it matters
+      description: What decision or downstream work depends on resolving this?
+    validations:
+      required: true
+
+  - type: textarea
+    id: approach
+    attributes:
+      label: Investigation approach
+      description: How should this be investigated (spike, prototype, research, stakeholder input)?
+    validations:
+      required: false
+
+  - type: textarea
+    id: definition-of-done
+    attributes:
+      label: Definition of done
+      description: What does resolving this discovery produce — e.g. "a Feature issue with goal/scope/acceptance criteria filed and linked here", or "a documented decision in this issue".
+      value: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: >
+        Greppable lines per docs/github-source-of-truth.md, section 5. Leave blank if
+        this issue has no dependencies.
+      placeholder: |
+        Depends on: #123
+        Blocks: #456
+        Parent: #100
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Related docs, code, or issues.
+    validations:
+      required: false

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://unpkg.com/release-it/schema/release-it.json",
+  "git": {
+    "commit": false,
+    "tag": false,
+    "push": false,
+    "requireCleanWorkingDir": false,
+    "requireUpstream": false
+  },
+  "npm": {
+    "publish": false
+  },
+  "github": {
+    "release": false
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": {
+        "name": "conventionalcommits"
+      },
+      "infile": false
+    }
+  }
+}

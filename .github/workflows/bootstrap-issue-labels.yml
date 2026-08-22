@@ -1,0 +1,41 @@
+# Ensures the GitHub-native issue lifecycle labels exist. Labels only — this
+# does not toggle them on any issue. Whether an issue is agent-ready or
+# blocked is a judgment call made by whoever edits the issue (human or
+# agent), not something this workflow infers from text. See
+# docs/github-project.md "Labels" and docs/github-source-of-truth.md, sections 4-5.
+#
+# Mirrors the idempotent `ensure` pattern already used by
+# .github/workflows/pr-hygiene.yml.
+
+name: Bootstrap issue labels
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bootstrap-issue-labels.yml'
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+
+jobs:
+  ensure-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure lifecycle labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ensure() {
+            local name="$1" color="$2" desc="$3"
+            if gh label list --repo "$GITHUB_REPOSITORY" --search "$name" --json name --jq '.[].name' | grep -Fxq "$name"; then
+              gh label edit "$name" --repo "$GITHUB_REPOSITORY" --color "$color" --description "$desc"
+            else
+              gh label create "$name" --repo "$GITHUB_REPOSITORY" --color "$color" --description "$desc"
+            fi
+          }
+          ensure "agent-ready" "2ea44f" "Meets every criterion in docs/github-source-of-truth.md, section 4 — safe for an agent to claim"
+          ensure "blocked" "d73a4a" "Has an unresolved Depends on: line (docs/github-source-of-truth.md, section 5) — do not claim"
+          ensure "needs-requirements" "fbca04" "Goal, scope, or acceptance criteria are not yet resolved — refinement work, not implementation work"

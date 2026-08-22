@@ -1,0 +1,90 @@
+name: Bug
+description: Reproducible defect in existing behavior.
+title: '[Bug] '
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read [`docs/github-source-of-truth.md`](../../docs/github-source-of-truth.md)
+        before filing — section 4 defines when an issue is **agent-ready** and
+        section 5 defines the `Depends on` / `Blocks` / `Parent` convention this
+        form uses.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken, in one or two sentences?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected vs. actual behavior
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment / scope
+      description: Which app/package, environment (local, CI, prod), and how consistently it reproduces.
+      placeholder: 'packages/post-kit-email, local, reproduces every time'
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: What must be true for this bug to be considered fixed?
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: >
+        Greppable lines per docs/github-source-of-truth.md, section 5. Leave blank if
+        this issue has no dependencies.
+      placeholder: |
+        Depends on: #123
+        Blocks: #456
+        Parent: #100
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Technical references
+      description: Linked docs, related code, related issues, logs, or screenshots.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: agent-ready-checklist
+    attributes:
+      label: Agent-ready checklist (docs/github-source-of-truth.md, section 4)
+      options:
+        - label: Reproduction steps are reliable
+        - label: Expected vs. actual behavior is unambiguous
+        - label: Acceptance criteria are explicit
+        - label: No unresolved blocking dependency (`Depends on`)

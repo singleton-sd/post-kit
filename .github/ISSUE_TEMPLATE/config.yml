@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Engineering source of truth
+    url: https://github.com/singleton-sd/post-kit/blob/main/docs/github-source-of-truth.md
+    about: Read the lifecycle, agent-ready criteria, and dependency conventions before filing an issue.
+  - name: GitHub Project configuration
+    url: https://github.com/singleton-sd/post-kit/blob/main/docs/github-project.md
+    about: Project fields, views, labels, and how agents should query/update status.
