@@ -1,6 +1,15 @@
 node_modules/
 dist/
 coverage/
+
+# Marketplace skills from singleton-sd/ai-plattform-skills (`pnpm sync:skills`).
+# Do not commit copies; another repo owns the skill source.
+.cursor/skills/
+.claude/skills/
+.agents/skills/
+.github/skills/
+.codex/skills/
+.grok/skills/
 *.log
 .env
 .env.*

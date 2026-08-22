@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "Backend": {
+      "source": "singleton-sd/ai-plattform-skills",
+      "sourceType": "github",
+      "skillPath": "engineering/backend/SKILL.md",
+      "computedHash": "2b5fa30a979018b7f092ad031520c253bc797931a644bfab058da0d5f74a9bf7"
+    },
+    "Frontend": {
+      "source": "singleton-sd/ai-plattform-skills",
+      "sourceType": "github",
+      "skillPath": "engineering/frontend/SKILL.md",
+      "computedHash": "1fd99d726777b35de3768b928d449775ab1a3136970c8b8a01434386dbc0aa0b"
+    },
+    "Task-Driven Development": {
+      "source": "singleton-sd/ai-plattform-skills",
+      "sourceType": "github",
+      "skillPath": "operations/task-driven-development/SKILL.md",
+      "computedHash": "cf0372e0ab58467f4123db930713cc01abb3a80b3de34c9266a8375a4d8394ff"
+    }
+  }
+}

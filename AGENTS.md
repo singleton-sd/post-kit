@@ -197,7 +197,7 @@ ticket requires it.**
 | `pnpm-lock.yaml` | Dep change via `pnpm install` | Never hand-edit; never line-merge |
 | Root `package.json` / `pnpm-workspace.yaml` | Root tooling ticket | Prefer deps/scripts in `apps/*`, `packages/*` |
 | Workspace `**/package.json` | That package's ticket | Keep diffs minimal |
-| `.cursor/skills/**` | Dedicated skills ticket | Do not mix skills edits into feature PRs |
+| Skills marketplace (`pnpm sync:skills`) | Never | Generated locally; source is `singleton-sd/ai-plattform-skills` |
 | `AGENTS.md`, `SETUP.md`, `docs/pr-pipelines.md` | Docs/ops issue | Otherwise open a GitHub issue as a follow-up |
 | `.github/workflows/**` | CI/CD ticket | - |
 | `.env.example` | New env keys required by ticket | Add keys only; no secrets |
@@ -220,7 +220,7 @@ Agents must not reason through lockfiles. Prefer **merge** over rebase
 | --- | --- |
 | `pnpm-lock.yaml` | Take main's lock → `pnpm install` → stage |
 | Any `package.json` | Merge `dependencies` / `devDependencies` / `scripts` (both sides' keys) |
-| `.cursor/skills/**` | Take main unless this is a skills ticket |
+| Generated skill dirs (`.cursor/skills/**`, `.claude/skills/**`, `.agents/skills/**`) | Leave untracked / gitignore |
 | Docs hubs above | Take main unless this is a docs ticket |
 | `.env.example` | Union unique `KEY=` lines |
 
@@ -300,8 +300,29 @@ GitHub Actions (see `docs/pr-pipelines.md` / `SETUP.md`):
 
 ## Skills
 
-Read curated skills under `.cursor/skills/` before coding (`git-conventions`,
-`code-review`, `task-driven-development`).
+Do **not** copy platform `SKILL.md` files into this repository. Install from
+the marketplace (GitHub mirror of `singleton-sd/ai-plattform-skills`):
+
+```bash
+pnpm sync:skills
+```
+
+That runs:
+
+```bash
+npx skills add singleton-sd/ai-plattform-skills \
+  --skill task-driven-development \
+  --skill backend \
+  --skill frontend \
+  -a cursor -a claude-code -a grok -a codex \
+  --copy \
+  -y
+```
+
+Generated copies land in agent folders (`.cursor/skills`, `.claude/skills`,
+`.agents/skills`, Codex) and are gitignored. Edit skills in
+`singleton-sd/ai-plattform-skills`, not here. After a worktree bootstrap, run
+`pnpm sync:skills` once so Cursor / Claude / Grok / Codex can load them.
 
 ## TDD / quality
 

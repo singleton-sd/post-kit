@@ -110,7 +110,7 @@ ownership table: the **Shared hub files** section of `AGENTS.md`.
 | --- | --- |
 | `pnpm-lock.yaml` | Take main → `pnpm install` → stage |
 | `**/package.json` | JSON-merge deps/scripts keys from both sides |
-| `.cursor/skills/**` | Take main unless this is a skills ticket |
+| Generated skill dirs | Leave untracked (gitignore) |
 | `AGENTS.md`, `SETUP.md`, `docs/pr-pipelines.md` | Take main unless this is a docs ticket |
 | `.env.example` | Union unique `KEY=` lines |
 

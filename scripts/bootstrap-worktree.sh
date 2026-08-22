@@ -63,5 +63,6 @@ if [[ "$QUICK_CHECK" -eq 1 ]]; then
 fi
 
 echo 'Next steps:'
+echo ' - pnpm sync:skills   # marketplace skills; do not copy SKILL.md into git'
 echo ' - Run targeted tests/builds for your issue before handoff: pnpm test && pnpm lint'
 echo ' - See AGENTS.md for the GitHub-native engineering workflow.'

@@ -32,9 +32,15 @@ org-wide. This repository has **no** ClickUp engineering integration.
 
 ```bash
 pnpm install
+pnpm sync:skills
 pnpm test
 pnpm lint
 ```
+
+Skills come from the
+[`singleton-sd/ai-plattform-skills`](https://github.com/singleton-sd/ai-plattform-skills)
+marketplace (`task-driven-development`, `backend`, `frontend` for Cursor,
+Claude Code, Grok, and Codex). Do not copy `SKILL.md` files into this repo.
 
 See [SETUP.md](./SETUP.md), [AGENTS.md](./AGENTS.md), and
 [docs/pr-pipelines.md](./docs/pr-pipelines.md).

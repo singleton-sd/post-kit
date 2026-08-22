@@ -70,7 +70,32 @@ section of `AGENTS.md`. The GitHub Project view is documented in
 This repository has no ClickUp engineering integration. Do not file
 engineering work in ClickUp.
 
-## 3. Agent automations
+## 3. Agent skills (marketplace — do not copy SKILL.md)
+
+Skills are owned by
+[`singleton-sd/ai-plattform-skills`](https://github.com/singleton-sd/ai-plattform-skills).
+Do not vendor copies into this repo.
+
+```bash
+pnpm sync:skills
+```
+
+Equivalent:
+
+```bash
+npx skills add singleton-sd/ai-plattform-skills \
+  --skill task-driven-development \
+  --skill backend \
+  --skill frontend \
+  -a cursor -a claude-code -a grok -a codex \
+  --copy \
+  -y
+```
+
+- [ ] Run `pnpm sync:skills` after clone / worktree bootstrap (Cursor, Claude
+      Code, Grok, Codex)
+
+## 4. Agent automations
 
 - [ ] Implementer: pick an agent-ready GitHub Issue → branch/worktree + open PR
       (`Closes #N`) is the claim. Required CI is `Lint / test / build`.
@@ -83,7 +108,7 @@ engineering work in ClickUp.
   labels (`agent-ready`, `blocked`, `needs-requirements`) are created once
   by a human/`gh` if missing; they are not toggled by Actions.
 
-## 4. Azure (document only — do not provision in this PR)
+## 5. Azure (document only — do not provision in this PR)
 
 **Subscription:** Singleton SD / `01c0bb8b-3770-4765-979a-cb13ae7e3dd2`
 **Resource group:** `rg-ssd-global`
@@ -122,7 +147,7 @@ engineering work in ClickUp.
 - [ ] Copy required secrets into Key Vault `ssd-global-kv-prod-ae` (names only in git)
 - [ ] Provision Function App / plan / storage when the API epic lands
 
-## 5. npmjs (public packages)
+## 6. npmjs (public packages)
 
 Publishable workspace packages use the `@singleton-sd/post-kit-*` scope and
 `"private": false`. The workspace root stays `"private": true` (the monorepo

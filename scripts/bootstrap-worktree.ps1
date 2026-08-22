@@ -67,6 +67,7 @@ try {
   }
 
   Write-Host "Next steps:" -ForegroundColor Yellow
+  Write-Host " - pnpm sync:skills   # marketplace skills; do not copy SKILL.md into git"
   Write-Host " - Run targeted tests/builds for your issue before handoff: pnpm test && pnpm lint"
   Write-Host " - See AGENTS.md for the GitHub-native engineering workflow."
 }

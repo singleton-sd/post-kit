@@ -15,6 +15,7 @@
     "prepare": "husky",
     "pr:gate": "node scripts/pr-handoff-gate.mjs",
     "test:pr-automation": "node scripts/pr-handoff-gate.test.mjs && node --test scripts/invoke-ps1.test.mjs",
+    "sync:skills": "npx --yes skills add singleton-sd/ai-plattform-skills --skill task-driven-development --skill \"Task-Driven Development\" --skill backend --skill frontend -a cursor -a claude-code -a grok -a codex --copy -y",
     "bootstrap:worktree": "node ./scripts/invoke-bootstrap-worktree.mjs",
     "bootstrap:worktree:quick": "node ./scripts/invoke-bootstrap-worktree.mjs --quick-check",
     "worktree:add": "node ./scripts/invoke-worktree-add.mjs",

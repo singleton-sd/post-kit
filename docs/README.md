@@ -37,5 +37,5 @@ docs/
 | --- | --- |
 | [`github-source-of-truth.md`](./github-source-of-truth.md) | Engineering system-of-record policy |
 | [`github-project.md`](./github-project.md) | PostKit Engineering project fields, views, labels |
-| [`pr-pipelines.md`](./pr-pipelines.md) | PR CI, hygiene labels, release, secrets policy |
+| [`pr-pipelines.md`](./pr-pipelines.md) | PR CI, release, secrets policy |
 | [`architecture/overview.md`](./architecture/overview.md) | Phase-1 architecture: Functions API, EmailProvider, consumers |
