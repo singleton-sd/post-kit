@@ -180,11 +180,17 @@ describe('SlidingWindowRateLimiter', () => {
     const xff = new Map([['x-forwarded-for', '203.0.113.9, 10.0.0.1']]);
     assert.equal(clientIpFromHeaders({ get: (n) => xff.get(n) ?? null }), '10.0.0.1');
 
+    const xffPort = new Map([['x-forwarded-for', '203.0.113.9, 10.0.0.1:49152']]);
+    assert.equal(clientIpFromHeaders({ get: (n) => xffPort.get(n) ?? null }), '10.0.0.1');
+
     const azure = new Map([
       ['x-forwarded-for', '203.0.113.9, 10.0.0.1'],
       ['x-azure-clientip', '198.51.100.7'],
     ]);
     assert.equal(clientIpFromHeaders({ get: (n) => azure.get(n) ?? null }), '198.51.100.7');
+
+    const v6 = new Map([['x-forwarded-for', '[2001:db8::1]:49152']]);
+    assert.equal(clientIpFromHeaders({ get: (n) => v6.get(n) ?? null }), '2001:db8::1');
   });
 
   it('evicts inactive buckets after the window', () => {

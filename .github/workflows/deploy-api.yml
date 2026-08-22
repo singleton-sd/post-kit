@@ -103,15 +103,19 @@ jobs:
       - name: Assert KV secret exists
         run: |
           set -euo pipefail
-          for i in 1 2 3 4 5; do
+          deadline=$((SECONDS + 600))
+          attempt=0
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            attempt=$((attempt + 1))
             if az keyvault secret show \
               --vault-name "$AZURE_KEY_VAULT_NAME" \
               --name forwardemail-api-key \
               --query name -o tsv >/dev/null; then
               exit 0
             fi
-            echo "Key Vault read not ready yet (attempt ${i}/5); waiting for RBAC."
-            sleep 5
+            remaining=$((deadline - SECONDS))
+            echo "Key Vault read not ready yet (attempt ${attempt}; ${remaining}s remaining); waiting for RBAC."
+            sleep 20
           done
           echo "forwardemail-api-key is missing or the OIDC principal cannot read it."
           exit 1

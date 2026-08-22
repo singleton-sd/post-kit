@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 /** In-memory sliding-window limiter for anonymous Contact (PoC). */
 
 export interface RateLimitResult {
@@ -82,8 +84,31 @@ export function resetContactRateLimiter(): void {
   contactRateLimiter = undefined;
 }
 
+/**
+ * Host from a forwarded hop. App Service often appends `ipv4:port`; IPv6
+ * ports use `[addr]:port`. Do not strip the last `:digits` group from bare
+ * IPv6. Untrusted `X-Client-IP` / `X-Real-IP` are ignored.
+ */
+function addressFromForwardedHop(hop: string): string | undefined {
+  const trimmed = hop.trim();
+  if (!trimmed) return undefined;
+
+  let host = trimmed;
+  if (host.startsWith('[')) {
+    const close = host.indexOf(']');
+    if (close < 2) return undefined;
+    host = host.slice(1, close);
+  } else if ((host.match(/:/g) ?? []).length === 1) {
+    const colon = host.indexOf(':');
+    const port = host.slice(colon + 1);
+    if (/^\d+$/.test(port)) host = host.slice(0, colon);
+  }
+
+  return isIP(host) ? host : undefined;
+}
+
 export function clientIpFromHeaders(headers: { get(name: string): string | null }): string {
-  const azureClient = headers.get('x-azure-clientip')?.trim();
+  const azureClient = addressFromForwardedHop(headers.get('x-azure-clientip') ?? '');
   if (azureClient) return azureClient;
 
   const xff = headers.get('x-forwarded-for');
@@ -92,10 +117,11 @@ export function clientIpFromHeaders(headers: { get(name: string): string | null 
       .split(',')
       .map((part) => part.trim())
       .filter(Boolean);
-    // Azure appends the socket peer; take the last hop, not a caller-supplied prefix.
+    // Y1 Consumption / App Service: last hop is the socket peer.
     const last = hops.at(-1);
-    if (last) return last;
+    const address = last ? addressFromForwardedHop(last) : undefined;
+    if (address) return address;
   }
 
-  return headers.get('x-real-ip')?.trim() || headers.get('x-client-ip')?.trim() || 'unknown';
+  return 'unknown';
 }
