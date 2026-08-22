@@ -12,7 +12,7 @@ body:
 
         This repository is public. Do not include secrets, credentials, customer-private
         data, contracts, pricing negotiations, or other commercially sensitive detail
-        in investigation notes or references.
+        anywhere in this issue. Redact any such data before submitting.
 
         Discovery issues are pre-implementation: they resolve into a Feature or
         Bug issue (or are closed as "not planned" if the question turns out to

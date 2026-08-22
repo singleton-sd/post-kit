@@ -12,8 +12,8 @@ body:
         form uses.
 
         This repository is public. Do not include secrets, credentials, customer-private
-        data, contracts, pricing negotiations, or other commercially sensitive detail.
-        Redact logs, screenshots, and reproduction steps.
+        data, contracts, pricing negotiations, or other commercially sensitive detail
+        anywhere in this issue. Redact logs, screenshots, and reproduction steps.
 
   - type: textarea
     id: summary

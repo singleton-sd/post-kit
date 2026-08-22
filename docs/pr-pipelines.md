@@ -67,11 +67,24 @@ pnpm build          # recursive package build (no-op if empty)
 ## PR readiness (no label pipeline)
 
 A PR is ready for human merge when it is mergeable, `Lint / test / build` is
-green, and there are no unresolved review threads. Poll that with `gh`:
+green, and there are no unresolved review threads. `gh pr view` and
+`gh pr checks` cover mergeability and CI only. Also paginate
+`PullRequest.reviewThreads` and require every `isResolved` to be true:
 
 ```bash
 gh pr view <n> --json mergeable,mergeStateStatus,statusCheckRollup
 gh pr checks <n>
+gh api graphql --paginate -f query='
+query($endCursor: String) {
+  repository(owner: "singleton-sd", name: "post-kit") {
+    pullRequest(number: <n>) {
+      reviewThreads(first: 100, after: $endCursor) {
+        nodes { isResolved }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}'
 ```
 
 Conflicts: follow the playbook below. Failed CI: fix and push. Review

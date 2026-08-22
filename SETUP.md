@@ -51,8 +51,10 @@ anywhere on any OS. Do not create `post-kit-wt-*` siblings next to other project
 
 1. Open the repo → **Settings** → **Rules** → **Rulesets**.
 2. **Protect `main`:** as above (CI + human merge; no required approvals).
-3. **Optional branch-name pattern:** New ruleset targeting
-   `refs/heads/{feat,fix,docs,chore,refactor,test}/*`. This constrains
+3. **Optional branch-name pattern:** New ruleset with **separate** targets
+   `refs/heads/feat/*`, `refs/heads/fix/*`, `refs/heads/docs/*`,
+   `refs/heads/chore/*`, `refs/heads/refactor/*`, and `refs/heads/test/*`
+   (GitHub ruleset fnmatch does not expand `{feat,fix,...}`). This constrains
    **which branches exist**, not pull-request source names. Do **not** add a
    GitHub Actions workflow just to validate `github.head_ref` — agents follow
    `AGENTS.md`; humans merge. A ruleset is a safety net, not a required check.

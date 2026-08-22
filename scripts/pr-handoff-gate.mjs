@@ -400,7 +400,7 @@ export async function runGate({
   throw new Error('PR handoff gate timed out');
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const value = (name, fallback) => {
     const index = argv.indexOf(name);
     return index === -1 ? fallback : argv[index + 1];
@@ -412,6 +412,13 @@ function parseArgs(argv) {
   };
   const pr = Number(value('--pr', process.env.PR_NUMBER));
   if (!Number.isInteger(pr) || pr <= 0) throw new Error('--pr is required');
+  const pollSeconds = finite(
+    value('--poll-seconds', process.env.PR_GATE_POLL_SECONDS ?? '10'),
+    '--poll-seconds',
+  );
+  if (pollSeconds < 0.001 || pollSeconds > 2147483.647) {
+    throw new Error('--poll-seconds must be between 0.001 and 2147483.647');
+  }
   return {
     pr,
     quietMs:
@@ -424,9 +431,7 @@ function parseArgs(argv) {
         value('--timeout-seconds', process.env.PR_GATE_TIMEOUT_SECONDS ?? '1800'),
         '--timeout-seconds',
       ) * 1000,
-    pollMs:
-      finite(value('--poll-seconds', process.env.PR_GATE_POLL_SECONDS ?? '10'), '--poll-seconds') *
-      1000,
+    pollMs: pollSeconds * 1000,
     once: argv.includes('--once'),
     reportFile: value('--report-file', process.env.PR_GATE_REPORT_FILE),
     label: !argv.includes('--no-label') && process.env.PR_GATE_NO_LABEL !== '1',

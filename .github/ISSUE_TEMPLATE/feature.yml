@@ -13,7 +13,7 @@ body:
 
         This repository is public. Do not include secrets, credentials, customer-private
         data, contracts, pricing negotiations, or other commercially sensitive detail
-        in scope, constraints, or technical references.
+        anywhere in this issue. Redact any such data before submitting.
 
   - type: textarea
     id: goal

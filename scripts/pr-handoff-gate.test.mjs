@@ -6,6 +6,7 @@ import {
   expectedChecks,
   formatGateReport,
   isRateLimitError,
+  parseArgs,
   parsePaginatedGhApiOutput,
 } from './pr-handoff-gate.mjs';
 
@@ -21,6 +22,25 @@ assert.deepEqual(expectedChecks(['README.md']), ['Lint / test / build']);
 assert.deepEqual(parsePaginatedGhApiOutput('[{"login":"github-actions[bot]"}]'), [
   { login: 'github-actions[bot]' },
 ]);
+assert.deepEqual(parsePaginatedGhApiOutput('[{"login":"github-actions[bot"}]\n[{"id":2}]'), [
+  { login: 'github-actions[bot' },
+  { id: 2 },
+]);
+
+assert.equal(parseArgs(['--pr', '1', '--poll-seconds', '10']).pollMs, 10_000);
+assert.equal(parseArgs(['--pr', '1', '--poll-seconds', '0.001']).pollMs, 1);
+assert.throws(
+  () => parseArgs(['--pr', '1', '--poll-seconds', '0']),
+  /--poll-seconds must be between 0.001 and 2147483.647/,
+);
+assert.throws(
+  () => parseArgs(['--pr', '1', '--poll-seconds', '0.000999']),
+  /--poll-seconds must be between 0.001 and 2147483.647/,
+);
+assert.throws(
+  () => parseArgs(['--pr', '1', '--poll-seconds', '2147483.648']),
+  /--poll-seconds must be between 0.001 and 2147483.647/,
+);
 
 const now = Date.now();
 const base = {
