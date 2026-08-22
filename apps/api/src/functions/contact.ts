@@ -8,8 +8,24 @@ export async function contactHandler(
   request: HttpRequest,
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
-  await ensureAppConfiguration();
   const origin = request.headers.get('origin');
+  try {
+    await ensureAppConfiguration();
+  } catch (error) {
+    context.error('app configuration load failed', {
+      name: error instanceof Error ? error.name : 'Error',
+    });
+    return {
+      status: 503,
+      headers: {
+        ...contactCorsHeaders(origin),
+        'Content-Type': 'application/json',
+      },
+      jsonBody: {
+        error: 'Contact delivery is temporarily unavailable. Please try again later.',
+      },
+    };
+  }
   const cors = contactCorsHeaders(origin);
 
   if (request.method === 'OPTIONS') {

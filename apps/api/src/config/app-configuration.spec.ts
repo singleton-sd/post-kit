@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import type { ConfigurationSetting } from '@azure/app-configuration';
-import { loadAppConfiguration, resetAppConfigurationCache } from './app-configuration';
+import {
+  ensureAppConfiguration,
+  loadAppConfiguration,
+  resetAppConfigurationCache,
+} from './app-configuration';
 
 describe('loadAppConfiguration', () => {
   const touched = [
@@ -85,6 +89,22 @@ describe('loadAppConfiguration', () => {
     });
 
     assert.equal(process.env.ORIGINS, 'localhost:4321');
+  });
+
+  it('retries after a failed load instead of caching the rejection', async () => {
+    process.env.AZURE_APPCONFIGURATION_ENDPOINT = 'https://example.azconfig.io';
+    let calls = 0;
+    const failing = {
+      listSettings: () =>
+        (async function* () {
+          calls += 1;
+          throw new Error('store unavailable');
+        })(),
+    };
+
+    await assert.rejects(ensureAppConfiguration(failing), /store unavailable/);
+    await assert.rejects(ensureAppConfiguration(failing), /store unavailable/);
+    assert.equal(calls, 2);
   });
 
   it('rejects malformed Key Vault references', async () => {

@@ -172,13 +172,19 @@ describe('SlidingWindowRateLimiter', () => {
     assert.ok(denied.retryAfterSec >= 1);
   });
 
-  it('isolates keys and reads first X-Forwarded-For hop', () => {
+  it('isolates keys and prefers the platform client address', () => {
     const limiter = new SlidingWindowRateLimiter(1, 60_000);
     assert.equal(limiter.tryConsume('a', 1).allowed, true);
     assert.equal(limiter.tryConsume('b', 1).allowed, true);
 
-    const headers = new Map([['x-forwarded-for', '203.0.113.9, 10.0.0.1']]);
-    assert.equal(clientIpFromHeaders({ get: (n) => headers.get(n) ?? null }), '203.0.113.9');
+    const xff = new Map([['x-forwarded-for', '203.0.113.9, 10.0.0.1']]);
+    assert.equal(clientIpFromHeaders({ get: (n) => xff.get(n) ?? null }), '10.0.0.1');
+
+    const azure = new Map([
+      ['x-forwarded-for', '203.0.113.9, 10.0.0.1'],
+      ['x-azure-clientip', '198.51.100.7'],
+    ]);
+    assert.equal(clientIpFromHeaders({ get: (n) => azure.get(n) ?? null }), '198.51.100.7');
   });
 
   it('evicts inactive buckets after the window', () => {

@@ -172,6 +172,16 @@ resource appConfigOidcOwner 'Microsoft.Authorization/roleAssignments@2022-04-01'
   }
 }
 
+resource kvOidcSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(githubOidcPrincipalId)) {
+  name: guid(keyVault.id, githubOidcPrincipalId, roleKeyVaultSecretsUser)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser)
+    principalId: githubOidcPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 output functionAppName string = functionApp.name
 output functionAppHostname string = functionApp.properties.defaultHostName
 output functionAppPrincipalId string = functionApp.identity.principalId

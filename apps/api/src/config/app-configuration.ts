@@ -68,8 +68,13 @@ export async function loadAppConfiguration(
 }
 
 /** Load once per worker. Safe to call from every Function invocation. */
-export function ensureAppConfiguration(): Promise<void> {
-  loadOnce ??= loadAppConfiguration();
+export function ensureAppConfiguration(
+  dependencies: AppConfigurationDependencies = {},
+): Promise<void> {
+  loadOnce ??= loadAppConfiguration(dependencies).catch((error: unknown) => {
+    loadOnce = undefined;
+    throw error;
+  });
   return loadOnce;
 }
 

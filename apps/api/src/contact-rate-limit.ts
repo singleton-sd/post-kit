@@ -83,15 +83,19 @@ export function resetContactRateLimiter(): void {
 }
 
 export function clientIpFromHeaders(headers: { get(name: string): string | null }): string {
+  const azureClient = headers.get('x-azure-clientip')?.trim();
+  if (azureClient) return azureClient;
+
   const xff = headers.get('x-forwarded-for');
   if (xff) {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first;
+    const hops = xff
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    // Azure appends the socket peer; take the last hop, not a caller-supplied prefix.
+    const last = hops.at(-1);
+    if (last) return last;
   }
-  return (
-    headers.get('x-client-ip')?.trim() ||
-    headers.get('x-real-ip')?.trim() ||
-    headers.get('x-azure-clientip')?.trim() ||
-    'unknown'
-  );
+
+  return headers.get('x-real-ip')?.trim() || headers.get('x-client-ip')?.trim() || 'unknown';
 }

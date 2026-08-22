@@ -6,9 +6,16 @@ non-secret settings come from Azure App Configuration
 (`ssd-postkit-appcs-prod-ae`). `FORWARD_EMAIL_TOKEN` is a Key Vault reference
 in that store.
 
-Local `func start` needs `az login` and
-`AZURE_APPCONFIGURATION_ENDPOINT` in `local.settings.json` (see the example).
-Do not put tenant profiles or tokens in `local.settings.json`.
+Local `func start` needs `az login`,
+`AZURE_APPCONFIGURATION_ENDPOINT` in `local.settings.json` (see the example),
+and these Azure RBAC roles on your user:
+
+- **App Configuration Data Reader** on `ssd-postkit-appcs-prod-ae`
+- **Key Vault Secrets User** on `ssd-global-kv-prod-ae`
+
+`az login` only supplies a credential; without both roles the contact handler
+cannot load configuration. Do not put tenant profiles or tokens in
+`local.settings.json`.
 
 ```bash
 pnpm --filter @singleton-sd/post-kit-api test

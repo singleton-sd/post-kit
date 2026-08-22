@@ -90,14 +90,6 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Assert KV secret exists
-        run: |
-          set -euo pipefail
-          az keyvault secret show \
-            --vault-name "$AZURE_KEY_VAULT_NAME" \
-            --name forwardemail-api-key \
-            --query name -o tsv >/dev/null
-
       - name: Deploy Function App infra
         run: |
           set -euo pipefail
@@ -107,6 +99,22 @@ jobs:
             --template-file infra/function-app.bicep \
             --name "postkit-api-${GITHUB_RUN_ID}" \
             --parameters githubOidcPrincipalId="$PRINCIPAL_ID"
+
+      - name: Assert KV secret exists
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            if az keyvault secret show \
+              --vault-name "$AZURE_KEY_VAULT_NAME" \
+              --name forwardemail-api-key \
+              --query name -o tsv >/dev/null; then
+              exit 0
+            fi
+            echo "Key Vault read not ready yet (attempt ${i}/5); waiting for RBAC."
+            sleep 5
+          done
+          echo "forwardemail-api-key is missing or the OIDC principal cannot read it."
+          exit 1
 
       - name: Seed App Configuration (missing keys only)
         run: |
