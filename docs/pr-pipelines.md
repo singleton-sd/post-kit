@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `ci.yml` | every pull request; every push to `main` | prettier check, eslint, worktree-path tests, PR automation tests, recursive package test/build |
 | `release.yml` | push to **`main`** (skipped for `chore: Release` commits) | Path-aware bumps; commit + tags for `@singleton-sd/post-kit-*` packages |
-| `validate-email-domain-branding.yml` | daily 06:00 UTC; `workflow_dispatch`; pushes to `main` under `packages/post-kit-email/**` | Live SPF/DKIM/DMARC/BIMI check. Skips (success) when `EMAIL_VALIDATION_DOMAIN` is unset. Not required on PRs. |
+| `validate-email-domain-branding.yml` | daily 06:00 UTC; `workflow_dispatch`; pushes to `main` under `packages/post-kit-email/**`, this workflow file, root `package.json`, or `pnpm-lock.yaml` | Live SPF/DKIM/DMARC/BIMI check. Skips (success) when `EMAIL_VALIDATION_DOMAIN` is unset. Not required on PRs. |
 
 There is **no** `pr-hygiene.yml` or `bootstrap-issue-labels.yml`. Do not add
 label-only GitHub Actions for this repository.

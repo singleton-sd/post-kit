@@ -166,6 +166,22 @@ describe('validateEmailDomainBranding', () => {
     assert.ok(report.errors.some((error) => error.includes('Multiple SPF TXT records')));
   });
 
+  it('fails when multiple DMARC TXT records are present', async () => {
+    const report = await validateEmailDomainBranding(
+      config,
+      validDeps({
+        dnsResolveTxt: resolver(
+          validDnsRecords({
+            '_dmarc.mail.example.com': ['v=DMARC1; p=reject', 'v=DMARC1; p=none'],
+          }),
+        ),
+      }),
+    );
+
+    assert.equal(report.ok, false);
+    assert.ok(report.errors.some((error) => error.includes('Multiple DMARC TXT records')));
+  });
+
   it('fails when SPF record ends with +all', async () => {
     const report = await validateEmailDomainBranding(
       config,

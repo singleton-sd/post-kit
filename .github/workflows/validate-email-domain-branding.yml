@@ -12,6 +12,8 @@ on:
     paths:
       - 'packages/post-kit-email/**'
       - '.github/workflows/validate-email-domain-branding.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
 
 permissions:
   contents: read
@@ -28,9 +30,11 @@ jobs:
       configured: ${{ steps.cfg.outputs.configured }}
     steps:
       - id: cfg
+        env:
+          EMAIL_VALIDATION_DOMAIN: ${{ vars.EMAIL_VALIDATION_DOMAIN }}
         run: |
           set -euo pipefail
-          if [ -z "${{ vars.EMAIL_VALIDATION_DOMAIN }}" ]; then
+          if [ -z "$EMAIL_VALIDATION_DOMAIN" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
             echo "EMAIL_VALIDATION_DOMAIN is unset — skipping live DNS validation."
             echo "Set repository Variables documented in SETUP.md and docs/email-forward-email.md."

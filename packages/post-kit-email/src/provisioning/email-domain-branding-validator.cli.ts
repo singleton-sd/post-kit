@@ -4,7 +4,15 @@ import {
 } from './email-domain-branding-validator';
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+  let args: Record<string, string>;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exitCode = 1;
+    return;
+  }
   const config = buildConfigFromEnvAndArgs(args);
   const report = await validateEmailDomainBranding(config);
 
@@ -42,9 +50,13 @@ function parseArgs(argv: string[]): Record<string, string> {
     if (!token.startsWith('--')) continue;
     const key = token.slice(2);
     const value = argv[index + 1];
-    if (!value || value.startsWith('--')) {
+    const hasValue = Boolean(value) && !value.startsWith('--');
+    if (key === 'requireBimiSvg' && !hasValue) {
       out[key] = 'true';
       continue;
+    }
+    if (!hasValue) {
+      throw new Error(`Missing value for --${key}`);
     }
     out[key] = value;
     index += 1;

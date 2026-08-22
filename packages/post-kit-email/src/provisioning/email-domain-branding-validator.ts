@@ -140,15 +140,23 @@ export async function validateEmailDomainBranding(
   if (dmarcLookup.lookupFailed) {
     pushFail(checks, errors, 'dmarc', dnsLookupFailureMessage(dmarcName));
   } else {
-    const dmarc = dmarcLookup.records.find((record) => /^v=dmarc1\b/i.test(record));
-    if (!dmarc) {
+    const dmarcMatches = dmarcLookup.records.filter((record) => /^v=dmarc1\b/i.test(record));
+    if (dmarcMatches.length === 0) {
       pushFail(
         checks,
         errors,
         'dmarc',
         `No DMARC TXT record found on ${dmarcName}. Add a record with "v=DMARC1; p=${config.expectedDmarcPolicy}; ...".`,
       );
+    } else if (dmarcMatches.length > 1) {
+      pushFail(
+        checks,
+        errors,
+        'dmarc',
+        `Multiple DMARC TXT records found on ${dmarcName} (${dmarcMatches.length}). DMARC permits exactly one record.`,
+      );
     } else {
+      const dmarc = dmarcMatches[0];
       const policyMatch = dmarc.match(/(?:^|;)\s*p\s*=\s*([a-z]+)/i)?.[1]?.toLowerCase();
       const pct = parseDmarcPct(dmarc);
       if (pct === 'invalid') {
@@ -366,9 +374,9 @@ async function fetchBimiLogoSvg(
       );
     }
 
-    return readResponseTextWithLimit(response as Response, BIMI_LOGO_MAX_BYTES);
+    return await readResponseTextWithLimit(response as Response, BIMI_LOGO_MAX_BYTES);
   } finally {
-    dispatcher.destroy();
+    await Promise.resolve(dispatcher.destroy()).catch(() => undefined);
   }
 }
 
