@@ -108,24 +108,24 @@ in the table above).
 | Who | When | Command / workflow |
 | --- | --- | --- |
 | **CI** | Daily 06:00 UTC, `workflow_dispatch`, and pushes to `main` that touch `packages/post-kit-email/**` | `.github/workflows/validate-email-domain-branding.yml` |
-| **Operators** | After `pnpm email:provision`, after DNS edits, or when CI is red | `pnpm validate:email-domain-branding` locally with the same Variables |
+| **Operators** | After `pnpm email:provision`, after DNS edits, or when CI is red | `pnpm validate:email-domain-branding` locally (flags or env) |
 
-CI reads **repository GitHub Variables** (not Secrets — these are public DNS
-names and public HTTPS URLs):
+CI reads **Azure App Configuration** `ssd-postkit-appcs-prod-ae` over OIDC
+(not GitHub Variables). Keys are public DNS names / public HTTPS URLs:
 
-| Variable | Required |
-| --- | --- |
-| `EMAIL_VALIDATION_DOMAIN` | Yes. If unset, the live job is skipped (workflow succeeds). |
-| `EMAIL_VALIDATION_DKIM_SELECTOR` | No (default `fe`) |
-| `EMAIL_VALIDATION_DMARC_POLICY` | No (default `quarantine`) |
-| `EMAIL_VALIDATION_BIMI_SELECTOR` | No (default `default`) |
-| `EMAIL_VALIDATION_BIMI_LOGO_URL` | No (when set, `l=` must match exactly) |
-| `EMAIL_VALIDATION_REQUIRE_BIMI_SVG` | No (default `true`) |
+| Env | App Config key | Required |
+| --- | --- | --- |
+| `EMAIL_VALIDATION_DOMAIN` | `app:email:validation:domain` | Yes. If unset (or the store / OIDC is missing), the job skips. |
+| `EMAIL_VALIDATION_DKIM_SELECTOR` | `app:email:validation:dkimSelector` | No (CLI default `fe`) |
+| `EMAIL_VALIDATION_DMARC_POLICY` | `app:email:validation:dmarcPolicy` | No (CLI default `quarantine`) |
+| `EMAIL_VALIDATION_BIMI_SELECTOR` | `app:email:validation:bimiSelector` | No (CLI default `default`) |
+| `EMAIL_VALIDATION_BIMI_LOGO_URL` | `app:email:validation:bimiLogoUrl` | No (when set, `l=` must match exactly) |
+| `EMAIL_VALIDATION_REQUIRE_BIMI_SVG` | `app:email:validation:requireBimiSvg` | No (CLI default `true`) |
 
-No Key Vault or OIDC is required for this check. A non-zero validator exit
-fails the workflow. The job retries a few times with backoff so short DNS
-propagation windows do not flake; remaining failures need a DNS/config fix
-and a re-run (`workflow_dispatch` or the next schedule).
+A non-zero validator exit fails the workflow. The job retries a few times
+with backoff so short DNS propagation windows do not flake; remaining
+failures need a DNS/config fix and a re-run (`workflow_dispatch` or the next
+schedule).
 
 Pull requests do **not** run live DNS validation. Unit tests in
 `email-domain-branding-validator.spec.ts` cover pass/fail cases with mocked

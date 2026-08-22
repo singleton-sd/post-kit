@@ -126,13 +126,15 @@ npx skills add singleton-sd/ai-plattform-skills \
 | Function App | `ssd-postkit-api-prod-ae` | Contact/send API |
 | App Service Plan | `ssd-postkit-plan-prod-ae` | Y1 Consumption |
 | Storage | `ssdpostkitstprodae` | Function App storage |
+| App Configuration | `ssd-postkit-appcs-prod-ae` | **Free** — branding keys `app:email:validation:*` |
 
 ### Secrets + configuration (locked)
 
 | Layer | Store | Rule |
 | --- | --- | --- |
 | **Secrets** | Azure Key Vault `ssd-global-kv-prod-ae` | Tokens, connection strings. Never in git or GitHub Actions secrets. |
-| **CI/CD** | GitHub Actions **OIDC** → Azure | Workflows log in with federated creds, then at job runtime: `SECRET_VALUE=$(az keyvault secret show --name <name> --vault-name ssd-global-kv-prod-ae --query value -o tsv)`, immediately `echo "::add-mask::$SECRET_VALUE"`, never print the raw value. |
+| **App configuration** | Azure App Configuration `ssd-postkit-appcs-prod-ae` | Non-secret settings including branding CI keys. |
+| **CI/CD** | GitHub Actions **OIDC** → Azure | Workflows log in with federated creds, then `az appconfig kv show` / `az keyvault secret show`. Mask secret values. |
 
 **GitHub Actions — allowed identifiers only (repository Variables, not Secrets):**
 
@@ -141,12 +143,6 @@ npx skills add singleton-sd/ai-plattform-skills \
 | `AZURE_CLIENT_ID` | OIDC app registration application (client) ID |
 | `AZURE_TENANT_ID` | Entra tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
-| `EMAIL_VALIDATION_DOMAIN` | Sending domain for live branding CI (e.g. `mail.plattform-kit.poc.singletonsd.com`) |
-| `EMAIL_VALIDATION_DKIM_SELECTOR` | Optional; default `fe` |
-| `EMAIL_VALIDATION_DMARC_POLICY` | Optional; `quarantine` or `reject` |
-| `EMAIL_VALIDATION_BIMI_SELECTOR` | Optional; default `default` |
-| `EMAIL_VALIDATION_BIMI_LOGO_URL` | Optional expected BIMI logo HTTPS URL |
-| `EMAIL_VALIDATION_REQUIRE_BIMI_SVG` | Optional; default `true` |
 
 **Do not** store connection strings, passwords, deploy tokens, or
 `AZURE_CREDENTIALS` in GitHub Secrets.
@@ -155,9 +151,9 @@ npx skills add singleton-sd/ai-plattform-skills \
 
 - [ ] OIDC app registration + federated credentials for this repo
 - [ ] GitHub Variables `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID`
-- [ ] GitHub Variables `EMAIL_VALIDATION_*` for live branding CI (see table above; skip-if-unset until DNS exists)
 - [ ] Copy required secrets into Key Vault `ssd-global-kv-prod-ae` (names only in git)
-- [ ] Provision Function App / plan / storage when the API epic lands
+- [ ] Provision Function App / plan / storage / App Configuration (`ssd-postkit-appcs-prod-ae`, Free)
+- [ ] Set branding keys `app:email:validation:*` in App Configuration (seeded on first Function deploy)
 
 ## 6. npmjs (public packages)
 

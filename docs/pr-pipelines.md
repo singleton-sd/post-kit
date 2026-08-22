@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `ci.yml` | every pull request; every push to `main` | prettier check, eslint, worktree-path tests, PR automation tests, recursive package test/build |
 | `release.yml` | push to **`main`** (skipped for `chore: Release` commits) | Path-aware bumps; commit + tags for `@singleton-sd/post-kit-*` packages |
-| `validate-email-domain-branding.yml` | daily 06:00 UTC; `workflow_dispatch`; pushes to `main` under `packages/post-kit-email/**`, this workflow file, root `package.json`, or `pnpm-lock.yaml` | Live SPF/DKIM/DMARC/BIMI check. Skips (success) when `EMAIL_VALIDATION_DOMAIN` is unset. Not required on PRs. |
+| `validate-email-domain-branding.yml` | daily 06:00 UTC; `workflow_dispatch`; pushes to `main` under `packages/post-kit-email/**`, this workflow file, root `package.json`, `pnpm-lock.yaml`, or `infra/appconfig-seed.json` | Live SPF/DKIM/DMARC/BIMI check. Reads `app:email:validation:*` from App Configuration. Skips (success) when OIDC Variables are missing, the store is missing, or `app:email:validation:domain` is unset. Not required on PRs. |
 
 There is **no** `pr-hygiene.yml` or `bootstrap-issue-labels.yml`. Do not add
 label-only GitHub Actions for this repository.
@@ -30,7 +30,7 @@ With an empty workspace (no `@singleton-sd/post-kit-*` packages yet) it logs
 
 | Allowed in GitHub | Forbidden in GitHub |
 | --- | --- |
-| Variables: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (IDs); `EMAIL_VALIDATION_*` (public DNS / HTTPS branding checks) | Any secret: connection strings, passwords, client secrets, `AZURE_CREDENTIALS` |
+| Variables: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (IDs) | Any secret: connection strings, passwords, client secrets, `AZURE_CREDENTIALS` |
 | Built-in `GITHUB_TOKEN` for PR labels and release commits | Provider API tokens |
 
 Flow (later, when Azure workflows exist): **Azure Login (OIDC)** →
