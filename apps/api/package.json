@@ -10,7 +10,10 @@
     "start": "func start"
   },
   "dependencies": {
+    "@azure/app-configuration": "^1.12.1",
     "@azure/functions": "^4.6.0",
+    "@azure/identity": "^4.13.1",
+    "@azure/keyvault-secrets": "^4.11.2",
     "@singleton-sd/post-kit-email": "workspace:*"
   },
   "devDependencies": {

@@ -1,5 +1,6 @@
 // PostKit contact/send Azure Functions — Linux Consumption in rg-ssd-global.
-// Secrets: FORWARD_EMAIL_TOKEN from existing Key Vault (never GitHub Secrets).
+// Secrets: FORWARD_EMAIL_TOKEN from Key Vault via App Configuration KV refs.
+// Non-secret settings: Azure App Configuration (Free) ssd-postkit-appcs-prod-ae
 // CAF: ssd-postkit-api-prod-ae
 
 @description('Azure region')
@@ -17,25 +18,19 @@ param planName string = 'ssd-postkit-plan-prod-ae'
 @description('Existing Key Vault name in this resource group')
 param keyVaultName string = 'ssd-global-kv-prod-ae'
 
-@description('Comma-separated allowed Origin hostnames (no scheme)')
-param origins string = '*.poc.singletonsd.com,localhost:4321'
+@description('CAF App Configuration store name')
+param appConfigName string = 'ssd-postkit-appcs-prod-ae'
 
-@description('Contact inbox destination')
-param contactInboxAddress string = 'hello@singletonsd.com'
+@description('App Configuration SKU — Free is available in this subscription')
+@allowed(['Free', 'Developer', 'Standard'])
+param appConfigSku string = 'Free'
 
-@description('Transactional From address (Forward Email alias)')
-param emailFromAddress string = 'noreply@mail.plattform-kit.poc.singletonsd.com'
-
-@description('From display name')
-param emailFromName string = 'Plattform Kit'
-
-@description('JSON map of marketing host → sender/inbox (CONTACT_EMAIL_PROFILES_BY_HOST)')
-param contactEmailProfilesByHost string = '{"inkads.poc.singletonsd.com":{"fromAddress":"noreply@mail.inkads.poc.singletonsd.com","fromName":"InkAds","contactInboxAddress":"inkads-support@singletonsd.com"},"plattform-kit.poc.singletonsd.com":{"fromAddress":"noreply@mail.plattform-kit.poc.singletonsd.com","fromName":"Plattform Kit","contactInboxAddress":"hello@singletonsd.com"}}'
-
-@description('KV secret name for Forward Email API token')
-param forwardEmailSecretName string = 'forwardemail-api-key'
+@description('Entra object id of the GitHub OIDC app (empty skips App Config RBAC for CI)')
+param githubOidcPrincipalId string = ''
 
 var roleKeyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
+var roleAppConfigDataReader = '516239f1-63e1-4d78-a4de-a74fb236a071'
+var roleAppConfigDataOwner = '5ae67dd6-50cb-40e7-96ff-dc2bfa4b606b'
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
@@ -65,6 +60,21 @@ resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
   name: keyVaultName
+}
+
+resource appConfig 'Microsoft.AppConfiguration/configurationStores@2024-05-01' = {
+  name: appConfigName
+  location: location
+  sku: {
+    name: appConfigSku
+  }
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    publicNetworkAccess: 'Enabled'
+    disableLocalAuth: false
+  }
 }
 
 var storageConnection = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storage.listKeys().keys[0].value}'
@@ -114,44 +124,8 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '~22'
         }
         {
-          name: 'ORIGINS'
-          value: origins
-        }
-        {
-          name: 'FORWARD_EMAIL_TOKEN'
-          value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/${forwardEmailSecretName}/)'
-        }
-        {
-          name: 'FORWARD_EMAIL_BASE_URL'
-          value: 'https://api.forwardemail.net'
-        }
-        {
-          name: 'EMAIL_PROVIDER'
-          value: 'forward-email'
-        }
-        {
-          name: 'EMAIL_ALLOW_PRODUCTION_SEND'
-          value: 'true'
-        }
-        {
-          name: 'EMAIL_FROM_ADDRESS'
-          value: emailFromAddress
-        }
-        {
-          name: 'EMAIL_FROM_NAME'
-          value: emailFromName
-        }
-        {
-          name: 'CONTACT_INBOX_ADDRESS'
-          value: contactInboxAddress
-        }
-        {
-          name: 'CONTACT_EMAIL_PROFILES_BY_HOST'
-          value: contactEmailProfilesByHost
-        }
-        {
-          name: 'CONTACT_RATE_LIMIT_PER_MIN'
-          value: '5'
+          name: 'AZURE_APPCONFIGURATION_ENDPOINT'
+          value: appConfig.properties.endpoint
         }
       ]
     }
@@ -168,7 +142,39 @@ resource kvFunctionSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-
   }
 }
 
+resource kvAppConfigSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, appConfig.id, roleKeyVaultSecretsUser)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser)
+    principalId: appConfig.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource appConfigFunctionReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(appConfig.id, functionApp.id, roleAppConfigDataReader)
+  scope: appConfig
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleAppConfigDataReader)
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource appConfigOidcOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(githubOidcPrincipalId)) {
+  name: guid(appConfig.id, githubOidcPrincipalId, roleAppConfigDataOwner)
+  scope: appConfig
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleAppConfigDataOwner)
+    principalId: githubOidcPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 output functionAppName string = functionApp.name
 output functionAppHostname string = functionApp.properties.defaultHostName
 output functionAppPrincipalId string = functionApp.identity.principalId
 output baseUrl string = 'https://${functionApp.properties.defaultHostName}'
+output appConfigName string = appConfig.name
+output appConfigEndpoint string = appConfig.properties.endpoint

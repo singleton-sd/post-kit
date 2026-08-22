@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `ci.yml` | every pull request; every push to `main` | prettier check, eslint, worktree-path tests, PR automation tests, recursive package test/build |
 | `release.yml` | push to **`main`** (skipped for `chore: Release` commits) | Path-aware bumps; commit + tags for `@singleton-sd/post-kit-*` packages |
-| `deploy-api.yml` | `main` path changes under `apps/api/**`, `packages/post-kit-email/**`, `infra/function-app.bicep`, `.github/workflows/deploy-api.yml`; also `workflow_dispatch` | OIDC → bicep + zip deploy; skips Azure if `AZURE_*` Variables are missing |
+| `deploy-api.yml` | `main` path changes under `apps/api/**`, `packages/post-kit-email/**`, `infra/function-app.bicep`, `infra/appconfig-seed.json`, `.github/workflows/deploy-api.yml`; also `workflow_dispatch` | OIDC → bicep + App Config seed-if-absent + zip deploy; skips Azure if `AZURE_*` Variables are missing |
 
 There is **no** `pr-hygiene.yml` or `bootstrap-issue-labels.yml`. Do not add
 label-only GitHub Actions for this repository.

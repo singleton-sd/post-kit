@@ -62,6 +62,7 @@ Not in this bootstrap:
 | --- | --- | --- |
 | API | Azure Function App `ssd-postkit-api-prod-ae` | Plan `ssd-postkit-plan-prod-ae` (Y1 Consumption) |
 | Storage | `ssdpostkitstprodae` | Function App storage |
+| App configuration | `ssd-postkit-appcs-prod-ae` | Free SKU; non-secret settings + KV refs |
 | Secrets | Key Vault `ssd-global-kv-prod-ae` | Subscription `01c0bb8b-3770-4765-979a-cb13ae7e3dd2`, RG `rg-ssd-global` |
 | Packages | npmjs public `@singleton-sd/post-kit-*` | Root workspace is private and not published |
 

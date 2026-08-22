@@ -11,6 +11,8 @@ on:
       - 'apps/api/**'
       - 'packages/post-kit-email/**'
       - 'infra/function-app.bicep'
+      - 'infra/appconfig-seed.json'
+      - 'scripts/seed-appconfig.sh'
       - '.github/workflows/deploy-api.yml'
   workflow_dispatch:
 
@@ -22,6 +24,7 @@ env:
   AZURE_RESOURCE_GROUP: rg-ssd-global
   AZURE_FUNCTIONAPP_NAME: ssd-postkit-api-prod-ae
   AZURE_KEY_VAULT_NAME: ssd-global-kv-prod-ae
+  APP_CONFIG_NAME: ssd-postkit-appcs-prod-ae
 
 jobs:
   build:
@@ -98,10 +101,18 @@ jobs:
       - name: Deploy Function App infra
         run: |
           set -euo pipefail
+          PRINCIPAL_ID=$(az ad sp show --id "${{ vars.AZURE_CLIENT_ID }}" --query id -o tsv)
           az deployment group create \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --template-file infra/function-app.bicep \
-            --name "postkit-api-${GITHUB_RUN_ID}"
+            --name "postkit-api-${GITHUB_RUN_ID}" \
+            --parameters githubOidcPrincipalId="$PRINCIPAL_ID"
+
+      - name: Seed App Configuration (missing keys only)
+        run: |
+          set -euo pipefail
+          chmod +x scripts/seed-appconfig.sh
+          ./scripts/seed-appconfig.sh infra/appconfig-seed.json
 
       - name: Zip deploy Function App
         run: |

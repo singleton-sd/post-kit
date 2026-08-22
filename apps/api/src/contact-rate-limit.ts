@@ -66,11 +66,21 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
 /**
  * Process-local limiter (resets on cold start / scale-out). A shared store
  * is out of scope for this Y1 PoC; CONTACT_RATE_LIMIT_PER_MIN is best-effort.
+ * Constructed lazily so App Configuration can populate env first.
  */
-export const contactRateLimiter = new SlidingWindowRateLimiter(
-  parsePositiveInt(process.env.CONTACT_RATE_LIMIT_PER_MIN, DEFAULT_MAX),
-  parsePositiveInt(process.env.CONTACT_RATE_LIMIT_WINDOW_MS, DEFAULT_WINDOW_MS),
-);
+let contactRateLimiter: SlidingWindowRateLimiter | undefined;
+
+export function getContactRateLimiter(): SlidingWindowRateLimiter {
+  contactRateLimiter ??= new SlidingWindowRateLimiter(
+    parsePositiveInt(process.env.CONTACT_RATE_LIMIT_PER_MIN, DEFAULT_MAX),
+    parsePositiveInt(process.env.CONTACT_RATE_LIMIT_WINDOW_MS, DEFAULT_WINDOW_MS),
+  );
+  return contactRateLimiter;
+}
+
+export function resetContactRateLimiter(): void {
+  contactRateLimiter = undefined;
+}
 
 export function clientIpFromHeaders(headers: { get(name: string): string | null }): string {
   const xff = headers.get('x-forwarded-for');

@@ -1,12 +1,14 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { EmailProviderError } from '@singleton-sd/post-kit-email';
+import { ensureAppConfiguration } from '../config/app-configuration';
 import { contactCorsHeaders, submitContactInquiry } from '../contact';
-import { clientIpFromHeaders, contactRateLimiter } from '../contact-rate-limit';
+import { clientIpFromHeaders, getContactRateLimiter } from '../contact-rate-limit';
 
 export async function contactHandler(
   request: HttpRequest,
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
+  await ensureAppConfiguration();
   const origin = request.headers.get('origin');
   const cors = contactCorsHeaders(origin);
 
@@ -15,7 +17,7 @@ export async function contactHandler(
   }
 
   const ip = clientIpFromHeaders(request.headers);
-  const limit = contactRateLimiter.tryConsume(ip);
+  const limit = getContactRateLimiter().tryConsume(ip);
   if (!limit.allowed) {
     return {
       status: 429,
