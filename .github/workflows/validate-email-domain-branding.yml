@@ -1,0 +1,88 @@
+# Live DNS/HTTPS branding checks for the configured sending domain.
+# No secrets. Public GitHub Variables only (EMAIL_VALIDATION_*).
+# If EMAIL_VALIDATION_DOMAIN is unset, the live job is skipped (success).
+name: Validate email domain branding
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/post-kit-email/**'
+      - '.github/workflows/validate-email-domain-branding.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-email-domain-branding
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Check configuration
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.cfg.outputs.configured }}
+    steps:
+      - id: cfg
+        run: |
+          set -euo pipefail
+          if [ -z "${{ vars.EMAIL_VALIDATION_DOMAIN }}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "EMAIL_VALIDATION_DOMAIN is unset — skipping live DNS validation."
+            echo "Set repository Variables documented in SETUP.md and docs/email-forward-email.md."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  validate:
+    name: SPF / DKIM / DMARC / BIMI
+    needs: gate
+    if: needs.gate.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    env:
+      EMAIL_VALIDATION_DOMAIN: ${{ vars.EMAIL_VALIDATION_DOMAIN }}
+      EMAIL_VALIDATION_DKIM_SELECTOR: ${{ vars.EMAIL_VALIDATION_DKIM_SELECTOR }}
+      EMAIL_VALIDATION_DMARC_POLICY: ${{ vars.EMAIL_VALIDATION_DMARC_POLICY }}
+      EMAIL_VALIDATION_BIMI_SELECTOR: ${{ vars.EMAIL_VALIDATION_BIMI_SELECTOR }}
+      EMAIL_VALIDATION_BIMI_LOGO_URL: ${{ vars.EMAIL_VALIDATION_BIMI_LOGO_URL }}
+      EMAIL_VALIDATION_REQUIRE_BIMI_SVG: ${{ vars.EMAIL_VALIDATION_REQUIRE_BIMI_SVG }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate with DNS retry
+        run: |
+          set -euo pipefail
+          attempts=4
+          delay=15
+          for i in $(seq 1 "$attempts"); do
+            echo "Branding validation attempt ${i}/${attempts} for ${EMAIL_VALIDATION_DOMAIN}"
+            if pnpm validate:email-domain-branding; then
+              exit 0
+            fi
+            if [ "$i" -lt "$attempts" ]; then
+              echo "Attempt ${i} failed; waiting ${delay}s for DNS propagation."
+              sleep "$delay"
+              delay=$((delay * 2))
+            fi
+          done
+          echo "Branding validation failed after ${attempts} attempts."
+          echo "Fix SPF/DKIM/DMARC/BIMI for ${EMAIL_VALIDATION_DOMAIN}, then re-run this workflow."
+          exit 1

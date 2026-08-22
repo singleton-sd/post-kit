@@ -141,6 +141,12 @@ npx skills add singleton-sd/ai-plattform-skills \
 | `AZURE_CLIENT_ID` | OIDC app registration application (client) ID |
 | `AZURE_TENANT_ID` | Entra tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
+| `EMAIL_VALIDATION_DOMAIN` | Sending domain for live branding CI (e.g. `mail.plattform-kit.poc.singletonsd.com`) |
+| `EMAIL_VALIDATION_DKIM_SELECTOR` | Optional; default `fe` |
+| `EMAIL_VALIDATION_DMARC_POLICY` | Optional; `quarantine` or `reject` |
+| `EMAIL_VALIDATION_BIMI_SELECTOR` | Optional; default `default` |
+| `EMAIL_VALIDATION_BIMI_LOGO_URL` | Optional expected BIMI logo HTTPS URL |
+| `EMAIL_VALIDATION_REQUIRE_BIMI_SVG` | Optional; default `true` |
 
 **Do not** store connection strings, passwords, deploy tokens, or
 `AZURE_CREDENTIALS` in GitHub Secrets.
@@ -149,6 +155,7 @@ npx skills add singleton-sd/ai-plattform-skills \
 
 - [ ] OIDC app registration + federated credentials for this repo
 - [ ] GitHub Variables `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID`
+- [ ] GitHub Variables `EMAIL_VALIDATION_*` for live branding CI (see table above; skip-if-unset until DNS exists)
 - [ ] Copy required secrets into Key Vault `ssd-global-kv-prod-ae` (names only in git)
 - [ ] Provision Function App / plan / storage when the API epic lands
 

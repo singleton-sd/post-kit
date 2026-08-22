@@ -65,7 +65,9 @@ Not in this bootstrap:
 | Secrets | Key Vault `ssd-global-kv-prod-ae` | Subscription `01c0bb8b-3770-4765-979a-cb13ae7e3dd2`, RG `rg-ssd-global` |
 | Packages | npmjs public `@singleton-sd/post-kit-*` | Root workspace is private and not published |
 
-CI is a single GitHub Actions workflow (`Lint / test / build`). There are no
-PR preview environments in v1. OIDC → Key Vault is the secrets path; GitHub
+CI is `Lint / test / build` on every PR. Live email-domain branding
+validation is a separate scheduled workflow (not required on PRs); see
+[`docs/email-forward-email.md`](../email-forward-email.md). There are no PR
+preview environments in v1. OIDC → Key Vault is the secrets path; GitHub
 Secrets are forbidden. IDs and human gates: [`SETUP.md`](../../SETUP.md),
 pipelines: [`docs/pr-pipelines.md`](../pr-pipelines.md).

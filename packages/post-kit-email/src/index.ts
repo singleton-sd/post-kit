@@ -41,6 +41,16 @@ export {
   resolveContactEmailProfile,
   resolveTenantEmailProfileOverride,
 } from './contact/contact-email-profile';
+export type {
+  DmarcPolicy,
+  TransactionalEmailAuthProfile,
+} from './contact/transactional-email-auth-profile';
+export {
+  extractEmailDomain,
+  loadTransactionalEmailAuthProfile,
+  validateResolvedSenderDomainAlignment,
+  validateTransactionalEmailAuthProfile,
+} from './contact/transactional-email-auth-profile';
 
 export type {
   ForwardEmailAliasSummary,
@@ -53,3 +63,15 @@ export {
   getRequiredDnsRecords,
   mergeSpfInclude,
 } from './provisioning/forward-email-management';
+
+export type {
+  EmailDomainBrandingValidationCheck,
+  EmailDomainBrandingValidationConfig,
+  EmailDomainBrandingValidationDependencies,
+  EmailDomainBrandingValidationReport,
+  ValidationStatus,
+} from './provisioning/email-domain-branding-validator';
+export {
+  validateBimiSvgStructure,
+  validateEmailDomainBranding,
+} from './provisioning/email-domain-branding-validator';
