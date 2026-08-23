@@ -3,11 +3,18 @@ import { EmailProviderError } from '@singleton-sd/post-kit-email';
 import { ensureAppConfiguration } from '../config/app-configuration';
 import { contactCorsHeaders, submitContactInquiry } from '../contact';
 import { clientIpFromHeaders, getContactRateLimiter } from '../contact-rate-limit';
+import { createLogger, resolveCorrelationId } from '../telemetry';
 
 export async function contactHandler(
   request: HttpRequest,
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
+  const startMs = Date.now();
+  const correlationId = resolveCorrelationId(request.headers.get('x-correlation-id') ?? undefined);
+  const logger = createLogger(correlationId);
+
+  logger.info('contact.request.received');
+
   const origin = request.headers.get('origin');
   try {
     await ensureAppConfiguration();
@@ -20,6 +27,7 @@ export async function contactHandler(
       headers: {
         ...contactCorsHeaders(origin),
         'Content-Type': 'application/json',
+        'X-Correlation-Id': correlationId,
       },
       jsonBody: {
         error: 'Contact delivery is temporarily unavailable. Please try again later.',
@@ -29,7 +37,7 @@ export async function contactHandler(
   const cors = contactCorsHeaders(origin);
 
   if (request.method === 'OPTIONS') {
-    return { status: 204, headers: cors };
+    return { status: 204, headers: { ...cors, 'X-Correlation-Id': correlationId } };
   }
 
   const ip = clientIpFromHeaders(request.headers);
@@ -41,6 +49,7 @@ export async function contactHandler(
         ...cors,
         'Content-Type': 'application/json',
         'Retry-After': String(limit.retryAfterSec),
+        'X-Correlation-Id': correlationId,
       },
       jsonBody: { error: 'Too many messages were sent. Please wait a minute and try again.' },
     };
@@ -49,18 +58,27 @@ export async function contactHandler(
   try {
     const body = await request.json().catch(() => null);
     const result = await submitContactInquiry(body, { requestOrigin: origin });
+    const durationMs = Date.now() - startMs;
+    logger.info('contact.request.completed', { outcome: 'sent', durationMs });
     return {
       status: 202,
-      headers: { ...cors, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json', 'X-Correlation-Id': correlationId },
       jsonBody: result,
     };
   } catch (error) {
+    const durationMs = Date.now() - startMs;
+
+    const errorCode =
+      error instanceof EmailProviderError ? error.kind : (error as Error | undefined)?.name;
+
     context.error('contact failed', {
       name: error instanceof Error ? error.name : 'Error',
       kind: error instanceof EmailProviderError ? error.kind : undefined,
       statusCode: error instanceof EmailProviderError ? error.statusCode : undefined,
       correlationId: error instanceof EmailProviderError ? error.correlationId : undefined,
     });
+
+    logger.error('contact.request.failed', { outcome: 'failed', errorCode, durationMs });
 
     const statusFromValidation =
       error instanceof Error && 'status' in error
@@ -69,7 +87,7 @@ export async function contactHandler(
     if (statusFromValidation === 400) {
       return {
         status: 400,
-        headers: { ...cors, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json', 'X-Correlation-Id': correlationId },
         jsonBody: { error: error instanceof Error ? error.message : 'Invalid request' },
       };
     }
@@ -80,7 +98,7 @@ export async function contactHandler(
 
     return {
       status: unavailable ? 503 : 500,
-      headers: { ...cors, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json', 'X-Correlation-Id': correlationId },
       jsonBody: {
         error: unavailable
           ? 'Contact delivery is temporarily unavailable. Please try again later.'
