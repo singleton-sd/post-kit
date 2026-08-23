@@ -85,6 +85,6 @@ const request: SendRequest = {
 
 ## Contributing
 
-This package is part of the [PostKit monorepo](https://github.com/singleton-sd/post-kit). See [AGENTS.md](../../AGENTS.md) for the engineering workflow.
+This package is part of the [PostKit monorepo](https://github.com/singleton-sd/post-kit). See [AGENTS.md](https://github.com/singleton-sd/post-kit/blob/main/AGENTS.md) for the engineering workflow.
 
 All exported names are a **public API surface** — treat them as stable. Breaking changes require a major version bump.

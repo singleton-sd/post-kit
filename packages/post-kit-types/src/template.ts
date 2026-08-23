@@ -46,7 +46,7 @@ export interface TemplateSourceMetadata {
    */
   variables: string[];
   /** Schema version of this metadata file. Must equal `TEMPLATE_SCHEMA_VERSION`. */
-  schemaVersion: string;
+  schemaVersion: typeof TEMPLATE_SCHEMA_VERSION;
 }
 
 /**
@@ -68,8 +68,8 @@ export type TemplatePreviewData = Record<string, string>;
 export interface TemplateManifest {
   /** Template key — matches `TemplateSourceMetadata.key`. */
   key: string;
-  /** Schema version of the compiled artifact format. */
-  schemaVersion: string;
+  /** Schema version of the compiled artifact format. Must equal `TEMPLATE_SCHEMA_VERSION`. */
+  schemaVersion: typeof TEMPLATE_SCHEMA_VERSION;
   /** ISO 8601 timestamp of when this artifact was compiled. */
   compiledAt: string;
   /**
