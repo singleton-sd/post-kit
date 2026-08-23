@@ -119,6 +119,13 @@ describe('ApiKeyTenantResolver', () => {
       const ctx = await resolver.resolve(request as never);
       assert.deepEqual(ctx, { tenantId: 'inkads', environment: 'production' });
     });
+
+    // Defensive: accept multiple spaces as separator (non-standard but harmless)
+    it('accepts "Bearer  token" with two spaces and resolves the correct TenantContext', async () => {
+      const request = makeRequest({ authorization: 'Bearer  tk_live_abc123' });
+      const ctx = await resolver.resolve(request as never);
+      assert.deepEqual(ctx, { tenantId: 'inkads', environment: 'production' });
+    });
   });
 
   describe('unknown token', () => {

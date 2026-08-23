@@ -62,8 +62,8 @@ export class ApiKeyTenantResolver implements TenantResolver {
     // RFC 7235: the auth-scheme token is case-insensitive. Accept lowercase
     // "bearer " as well as the canonical "Bearer " form before extracting the
     // credential, so clients sending e.g. `authorization: bearer <token>` are
-    // not rejected.
-    const bearerPrefixMatch = /^bearer /i.exec(authHeader);
+    // not rejected. Accept one or more spaces as the separator (defensive).
+    const bearerPrefixMatch = /^bearer +/i.exec(authHeader);
     if (!bearerPrefixMatch) {
       throw new TenantResolverError(
         'Authorization header must use the Bearer scheme.',
