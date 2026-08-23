@@ -27,7 +27,8 @@
     "build": "tsc -p tsconfig.json",
     "lint": "echo \"lint:email — covered by root eslint on staged files\"",
     "test": "node --import tsx --test src/**/*.spec.ts",
-    "provision": "node --import tsx src/bin/provision.ts"
+    "provision": "node --import tsx src/bin/provision.ts",
+    "validate:domain-branding": "node --import tsx src/provisioning/email-domain-branding-validator.cli.ts"
   },
   "devDependencies": {
     "@types/node": "^20.17.9",
@@ -35,6 +36,9 @@
     "typescript": "^5.7.2"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.18.1"
+  },
+  "dependencies": {
+    "undici": "^7.10.0"
   }
 }

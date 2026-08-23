@@ -1,0 +1,134 @@
+# Live DNS/HTTPS branding checks for the configured sending domain.
+# Config: Azure App Configuration ssd-postkit-appcs-prod-ae (not GitHub Variables).
+# If OIDC Variables are missing or the store/key is unset, the job is skipped.
+name: Validate email domain branding
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/post-kit-email/**'
+      - '.github/workflows/validate-email-domain-branding.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'infra/appconfig-seed.json'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: validate-email-domain-branding
+  cancel-in-progress: false
+
+env:
+  APP_CONFIG_NAME: ssd-postkit-appcs-prod-ae
+
+jobs:
+  validate:
+    name: SPF / DKIM / DMARC / BIMI
+    if: ${{ vars.AZURE_CLIENT_ID != '' && vars.AZURE_TENANT_ID != '' && vars.AZURE_SUBSCRIPTION_ID != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Load branding keys from App Configuration
+        id: cfg
+        env:
+          APP_CONFIG_NAME: ${{ env.APP_CONFIG_NAME }}
+        run: |
+          set -euo pipefail
+          if ! err=$(az appconfig show --name "$APP_CONFIG_NAME" -o none 2>&1); then
+            if echo "$err" | grep -qiE 'ResourceNotFound|could not be found|ResourceNotFoundError'; then
+              echo "configured=false" >> "$GITHUB_OUTPUT"
+              echo "App Configuration $APP_CONFIG_NAME is missing — skipping live DNS validation."
+              exit 0
+            fi
+            echo "$err" >&2
+            exit 1
+          fi
+
+          ENDPOINT="$(az appconfig show --name "$APP_CONFIG_NAME" --query endpoint -o tsv)"
+
+          kv() {
+            local key="$1"
+            local out err
+            set +e
+            out=$(az appconfig kv show --endpoint "$ENDPOINT" --auth-mode login --key "$key" --query value -o tsv 2>&1)
+            local status=$?
+            set -e
+            if [ "$status" -eq 0 ]; then
+              printf '%s' "$out"
+              return 0
+            fi
+            if echo "$out" | grep -qiE 'not found|does not exist|No key-value found|KeyNotFound'; then
+              return 0
+            fi
+            echo "$out" >&2
+            return 1
+          }
+
+          domain="$(kv 'app:email:validation:domain')"
+          if [ -z "$domain" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "app:email:validation:domain is unset — skipping live DNS validation."
+            exit 0
+          fi
+
+          {
+            echo "EMAIL_VALIDATION_DOMAIN=$domain"
+            echo "EMAIL_VALIDATION_DKIM_SELECTOR=$(kv 'app:email:validation:dkimSelector')"
+            echo "EMAIL_VALIDATION_DMARC_POLICY=$(kv 'app:email:validation:dmarcPolicy')"
+            echo "EMAIL_VALIDATION_BIMI_SELECTOR=$(kv 'app:email:validation:bimiSelector')"
+            echo "EMAIL_VALIDATION_BIMI_LOGO_URL=$(kv 'app:email:validation:bimiLogoUrl')"
+            echo "EMAIL_VALIDATION_REQUIRE_BIMI_SVG=$(kv 'app:email:validation:requireBimiSvg')"
+          } >> "$GITHUB_ENV"
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v4
+        if: steps.cfg.outputs.configured == 'true'
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        if: steps.cfg.outputs.configured == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        if: steps.cfg.outputs.configured == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate with DNS retry
+        if: steps.cfg.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          attempts=4
+          delay=15
+          for i in $(seq 1 "$attempts"); do
+            echo "Branding validation attempt ${i}/${attempts} for ${EMAIL_VALIDATION_DOMAIN}"
+            if pnpm validate:email-domain-branding; then
+              exit 0
+            fi
+            if [ "$i" -lt "$attempts" ]; then
+              echo "Attempt ${i} failed; waiting ${delay}s for DNS propagation."
+              sleep "$delay"
+              delay=$((delay * 2))
+            fi
+          done
+          echo "Branding validation failed after ${attempts} attempts."
+          echo "Fix SPF/DKIM/DMARC/BIMI for ${EMAIL_VALIDATION_DOMAIN}, then re-run this workflow."
+          exit 1

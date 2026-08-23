@@ -126,14 +126,14 @@ npx skills add singleton-sd/ai-plattform-skills \
 | Function App | `ssd-postkit-api-prod-ae` | Contact/send API |
 | App Service Plan | `ssd-postkit-plan-prod-ae` | Y1 Consumption |
 | Storage | `ssdpostkitstprodae` | Function App storage |
-| App Configuration | `ssd-postkit-appcs-prod-ae` | **Free** (this subscription has no other Free store) |
+| App Configuration | `ssd-postkit-appcs-prod-ae` | **Free** (this subscription has no other Free store); includes branding keys `app:email:validation:*` |
 
 ### Secrets + configuration (locked)
 
 | Layer | Store | Rule |
 | --- | --- | --- |
 | **Secrets** | Azure Key Vault `ssd-global-kv-prod-ae` | Tokens, connection strings. Never in git or GitHub Actions secrets. |
-| **App configuration** | Azure App Configuration `ssd-postkit-appcs-prod-ae` | Non-secret settings + **Key Vault references** for secret values. |
+| **App configuration** | Azure App Configuration `ssd-postkit-appcs-prod-ae` | Non-secret settings, including branding CI keys, + **Key Vault references** for secret values. |
 | **CI/CD** | GitHub Actions **OIDC** → Azure | Workflows log in with federated creds, then at job runtime: `az appconfig kv show` / `az keyvault secret show`. Mask secret values; never print them. |
 
 **GitHub Actions — allowed identifiers only (repository Variables, not Secrets):**
@@ -154,6 +154,8 @@ npx skills add singleton-sd/ai-plattform-skills \
 - [ ] Copy required secrets into Key Vault `ssd-global-kv-prod-ae` (names only in git)
 - [ ] Provision Function App / plan / storage / App Configuration when the API epic lands
 - [ ] Grant the GitHub OIDC app App Configuration Data Owner (bicep param `githubOidcPrincipalId`)
+- [ ] Grant the GitHub OIDC app App Configuration Reader for management-plane store reads
+- [ ] Set branding keys `app:email:validation:*` in App Configuration (seeded on first Function deploy)
 
 ## 6. npmjs (public packages)
 

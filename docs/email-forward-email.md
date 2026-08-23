@@ -33,6 +33,7 @@ Trusted consumer / contact form
 | Secret storage | Azure Key Vault `ssd-global-kv-prod-ae` name **`forwardemail-api-key`** |
 | App configuration | Azure App Configuration `ssd-postkit-appcs-prod-ae` (Free) |
 | Runtime Function App | `apps/api` on `ssd-postkit-api-prod-ae`; loads env from App Config |
+| Branding validator | `pnpm validate:email-domain-branding` + scheduled CI |
 
 ## Configuration
 
@@ -49,7 +50,12 @@ Explicit process env always wins (local overrides / tests).
 | `CONTACT_INBOX_ADDRESS` | `app:email:contactInboxAddress` | Contact form destination |
 | `CONTACT_EMAIL_PROFILES_BY_HOST` | `app:email:profilesByHost` | JSON map of host → sender/inbox |
 | `ORIGINS` | `app:email:origins` | Allowlisted Origin hosts |
-| `EMAIL_VALIDATION_*` | `app:email:validation:*` | Branding CI (see branding workflow) |
+| `EMAIL_VALIDATION_DOMAIN` | `app:email:validation:domain` | Sending domain for branding CI / CLI (public DNS) |
+| `EMAIL_VALIDATION_DKIM_SELECTOR` | `app:email:validation:dkimSelector` | DKIM selector (default `fe`) |
+| `EMAIL_VALIDATION_DMARC_POLICY` | `app:email:validation:dmarcPolicy` | `quarantine` or `reject` (default `quarantine`) |
+| `EMAIL_VALIDATION_BIMI_SELECTOR` | `app:email:validation:bimiSelector` | BIMI selector (default `default`) |
+| `EMAIL_VALIDATION_BIMI_LOGO_URL` | `app:email:validation:bimiLogoUrl` | Optional expected BIMI `l=` HTTPS URL |
+| `EMAIL_VALIDATION_REQUIRE_BIMI_SVG` | `app:email:validation:requireBimiSvg` | Default `true`; `false` downgrades SVG issues to warnings |
 
 First-run values are in `infra/appconfig-seed.json`. After that, edit the store
 in Azure (seed will not overwrite existing keys). Onboard a new PoC host by
@@ -81,6 +87,76 @@ planning (those need the API domain payload). Verify-records / verify-smtp
 retry a few times; still-pending DNS exits 0 with a clear message.
 
 Do not log `FORWARD_EMAIL_TOKEN` or Authorization headers.
+
+## Automated domain branding validation
+
+The reusable validator fails fast when SPF, DKIM, DMARC, BIMI, or BIMI
+logo/SVG setup is incomplete for a sending domain. It lives in
+`packages/post-kit-email` (`email-domain-branding-validator.ts`). Do not
+treat it as a mailbox-rendering check.
+
+```bash
+pnpm validate:email-domain-branding -- --domain mail.plattform-kit.poc.singletonsd.com --dkimSelector fe --expectedDmarcPolicy quarantine --bimiSelector default --expectedBimiLogoUrl https://plattform-kit.poc.singletonsd.com/brand/bimi-logo.svg
+```
+
+Checks:
+
+- SPF TXT exists on `--domain` and is syntactically recognizable (`v=spf1 …`).
+- DKIM TXT exists on `<selector>._domainkey.<domain>` and includes `v=DKIM1`.
+- DMARC TXT exists on `_dmarc.<domain>` and matches `--expectedDmarcPolicy`.
+- BIMI TXT exists on `<selector>._bimi.<domain>` and includes `v=BIMI1; l=…`.
+- BIMI logo URL resolves over HTTPS with a successful HTTP status.
+- BIMI SVG has key structural requirements (`<svg>`, `baseProfile="tiny-ps"`,
+  `version="1.2"`, no `<script>`, no external HTTP(S) refs).
+
+Configuration can be supplied by CLI flags or env vars (`EMAIL_VALIDATION_*`
+in the table above).
+
+### When CI runs vs when operators run it
+
+| Who | When | Command / workflow |
+| --- | --- | --- |
+| **CI** | Daily 06:00 UTC, `workflow_dispatch`, and pushes to `main` that touch `packages/post-kit-email/**` | `.github/workflows/validate-email-domain-branding.yml` |
+| **Operators** | After `pnpm email:provision`, after DNS edits, or when CI is red | `pnpm validate:email-domain-branding` locally (flags or env) |
+
+CI reads **Azure App Configuration** `ssd-postkit-appcs-prod-ae` over OIDC
+(not GitHub Variables). Keys are public DNS names / public HTTPS URLs:
+
+| Env | App Config key | Required |
+| --- | --- | --- |
+| `EMAIL_VALIDATION_DOMAIN` | `app:email:validation:domain` | Yes. If unset (or Azure repository Variables / the store are missing), the job skips. Invalid OIDC federation fails the workflow. |
+| `EMAIL_VALIDATION_DKIM_SELECTOR` | `app:email:validation:dkimSelector` | No (CLI default `fe`) |
+| `EMAIL_VALIDATION_DMARC_POLICY` | `app:email:validation:dmarcPolicy` | No (CLI default `quarantine`) |
+| `EMAIL_VALIDATION_BIMI_SELECTOR` | `app:email:validation:bimiSelector` | No (CLI default `default`) |
+| `EMAIL_VALIDATION_BIMI_LOGO_URL` | `app:email:validation:bimiLogoUrl` | No (when set, `l=` must match exactly) |
+| `EMAIL_VALIDATION_REQUIRE_BIMI_SVG` | `app:email:validation:requireBimiSvg` | No (CLI default `true`) |
+
+A non-zero validator exit fails the workflow. The job retries a few times
+with backoff so short DNS propagation windows do not flake; remaining
+failures need a DNS/config fix and a re-run (`workflow_dispatch` or the next
+schedule).
+
+Pull requests do **not** run live DNS validation. Unit tests in
+`email-domain-branding-validator.spec.ts` cover pass/fail cases with mocked
+DNS and fetch. Regular `ci.yml` still runs those tests on every PR.
+
+Suggested operator sequence:
+
+1. Provision DNS (`pnpm email:provision -- --dry-run`, then without dry-run).
+2. Wait for TTL / Forward Email verify-records.
+3. Run `pnpm validate:email-domain-branding` (or dispatch the workflow).
+4. Treat non-zero exit as a gate failure; fix DNS/config and rerun.
+
+Known limitations:
+
+- DNS checks depend on external resolvers and can fail transiently during
+  propagation. CI retries; operators should wait and rerun rather than
+  treating a single failure as permanent.
+- Mailbox-provider rendering (logo display, VMC/CMC, Gmail trust scoring)
+  cannot be guaranteed by static DNS/SVG checks. That remains Human &
+  Operations (#11, #12).
+- The SVG validator enforces practical structural requirements only; it does
+  not replace provider-side BIMI compliance decisions.
 
 ## Preview safety
 

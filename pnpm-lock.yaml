@@ -65,6 +65,10 @@ importers:
         version: 5.9.3
 
   packages/post-kit-email:
+    dependencies:
+      undici:
+        specifier: ^7.10.0
+        version: 7.29.0
     devDependencies:
       '@types/node':
         specifier: ^20.17.9
@@ -1857,6 +1861,10 @@ packages:
   undici@6.21.1:
     resolution: {integrity: sha512-q/1rj5D0/zayJB2FraXdaWxbhWiNKDvu8naDT2dl1yTlvJp4BLtOcp2a5BvgGNQpYYJzau7tf1WgKv3b+7mqpQ==}
     engines: {node: '>=18.17'}
+
+  undici@7.29.0:
+    resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
+    engines: {node: '>=20.18.1'}
 
   unicorn-magic@0.1.0:
     resolution: {integrity: sha512-lRfVq8fE8gz6QMBuDM6a+LO3IAzTi05H6gCVaUpir2E1Rwpo4ZUog45KpNXKC/Mn3Yb9UDuHumeFTo9iV/D9FQ==}
@@ -3756,6 +3764,8 @@ snapshots:
   undici-types@8.3.0: {}
 
   undici@6.21.1: {}
+
+  undici@7.29.0: {}
 
   unicorn-magic@0.1.0: {}
 
