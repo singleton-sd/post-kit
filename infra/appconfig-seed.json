@@ -1,0 +1,17 @@
+{
+  "app:email:origins": "*.poc.singletonsd.com,localhost:4321",
+  "app:email:provider": "forward-email",
+  "app:email:allowProductionSend": "true",
+  "app:email:fromAddress": "noreply@mail.plattform-kit.poc.singletonsd.com",
+  "app:email:fromName": "Plattform Kit",
+  "app:email:contactInboxAddress": "hello@singletonsd.com",
+  "app:email:profilesByHost": "{\"inkads.poc.singletonsd.com\":{\"fromAddress\":\"noreply@mail.inkads.poc.singletonsd.com\",\"fromName\":\"InkAds\",\"contactInboxAddress\":\"inkads-support@singletonsd.com\"},\"plattform-kit.poc.singletonsd.com\":{\"fromAddress\":\"noreply@mail.plattform-kit.poc.singletonsd.com\",\"fromName\":\"Plattform Kit\",\"contactInboxAddress\":\"hello@singletonsd.com\"}}",
+  "app:email:rateLimitPerMin": "5",
+  "app:email:forwardEmailBaseUrl": "https://api.forwardemail.net",
+  "app:email:validation:domain": "mail.plattform-kit.poc.singletonsd.com",
+  "app:email:validation:dkimSelector": "fe",
+  "app:email:validation:dmarcPolicy": "quarantine",
+  "app:email:validation:bimiSelector": "default",
+  "app:email:validation:bimiLogoUrl": "",
+  "app:email:validation:requireBimiSvg": "true"
+}

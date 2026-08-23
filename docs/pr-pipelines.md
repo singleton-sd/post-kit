@@ -7,6 +7,7 @@
 | `ci.yml` | every pull request; every push to `main` | prettier check, eslint, worktree-path tests, PR automation tests, recursive package test/build |
 | `release.yml` | push to **`main`** (skipped for `chore: Release` commits) | Path-aware bumps; commit + tags for `@singleton-sd/post-kit-*` packages |
 | `validate-email-domain-branding.yml` | daily 06:00 UTC; `workflow_dispatch`; pushes to `main` under `packages/post-kit-email/**`, this workflow file, root `package.json`, `pnpm-lock.yaml`, or `infra/appconfig-seed.json` | Live SPF/DKIM/DMARC/BIMI check. Reads `app:email:validation:*` from App Configuration with `--auth-mode login`. Skips (success) when Azure repository Variables are missing, the store is missing, or `app:email:validation:domain` is unset. Failed OIDC federation fails the job. Not required on PRs. |
+| `deploy-api.yml` | `main` path changes under `apps/api/**`, `packages/post-kit-email/**`, `infra/function-app.bicep`, `infra/appconfig-seed.json`, `.github/workflows/deploy-api.yml`; also `workflow_dispatch` | OIDC → bicep + App Config seed-if-absent + zip deploy; skips Azure if `AZURE_*` Variables are missing |
 
 There is **no** `pr-hygiene.yml` or `bootstrap-issue-labels.yml`. Do not add
 label-only GitHub Actions for this repository.

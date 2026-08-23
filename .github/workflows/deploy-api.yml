@@ -1,0 +1,135 @@
+# PostKit Function App — Linux Consumption in rg-ssd-global.
+# Secrets: NEVER in GitHub Secrets. OIDC → Key Vault `forwardemail-api-key`.
+# Required Variables: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
+# If OIDC Variables are missing, the deploy job is skipped (workflow succeeds).
+name: Deploy API (Function)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'packages/post-kit-email/**'
+      - 'infra/function-app.bicep'
+      - 'infra/appconfig-seed.json'
+      - 'scripts/seed-appconfig.sh'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api-production
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: rg-ssd-global
+  AZURE_FUNCTIONAPP_NAME: ssd-postkit-api-prod-ae
+  AZURE_KEY_VAULT_NAME: ssd-global-kv-prod-ae
+  APP_CONFIG_NAME: ssd-postkit-appcs-prod-ae
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build ZIP
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Test API
+        run: pnpm --filter @singleton-sd/post-kit-api run test
+
+      - name: Stage zip
+        run: |
+          set -euo pipefail
+          pnpm --filter @singleton-sd/post-kit-email run build
+          pnpm --filter @singleton-sd/post-kit-api run build
+          STAGE=$(mktemp -d)
+          pnpm --filter @singleton-sd/post-kit-api deploy --prod "$STAGE"
+          cp apps/api/host.json "$STAGE/"
+          test -f "$STAGE/dist/index.js"
+          test -d "$STAGE/node_modules/@singleton-sd/post-kit-email"
+          (cd "$STAGE" && zip -r "$GITHUB_WORKSPACE/post-kit-api.zip" .)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: post-kit-api-zip
+          path: post-kit-api.zip
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    if: ${{ vars.AZURE_CLIENT_ID != '' && vars.AZURE_TENANT_ID != '' && vars.AZURE_SUBSCRIPTION_ID != '' }}
+    runs-on: ubuntu-latest
+    name: Function App
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: post-kit-api-zip
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Function App infra
+        run: |
+          set -euo pipefail
+          PRINCIPAL_ID=$(az ad sp show --id "${{ vars.AZURE_CLIENT_ID }}" --query id -o tsv)
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/function-app.bicep \
+            --name "postkit-api-${GITHUB_RUN_ID}" \
+            --parameters githubOidcPrincipalId="$PRINCIPAL_ID"
+
+      - name: Assert KV secret exists
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 600))
+          attempt=0
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            attempt=$((attempt + 1))
+            if az keyvault secret show \
+              --vault-name "$AZURE_KEY_VAULT_NAME" \
+              --name forwardemail-api-key \
+              --query name -o tsv >/dev/null; then
+              exit 0
+            fi
+            remaining=$((deadline - SECONDS))
+            echo "Key Vault read not ready yet (attempt ${attempt}; ${remaining}s remaining); waiting for RBAC."
+            sleep 20
+          done
+          echo "forwardemail-api-key is missing or the OIDC principal cannot read it."
+          exit 1
+
+      - name: Seed App Configuration (missing keys only)
+        run: |
+          set -euo pipefail
+          chmod +x scripts/seed-appconfig.sh
+          ./scripts/seed-appconfig.sh infra/appconfig-seed.json
+
+      - name: Zip deploy Function App
+        run: |
+          set -euo pipefail
+          az functionapp deployment source config-zip \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_FUNCTIONAPP_NAME" \
+            --src post-kit-api.zip

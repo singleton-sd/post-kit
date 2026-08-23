@@ -31,26 +31,35 @@ Trusted consumer / contact form
 | Domain / alias / verify | `ForwardEmailManagementClient` + `pnpm email:provision` |
 | DNS (MX / SPF / DKIM / DMARC / Return-Path) | AWS Route53; credentials from **pc-provision**, not this repo |
 | Secret storage | Azure Key Vault `ssd-global-kv-prod-ae` name **`forwardemail-api-key`** |
-| Runtime Function App | Later epic (`apps/api`); this package is the library only |
+| App configuration | Azure App Configuration `ssd-postkit-appcs-prod-ae` (Free) |
+| Runtime Function App | `apps/api` on `ssd-postkit-api-prod-ae`; loads env from App Config |
 | Branding validator | `pnpm validate:email-domain-branding` + scheduled CI |
 
 ## Configuration
 
-| Env | Notes |
-| --- | --- |
-| `FORWARD_EMAIL_TOKEN` | Required for live send / provision. KV secret `forwardemail-api-key` |
-| `FORWARD_EMAIL_BASE_URL` | Default `https://api.forwardemail.net` |
-| `EMAIL_PROVIDER` | `development` (safe default) or `forward-email` |
-| `EMAIL_ALLOW_PRODUCTION_SEND` | Must be `true` with `EMAIL_PROVIDER=forward-email` |
-| `EMAIL_FROM_ADDRESS` / `EMAIL_FROM_NAME` | Default sender |
-| `CONTACT_INBOX_ADDRESS` | Contact form destination |
-| `CONTACT_EMAIL_PROFILES_BY_HOST` | Optional JSON map of host → sender/inbox |
-| `EMAIL_VALIDATION_DOMAIN` | Sending domain for branding CI / CLI (public DNS) |
-| `EMAIL_VALIDATION_DKIM_SELECTOR` | DKIM selector (default `fe`) |
-| `EMAIL_VALIDATION_DMARC_POLICY` | `quarantine` or `reject` (default `quarantine`) |
-| `EMAIL_VALIDATION_BIMI_SELECTOR` | BIMI selector (default `default`) |
-| `EMAIL_VALIDATION_BIMI_LOGO_URL` | Optional expected BIMI `l=` HTTPS URL |
-| `EMAIL_VALIDATION_REQUIRE_BIMI_SVG` | Default `true`; `false` downgrades SVG issues to warnings |
+Runtime env is filled from App Configuration (`AZURE_APPCONFIGURATION_ENDPOINT`).
+Explicit process env always wins (local overrides / tests).
+
+| Env | App Config key | Notes |
+| --- | --- | --- |
+| `FORWARD_EMAIL_TOKEN` | `secret:forwardemail-api-key` | KV reference, never stored as a value |
+| `FORWARD_EMAIL_BASE_URL` | `app:email:forwardEmailBaseUrl` | Default `https://api.forwardemail.net` |
+| `EMAIL_PROVIDER` | `app:email:provider` | `development` locally; `forward-email` in prod |
+| `EMAIL_ALLOW_PRODUCTION_SEND` | `app:email:allowProductionSend` | Must be `true` with Forward Email |
+| `EMAIL_FROM_ADDRESS` / `EMAIL_FROM_NAME` | `app:email:fromAddress` / `fromName` | Default sender |
+| `CONTACT_INBOX_ADDRESS` | `app:email:contactInboxAddress` | Contact form destination |
+| `CONTACT_EMAIL_PROFILES_BY_HOST` | `app:email:profilesByHost` | JSON map of host → sender/inbox |
+| `ORIGINS` | `app:email:origins` | Allowlisted Origin hosts |
+| `EMAIL_VALIDATION_DOMAIN` | `app:email:validation:domain` | Sending domain for branding CI / CLI (public DNS) |
+| `EMAIL_VALIDATION_DKIM_SELECTOR` | `app:email:validation:dkimSelector` | DKIM selector (default `fe`) |
+| `EMAIL_VALIDATION_DMARC_POLICY` | `app:email:validation:dmarcPolicy` | `quarantine` or `reject` (default `quarantine`) |
+| `EMAIL_VALIDATION_BIMI_SELECTOR` | `app:email:validation:bimiSelector` | BIMI selector (default `default`) |
+| `EMAIL_VALIDATION_BIMI_LOGO_URL` | `app:email:validation:bimiLogoUrl` | Optional expected BIMI `l=` HTTPS URL |
+| `EMAIL_VALIDATION_REQUIRE_BIMI_SVG` | `app:email:validation:requireBimiSvg` | Default `true`; `false` downgrades SVG issues to warnings |
+
+First-run values are in `infra/appconfig-seed.json`. After that, edit the store
+in Azure (seed will not overwrite existing keys). Onboard a new PoC host by
+updating `app:email:profilesByHost` in the store, not Function App settings.
 
 AWS credentials for DNS are **not** stored here. Load them from pc-provision
 Key Vault `ssd-devtools-kv-prod-ae` (`aws-access-key-id` /

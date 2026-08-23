@@ -1,0 +1,8 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AZURE_APPCONFIGURATION_ENDPOINT": "https://ssd-postkit-appcs-prod-ae.azconfig.io"
+  }
+}
