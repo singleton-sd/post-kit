@@ -154,6 +154,7 @@ npx skills add singleton-sd/ai-plattform-skills \
 - [ ] Copy required secrets into Key Vault `ssd-global-kv-prod-ae` (names only in git)
 - [ ] Provision Function App / plan / storage / App Configuration when the API epic lands
 - [ ] Grant the GitHub OIDC app App Configuration Data Owner (bicep param `githubOidcPrincipalId`)
+- [ ] Grant the GitHub OIDC app App Configuration Reader for management-plane store reads
 - [ ] Set branding keys `app:email:validation:*` in App Configuration (seeded on first Function deploy)
 
 ## 6. npmjs (public packages)
