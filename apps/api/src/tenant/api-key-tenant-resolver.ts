@@ -59,20 +59,29 @@ export class ApiKeyTenantResolver implements TenantResolver {
       );
     }
 
-    if (!authHeader.startsWith('Bearer ')) {
+    // RFC 7235: the auth-scheme token is case-insensitive. Accept lowercase
+    // "bearer " as well as the canonical "Bearer " form before extracting the
+    // credential, so clients sending e.g. `authorization: bearer <token>` are
+    // not rejected.
+    const bearerPrefixMatch = /^bearer /i.exec(authHeader);
+    if (!bearerPrefixMatch) {
       throw new TenantResolverError(
         'Authorization header must use the Bearer scheme.',
         PostKitErrorCode.UNAUTHENTICATED,
       );
     }
 
-    const token = authHeader.slice('Bearer '.length);
+    const token = authHeader.slice(bearerPrefixMatch[0].length);
 
     if (!token) {
       throw new TenantResolverError('Bearer token is empty.', PostKitErrorCode.UNAUTHENTICATED);
     }
 
-    const entry = this.keyMap[token];
+    // Guard against prototype-chain property names (e.g. "toString", "__proto__")
+    // being accepted as valid tokens — they must be own properties of keyMap.
+    const entry = Object.prototype.hasOwnProperty.call(this.keyMap, token)
+      ? this.keyMap[token]
+      : undefined;
 
     if (!entry) {
       // Do not include the token value in this message.

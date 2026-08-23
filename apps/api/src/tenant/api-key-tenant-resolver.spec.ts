@@ -112,6 +112,13 @@ describe('ApiKeyTenantResolver', () => {
         },
       );
     });
+
+    // RFC 7235 regression: auth-scheme token is case-insensitive
+    it('accepts lowercase "bearer " scheme and resolves the correct TenantContext', async () => {
+      const request = makeRequest({ authorization: 'bearer tk_live_abc123' });
+      const ctx = await resolver.resolve(request as never);
+      assert.deepEqual(ctx, { tenantId: 'inkads', environment: 'production' });
+    });
   });
 
   describe('unknown token', () => {
@@ -128,6 +135,31 @@ describe('ApiKeyTenantResolver', () => {
             !err.message.includes('tk_unknown_token'),
             'Error message must not leak the raw token value',
           );
+          return true;
+        },
+      );
+    });
+
+    // Prototype-chain regression: inherited property names must not resolve a tenant
+    it('throws UNAUTHORIZED for a prototype-chain property name like "toString"', async () => {
+      const request = makeRequest({ authorization: 'Bearer toString' });
+      await assert.rejects(
+        () => resolver.resolve(request as never),
+        (err: unknown) => {
+          assert.ok(err instanceof TenantResolverError);
+          assert.equal(err.code, PostKitErrorCode.UNAUTHORIZED);
+          return true;
+        },
+      );
+    });
+
+    it('throws UNAUTHORIZED for the "__proto__" token', async () => {
+      const request = makeRequest({ authorization: 'Bearer __proto__' });
+      await assert.rejects(
+        () => resolver.resolve(request as never),
+        (err: unknown) => {
+          assert.ok(err instanceof TenantResolverError);
+          assert.equal(err.code, PostKitErrorCode.UNAUTHORIZED);
           return true;
         },
       );
