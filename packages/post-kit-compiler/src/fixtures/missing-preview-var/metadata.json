@@ -1,0 +1,7 @@
+{
+  "key": "auth.password-reset",
+  "name": "Password Reset",
+  "subject": "Reset your password",
+  "variables": ["resetUrl"],
+  "schemaVersion": "1"
+}

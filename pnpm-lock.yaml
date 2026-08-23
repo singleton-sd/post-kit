@@ -64,6 +64,25 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/post-kit-compiler:
+    dependencies:
+      '@singleton-sd/post-kit-types':
+        specifier: workspace:*
+        version: link:../post-kit-types
+      handlebars:
+        specifier: ^4.7.8
+        version: 4.7.9
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.9
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/post-kit-email:
     dependencies:
       undici:

@@ -1,0 +1,39 @@
+{
+  "name": "@singleton-sd/post-kit-compiler",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Template compiler for PostKit — validates and compiles EmailBuilder.js source files into deployable HTML artifacts",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo \"lint:compiler — covered by root eslint on staged files\"",
+    "test": "tsc -p tsconfig.spec.json && node --import tsx --test src/**/*.spec.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "dependencies": {
+    "@singleton-sd/post-kit-types": "workspace:*",
+    "handlebars": "^4.7.8"
+  }
+}
