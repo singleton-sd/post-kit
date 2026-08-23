@@ -20,9 +20,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm --filter @singleton-sd/post-kit-types run build && tsc -p tsconfig.json",
     "lint": "echo \"lint:compiler — covered by root eslint on staged files\"",
-    "test": "tsc -p tsconfig.spec.json && node --import tsx --test src/**/*.spec.ts"
+    "test": "pnpm --filter @singleton-sd/post-kit-types run build && tsc -p tsconfig.spec.json && node --import tsx --test src/**/*.spec.ts"
   },
   "devDependencies": {
     "@types/node": "^20.17.9",
