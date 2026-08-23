@@ -26,6 +26,17 @@ export interface LogEntry {
   // NOTE: never log recipient addresses, variable values, or tokens
 }
 
+/** The explicit set of optional LogEntry keys (excludes correlationId which is always set). */
+const LOG_ENTRY_KEYS: ReadonlyArray<keyof Omit<LogEntry, 'correlationId'>> = [
+  'tenantId',
+  'environment',
+  'templateKey',
+  'outcome',
+  'durationMs',
+  'providerMessageId',
+  'errorCode',
+];
+
 /** Minimal logger interface exposed to callers. */
 export interface Logger {
   info(msg: string, fields?: Partial<LogEntry>): void;
@@ -44,12 +55,14 @@ export function createLogger(
   write: (line: string) => void = console.log,
 ): Logger {
   function emit(level: 'info' | 'error', msg: string, fields?: Partial<LogEntry>): void {
-    // Build the entry: correlationId always present; omit undefined/missing fields.
+    // Build the entry: only emit the known LogEntry contract keys to avoid
+    // leaking arbitrary properties. correlationId is always present.
     const entry: Record<string, unknown> = { level, msg, correlationId };
 
     if (fields) {
-      for (const [key, value] of Object.entries(fields)) {
-        if (value !== undefined && key !== 'correlationId') {
+      for (const key of LOG_ENTRY_KEYS) {
+        const value = fields[key];
+        if (value !== undefined) {
           entry[key] = value;
         }
       }

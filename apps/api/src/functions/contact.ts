@@ -19,8 +19,14 @@ export async function contactHandler(
   try {
     await ensureAppConfiguration();
   } catch (error) {
+    const durationMs = Date.now() - startMs;
     context.error('app configuration load failed', {
       name: error instanceof Error ? error.name : 'Error',
+    });
+    logger.error('contact.request.failed', {
+      outcome: 'failed',
+      errorCode: 'configuration',
+      durationMs,
     });
     return {
       status: 503,
@@ -43,6 +49,12 @@ export async function contactHandler(
   const ip = clientIpFromHeaders(request.headers);
   const limit = getContactRateLimiter().tryConsume(ip);
   if (!limit.allowed) {
+    const durationMs = Date.now() - startMs;
+    logger.error('contact.request.failed', {
+      outcome: 'failed',
+      errorCode: 'rate_limit',
+      durationMs,
+    });
     return {
       status: 429,
       headers: {
@@ -87,7 +99,11 @@ export async function contactHandler(
     if (statusFromValidation === 400) {
       return {
         status: 400,
-        headers: { ...cors, 'Content-Type': 'application/json', 'X-Correlation-Id': correlationId },
+        headers: {
+          ...cors,
+          'Content-Type': 'application/json',
+          'X-Correlation-Id': correlationId,
+        },
         jsonBody: { error: error instanceof Error ? error.message : 'Invalid request' },
       };
     }
