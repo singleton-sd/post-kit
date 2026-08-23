@@ -134,9 +134,16 @@ export class BlobTemplateStore implements TemplateStore {
 // ---------------------------------------------------------------------------
 
 function validateTemplateKey(templateKey: string): void {
-  if (!templateKey || !SAFE_TEMPLATE_KEY.test(templateKey)) {
+  // Reject empty, non-matching, or bare dot-segment keys ("." and "..") even
+  // though "." technically satisfies the character allowlist.
+  if (
+    !templateKey ||
+    !SAFE_TEMPLATE_KEY.test(templateKey) ||
+    templateKey === '.' ||
+    templateKey === '..'
+  ) {
     throw new TemplateStoreError(
-      `Invalid templateKey: "${templateKey}". Must match /^[a-zA-Z0-9._-]+$/`,
+      `Invalid templateKey: "${templateKey}". Must match /^[a-zA-Z0-9._-]+$/ and must not be a bare dot-segment.`,
       PostKitErrorCode.INVALID_TEMPLATE,
     );
   }
@@ -185,7 +192,21 @@ function parseMetadata(json: string, templateKey: string): TemplateSourceMetadat
 
   if (!isTemplateSourceMetadata(parsed)) {
     throw new TemplateStoreError(
-      `metadata.json for template "${templateKey}" is missing required fields`,
+      `metadata.json for template "${templateKey}" is missing required fields or has invalid types`,
+      PostKitErrorCode.INVALID_TEMPLATE,
+    );
+  }
+
+  if (parsed.key !== templateKey) {
+    throw new TemplateStoreError(
+      `metadata.json key "${parsed.key}" does not match requested templateKey "${templateKey}"`,
+      PostKitErrorCode.INVALID_TEMPLATE,
+    );
+  }
+
+  if (parsed.schemaVersion !== TEMPLATE_SCHEMA_VERSION) {
+    throw new TemplateStoreError(
+      `metadata.json for template "${templateKey}" has unsupported schemaVersion "${parsed.schemaVersion}" (expected "${TEMPLATE_SCHEMA_VERSION}")`,
       PostKitErrorCode.INVALID_TEMPLATE,
     );
   }
@@ -201,6 +222,7 @@ function isTemplateSourceMetadata(value: unknown): value is TemplateSourceMetada
     typeof obj['name'] === 'string' &&
     typeof obj['subject'] === 'string' &&
     Array.isArray(obj['variables']) &&
+    (obj['variables'] as unknown[]).every((v) => typeof v === 'string') &&
     typeof obj['schemaVersion'] === 'string'
   );
 }

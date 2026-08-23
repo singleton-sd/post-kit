@@ -152,6 +152,30 @@ describe('BlobTemplateStore', () => {
       );
     });
 
+    it('rejects the bare "." dot-segment key', async () => {
+      const store = makeStore(new Map());
+      await assert.rejects(
+        () => store.load(TENANT, '.'),
+        (err: unknown) => {
+          assert.ok(err instanceof TemplateStoreError);
+          assert.equal((err as TemplateStoreError).code, PostKitErrorCode.INVALID_TEMPLATE);
+          return true;
+        },
+      );
+    });
+
+    it('rejects the bare ".." dot-segment key', async () => {
+      const store = makeStore(new Map());
+      await assert.rejects(
+        () => store.load(TENANT, '..'),
+        (err: unknown) => {
+          assert.ok(err instanceof TemplateStoreError);
+          assert.equal((err as TemplateStoreError).code, PostKitErrorCode.INVALID_TEMPLATE);
+          return true;
+        },
+      );
+    });
+
     it('does not make any blob calls for an invalid key', async () => {
       let blobCallCount = 0;
       const blobs: FakeBlobStore = new Map();
@@ -241,6 +265,27 @@ describe('BlobTemplateStore', () => {
         [
           templateBlobKey('acme', 'production', TEMPLATE_KEY, 'metadata.json'),
           JSON.stringify(partial),
+        ],
+      ]);
+
+      const store = makeStore(blobs);
+      await assert.rejects(
+        () => store.load(TENANT, TEMPLATE_KEY),
+        (err: unknown) => {
+          assert.ok(err instanceof TemplateStoreError);
+          assert.equal((err as TemplateStoreError).code, PostKitErrorCode.INVALID_TEMPLATE);
+          return true;
+        },
+      );
+    });
+
+    it('throws TemplateStoreError with INVALID_TEMPLATE when metadata.key does not match the requested templateKey', async () => {
+      const wrongKeyMetadata: TemplateSourceMetadata = { ...METADATA, key: 'different.template' };
+      const blobs: FakeBlobStore = new Map([
+        [templateBlobKey('acme', 'production', TEMPLATE_KEY, 'template.html'), HTML],
+        [
+          templateBlobKey('acme', 'production', TEMPLATE_KEY, 'metadata.json'),
+          JSON.stringify(wrongKeyMetadata),
         ],
       ]);
 
