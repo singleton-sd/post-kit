@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-08-24
+
+- **@singleton-sd/post-kit-compiler** `0.1.0` → `0.2.0` (minor)
 ## 2026-08-23
 
 - **@singleton-sd/post-kit-types** `0.1.0` → `0.2.0` (minor)

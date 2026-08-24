@@ -1,6 +1,6 @@
 {
   "name": "@singleton-sd/post-kit-compiler",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "description": "Template compiler for PostKit — validates and compiles EmailBuilder.js source files into deployable HTML artifacts",
   "license": "MIT",
