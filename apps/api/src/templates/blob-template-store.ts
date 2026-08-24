@@ -81,6 +81,15 @@ export class BlobTemplateStore implements TemplateStore {
   /**
    * Create a BlobTemplateStore from environment variables.
    * Reads TEMPLATE_STORAGE_ACCOUNT and TEMPLATE_STORAGE_CONTAINER.
+   *
+   * **Caller responsibility:** App Configuration values are only available in
+   * `process.env` after `ensureAppConfiguration()` has been awaited. Call
+   * `await ensureAppConfiguration()` before `fromEnv()` — exactly as the
+   * contact function handler does at request start — so that any
+   * App Configuration-backed env vars are populated before this method reads
+   * them. If `AZURE_APPCONFIGURATION_ENDPOINT` is not set (unit tests, local
+   * overrides with a `.env` file), `ensureAppConfiguration()` is a no-op and
+   * direct `process.env` values are used instead.
    */
   static fromEnv(): BlobTemplateStore {
     const storageAccount = process.env['TEMPLATE_STORAGE_ACCOUNT'];

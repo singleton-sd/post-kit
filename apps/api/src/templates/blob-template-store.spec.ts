@@ -299,5 +299,47 @@ describe('BlobTemplateStore', () => {
         },
       );
     });
+
+    it('throws TemplateStoreError with INVALID_TEMPLATE when metadata.schemaVersion does not match', async () => {
+      const wrongVersionMetadata = { ...METADATA, schemaVersion: '0.0.0' };
+      const blobs: FakeBlobStore = new Map([
+        [templateBlobKey('acme', 'production', TEMPLATE_KEY, 'template.html'), HTML],
+        [
+          templateBlobKey('acme', 'production', TEMPLATE_KEY, 'metadata.json'),
+          JSON.stringify(wrongVersionMetadata),
+        ],
+      ]);
+
+      const store = makeStore(blobs);
+      await assert.rejects(
+        () => store.load(TENANT, TEMPLATE_KEY),
+        (err: unknown) => {
+          assert.ok(err instanceof TemplateStoreError);
+          assert.equal((err as TemplateStoreError).code, PostKitErrorCode.INVALID_TEMPLATE);
+          return true;
+        },
+      );
+    });
+
+    it('throws TemplateStoreError with INVALID_TEMPLATE when a variable in the variables array is not a string', async () => {
+      const nonStringVarMetadata = { ...METADATA, variables: ['name', 42, 'message'] };
+      const blobs: FakeBlobStore = new Map([
+        [templateBlobKey('acme', 'production', TEMPLATE_KEY, 'template.html'), HTML],
+        [
+          templateBlobKey('acme', 'production', TEMPLATE_KEY, 'metadata.json'),
+          JSON.stringify(nonStringVarMetadata),
+        ],
+      ]);
+
+      const store = makeStore(blobs);
+      await assert.rejects(
+        () => store.load(TENANT, TEMPLATE_KEY),
+        (err: unknown) => {
+          assert.ok(err instanceof TemplateStoreError);
+          assert.equal((err as TemplateStoreError).code, PostKitErrorCode.INVALID_TEMPLATE);
+          return true;
+        },
+      );
+    });
   });
 });
