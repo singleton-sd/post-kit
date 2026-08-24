@@ -223,6 +223,66 @@ describe('sendHandler', () => {
     assert.equal((response.jsonBody as { code: string }).code, PostKitErrorCode.INVALID_RECIPIENT);
   });
 
+  it('rejects unsafe template keys before loading the store', async () => {
+    let loaded = false;
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: {
+        load: async () => {
+          loaded = true;
+          return COMPILED;
+        },
+      },
+      emailProvider: fakeProvider(),
+      fromAddress: () => 'noreply@example.com',
+    });
+    const response = await handler(
+      fakeRequest({
+        json: { template: '../etc/passwd', to: 'user@example.com', variables: { name: 'Ada' } },
+      }),
+      fakeContext(),
+    );
+    assert.equal(response.status, 400);
+    assert.equal((response.jsonBody as { code: string }).code, PostKitErrorCode.INVALID_TEMPLATE);
+    assert.equal(loaded, false);
+  });
+
+  it('allows branding defaults to satisfy required variables', async () => {
+    const sent: EmailSendRequest[] = [];
+    const withBrandingVar: CompiledTemplate = {
+      ...COMPILED,
+      templateHtml: '<p>{{companyName}}</p>',
+      metadata: {
+        ...COMPILED.metadata,
+        subject: 'From {{companyName}}',
+        variables: ['companyName'],
+      },
+      manifest: { ...COMPILED.manifest, variables: ['companyName'] },
+    };
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(withBrandingVar),
+      emailProvider: fakeProvider(sent),
+      resolveBranding: async () => ({ companyName: 'InkAds' }),
+      fromAddress: () => 'noreply@example.com',
+    });
+
+    const response = await handler(
+      fakeRequest({
+        json: {
+          template: 'marketing.contact-us',
+          to: 'user@example.com',
+          variables: {},
+        },
+      }),
+      fakeContext(),
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(sent[0]?.subject, 'From InkAds');
+    assert.equal(sent[0]?.html, '<p>InkAds</p>');
+  });
+
   it('returns PROVIDER_FAILURE when the provider throws', async () => {
     const { EmailProviderError } = await import('@singleton-sd/post-kit-email');
     const handler = createSendHandler({

@@ -11,6 +11,7 @@ import {
   type SendRequest,
   type SendResponse,
   type TenantBranding,
+  type TenantContext,
   type TemplateVariables,
 } from '@singleton-sd/post-kit-types';
 import { ensureAppConfiguration } from '../config/app-configuration';
@@ -24,11 +25,22 @@ import {
 import { BlobTemplateStore, TemplateStoreError, type TemplateStore } from '../templates';
 
 const BASIC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Same allowlist as BlobTemplateStore — reject path traversal before load. */
+const SAFE_TEMPLATE_KEY = /^[a-zA-Z0-9._-]+$/;
 
 export interface SendHandlerDependencies {
   tenantResolver: TenantResolver;
   templateStore: TemplateStore;
-  emailProvider: EmailProvider;
+  /** Prefer injecting a factory so App Configuration can populate env first. */
+  createEmailProvider?: () => EmailProvider;
+  /** Direct provider injection for unit tests. */
+  emailProvider?: EmailProvider;
+  /**
+   * Resolve tenant branding defaults after auth. Merged before required-variable
+   * validation so branding can satisfy template variables.
+   */
+  resolveBranding?: (tenant: TenantContext) => Promise<TenantBranding> | TenantBranding;
+  /** Static branding for tests (applied after resolveBranding). */
   branding?: TenantBranding;
   createLogger?: typeof createLogger;
   fromAddress?: () => string;
@@ -48,10 +60,13 @@ export function createDefaultSendDependencies(
   templateStore: TemplateStore,
 ): SendHandlerDependencies {
   return {
-    tenantResolver: new ApiKeyTenantResolver(parseTenantKeyMap(process.env.TENANT_KEY_MAP)),
+    // Re-read env after App Configuration in the handler via factories.
+    get tenantResolver(): TenantResolver {
+      return new ApiKeyTenantResolver(parseTenantKeyMap(process.env.TENANT_KEY_MAP));
+    },
     templateStore,
-    emailProvider: createEmailProvider(process.env),
-    branding: {},
+    createEmailProvider: () => createEmailProvider(process.env),
+    resolveBranding: async () => ({}),
     fromAddress: () => process.env.EMAIL_FROM_ADDRESS ?? '',
     fromName: () => process.env.EMAIL_FROM_NAME,
   };
@@ -141,8 +156,15 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         throw err;
       }
 
+      const resolvedBranding = deps.resolveBranding ? await deps.resolveBranding(tenant) : {};
+      const variables: TemplateVariables = {
+        ...resolvedBranding,
+        ...(deps.branding ?? {}),
+        ...sendRequest.variables,
+      };
+
       const missing = compiled.metadata.variables.filter(
-        (name) => !Object.prototype.hasOwnProperty.call(sendRequest.variables, name),
+        (name) => !Object.prototype.hasOwnProperty.call(variables, name),
       );
       if (missing.length > 0) {
         return errorResponse(
@@ -153,11 +175,6 @@ export function createSendHandler(deps: SendHandlerDependencies) {
           { tenantId, templateKey },
         );
       }
-
-      const variables: TemplateVariables = {
-        ...(deps.branding ?? {}),
-        ...sendRequest.variables,
-      };
 
       const subject = Handlebars.compile(compiled.metadata.subject, { noEscape: false })(variables);
       const html = Handlebars.compile(compiled.templateHtml, { noEscape: false })(variables);
@@ -173,7 +190,9 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         );
       }
 
-      const provider = deps.emailProvider;
+      const provider =
+        deps.emailProvider ??
+        (deps.createEmailProvider ?? (() => createEmailProvider(process.env)))();
       const result = await provider.send({
         to: sendRequest.to,
         from: fromAddress,
@@ -242,6 +261,15 @@ export function createSendHandler(deps: SendHandlerDependencies) {
   };
 }
 
+function isSafeTemplateKey(templateKey: string): boolean {
+  return (
+    Boolean(templateKey) &&
+    templateKey !== '.' &&
+    templateKey !== '..' &&
+    SAFE_TEMPLATE_KEY.test(templateKey)
+  );
+}
+
 function parseSendRequest(
   body: unknown,
 ): { ok: true; value: SendRequest } | { ok: false; code: PostKitErrorCode; error: string } {
@@ -255,6 +283,13 @@ function parseSendRequest(
   const obj = body as Record<string, unknown>;
   if (typeof obj['template'] !== 'string' || !obj['template'].trim()) {
     return { ok: false, code: PostKitErrorCode.INVALID_TEMPLATE, error: 'template is required.' };
+  }
+  if (!isSafeTemplateKey(obj['template'])) {
+    return {
+      ok: false,
+      code: PostKitErrorCode.INVALID_TEMPLATE,
+      error: 'template key contains unsafe path characters.',
+    };
   }
   if (typeof obj['to'] !== 'string' || !BASIC_EMAIL.test(obj['to'])) {
     return {
