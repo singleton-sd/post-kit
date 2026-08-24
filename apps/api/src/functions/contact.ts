@@ -83,6 +83,11 @@ export async function contactHandler(
     const errorCode =
       error instanceof EmailProviderError ? error.kind : (error as Error | undefined)?.name;
 
+    const statusFromValidation =
+      error instanceof Error && 'status' in error
+        ? Number((error as Error & { status?: number }).status)
+        : undefined;
+
     context.error('contact failed', {
       name: error instanceof Error ? error.name : 'Error',
       kind: error instanceof EmailProviderError ? error.kind : undefined,
@@ -90,12 +95,12 @@ export async function contactHandler(
       correlationId: error instanceof EmailProviderError ? error.correlationId : undefined,
     });
 
-    logger.error('contact.request.failed', { outcome: 'failed', errorCode, durationMs });
+    logger.error('contact.request.failed', {
+      outcome: statusFromValidation === 400 ? 'validation_error' : 'failed',
+      errorCode,
+      durationMs,
+    });
 
-    const statusFromValidation =
-      error instanceof Error && 'status' in error
-        ? Number((error as Error & { status?: number }).status)
-        : undefined;
     if (statusFromValidation === 400) {
       return {
         status: 400,
