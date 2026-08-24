@@ -1,12 +1,8 @@
-export {
-  publishTemplates,
-  type PublishOptions,
-  type PublishResult,
-  type CompiledEntry,
-} from './publish';
+export { publishTemplates, type PublishOptions, type PublishResult } from './publish';
 export {
   assertSafeTenantId,
   assertSafeEnvironment,
   assertSafeTemplateKey,
+  assertSafeStorageAccount,
   blobBasePath,
 } from './path-safety';

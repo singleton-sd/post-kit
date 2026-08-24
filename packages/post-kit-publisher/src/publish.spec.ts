@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import type { BlobServiceClient, ContainerClient, BlockBlobClient } from '@azure/storage-blob';
 import {
   assertSafeEnvironment,
+  assertSafeStorageAccount,
   assertSafeTenantId,
   assertSafeTemplateKey,
   blobBasePath,
@@ -34,6 +35,13 @@ describe('path safety', () => {
     assert.doesNotThrow(() => assertSafeTemplateKey('marketing.contact-us'));
   });
 
+  it('rejects unsafe storage account names', () => {
+    assert.throws(() => assertSafeStorageAccount('attacker.example/'));
+    assert.throws(() => assertSafeStorageAccount('Ab'));
+    assert.throws(() => assertSafeStorageAccount('UPPERCASEACCOUNT'));
+    assert.doesNotThrow(() => assertSafeStorageAccount('ssdpostkitstprodae'));
+  });
+
   it('builds the TemplateStore blob base path', () => {
     assert.equal(
       blobBasePath('inkads', 'production', 'marketing.contact-us'),
@@ -57,17 +65,45 @@ describe('publishTemplates', () => {
       uploads += 1;
     });
 
-    const result = await publishTemplates({
-      templatesDir: root,
-      tenant: 'inkads',
-      environment: 'development',
-      storageAccount: 'test',
-      container: 'templates',
-      client,
-    });
+    const result = await publishTemplates(
+      {
+        templatesDir: root,
+        tenant: 'inkads',
+        environment: 'development',
+        storageAccount: 'ssdpostkitstprodae',
+        container: 'templates',
+      },
+      { client },
+    );
 
     assert.equal(result.published.length, 0);
     assert.ok(result.failed.length >= 1);
+    assert.equal(uploads, 0);
+  });
+
+  it('does not upload when two directories share the same template key', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'post-kit-publish-'));
+    await cp(join(FIXTURES, 'marketing.contact-us'), join(root, 'copy-a'), { recursive: true });
+    await cp(join(FIXTURES, 'marketing.contact-us'), join(root, 'copy-b'), { recursive: true });
+
+    let uploads = 0;
+    const client = makeFakeClient(() => {
+      uploads += 1;
+    });
+
+    const result = await publishTemplates(
+      {
+        templatesDir: root,
+        tenant: 'inkads',
+        environment: 'production',
+        storageAccount: 'ssdpostkitstprodae',
+        container: 'templates',
+      },
+      { client },
+    );
+
+    assert.equal(result.published.length, 0);
+    assert.ok(result.failed.some((f) => f.error.includes('Duplicate template key')));
     assert.equal(uploads, 0);
   });
 
@@ -82,15 +118,17 @@ describe('publishTemplates', () => {
       uploaded.set(path, body);
     });
 
-    const result = await publishTemplates({
-      templatesDir: root,
-      tenant: 'inkads',
-      environment: 'production',
-      storageAccount: 'test',
-      container: 'templates',
-      commit: 'abc123',
-      client,
-    });
+    const result = await publishTemplates(
+      {
+        templatesDir: root,
+        tenant: 'inkads',
+        environment: 'production',
+        storageAccount: 'ssdpostkitstprodae',
+        container: 'templates',
+        commit: 'abc123',
+      },
+      { client },
+    );
 
     assert.deepEqual(result.published, ['marketing.contact-us']);
     assert.equal(result.failed.length, 0);

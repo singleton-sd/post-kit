@@ -6,6 +6,7 @@ import { compileFromDirectory } from '@singleton-sd/post-kit-compiler';
 import type { CompiledTemplate, TenantEnvironment } from '@singleton-sd/post-kit-types';
 import {
   assertSafeEnvironment,
+  assertSafeStorageAccount,
   assertSafeTenantId,
   assertSafeTemplateKey,
   blobBasePath,
@@ -20,11 +21,6 @@ export interface PublishOptions {
   container: string;
   /** Passed through to TemplateManifest.sourceCommit. */
   commit?: string;
-  /**
-   * Optional pre-built client for tests.
-   * When omitted, uses DefaultAzureCredential against the storage account.
-   */
-  client?: BlobServiceClient;
 }
 
 export interface PublishResult {
@@ -32,29 +28,49 @@ export interface PublishResult {
   failed: Array<{ key: string; error: string }>;
 }
 
-export interface CompiledEntry {
+/** Internal batch row — not part of the public package API. */
+interface CompiledEntry {
   dirName: string;
   compiled: CompiledTemplate;
+}
+
+/** Test-only injection; not exported from the package root. */
+export interface PublishDependencies {
+  client?: BlobServiceClient;
 }
 
 /**
  * Compile every template under `templatesDir`, then upload artifacts.
  *
  * Fail-fast for publishing: if any compile fails, nothing is uploaded.
+ * Auth uses DefaultAzureCredential unless a test injects a client via `deps`.
  */
-export async function publishTemplates(options: PublishOptions): Promise<PublishResult> {
+export async function publishTemplates(
+  options: PublishOptions,
+  deps: PublishDependencies = {},
+): Promise<PublishResult> {
   assertSafeTenantId(options.tenant);
   assertSafeEnvironment(options.environment);
+  assertSafeStorageAccount(options.storageAccount);
 
   const entries = await listTemplateDirs(options.templatesDir);
   const compiled: CompiledEntry[] = [];
   const failed: PublishResult['failed'] = [];
+  const seenKeys = new Set<string>();
 
   for (const dirName of entries) {
     const dir = join(options.templatesDir, dirName);
     try {
       const result = await compileFromDirectory(dir, { sourceCommit: options.commit ?? '' });
       assertSafeTemplateKey(result.metadata.key);
+      if (seenKeys.has(result.metadata.key)) {
+        failed.push({
+          key: dirName,
+          error: `Duplicate template key "${result.metadata.key}" (already compiled from another directory).`,
+        });
+        continue;
+      }
+      seenKeys.add(result.metadata.key);
       compiled.push({ dirName, compiled: result });
     } catch (err) {
       failed.push({
@@ -69,7 +85,7 @@ export async function publishTemplates(options: PublishOptions): Promise<Publish
   }
 
   const client =
-    options.client ??
+    deps.client ??
     new BlobServiceClient(
       `https://${options.storageAccount}.blob.core.windows.net`,
       new DefaultAzureCredential(),
