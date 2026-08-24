@@ -7,6 +7,7 @@ import type {
   TemplateSourceMetadata,
 } from '@singleton-sd/post-kit-types';
 import { PostKitErrorCode, TEMPLATE_SCHEMA_VERSION } from '@singleton-sd/post-kit-types';
+import { resetAppConfigurationCache } from '../config/app-configuration';
 import { BlobTemplateStore, TemplateStoreError } from './blob-template-store';
 
 // ---------------------------------------------------------------------------
@@ -341,5 +342,71 @@ describe('BlobTemplateStore', () => {
         },
       );
     });
+  });
+});
+
+describe('BlobTemplateStore.fromEnv', () => {
+  const touched = [
+    'AZURE_APPCONFIGURATION_ENDPOINT',
+    'TEMPLATE_STORAGE_ACCOUNT',
+    'TEMPLATE_STORAGE_CONTAINER',
+  ];
+  const prior = new Map<string, string | undefined>();
+
+  function restoreEnv(): void {
+    for (const [key, value] of prior) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    resetAppConfigurationCache();
+  }
+
+  function clearEnv(): void {
+    for (const key of touched) {
+      prior.set(key, process.env[key]);
+      delete process.env[key];
+    }
+    resetAppConfigurationCache();
+  }
+
+  it('reads TEMPLATE_STORAGE_ACCOUNT from process.env when App Configuration is unset', async () => {
+    clearEnv();
+    try {
+      process.env.TEMPLATE_STORAGE_ACCOUNT = 'localaccount';
+      const store = await BlobTemplateStore.fromEnv();
+      assert.ok(store instanceof BlobTemplateStore);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('loads storage settings from App Configuration before constructing the store', async () => {
+    clearEnv();
+    try {
+      process.env.AZURE_APPCONFIGURATION_ENDPOINT = 'https://example.azconfig.io';
+      const store = await BlobTemplateStore.fromEnv({
+        listSettings: async function* () {
+          yield { key: 'app:templates:storageAccount', value: 'fromappconfig' };
+          yield { key: 'app:templates:storageContainer', value: 'compiled-templates' };
+        },
+      });
+      assert.ok(store instanceof BlobTemplateStore);
+      assert.equal(process.env.TEMPLATE_STORAGE_ACCOUNT, 'fromappconfig');
+      assert.equal(process.env.TEMPLATE_STORAGE_CONTAINER, 'compiled-templates');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('throws when TEMPLATE_STORAGE_ACCOUNT is missing after App Configuration load', async () => {
+    clearEnv();
+    try {
+      await assert.rejects(
+        () => BlobTemplateStore.fromEnv(),
+        /Missing required environment variable: TEMPLATE_STORAGE_ACCOUNT/,
+      );
+    } finally {
+      restoreEnv();
+    }
   });
 });
