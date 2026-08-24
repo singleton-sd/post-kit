@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import Handlebars from 'handlebars';
+import { renderToStaticMarkup, type TReaderDocument } from '@usewaypoint/email-builder';
 import type { CompiledTemplate, TemplateSourceMetadata } from '@singleton-sd/post-kit-types';
 import { TEMPLATE_SCHEMA_VERSION } from '@singleton-sd/post-kit-types';
 import { CompilerError } from './compiler-error';
@@ -54,26 +55,22 @@ function assertMetadata(value: unknown): TemplateSourceMetadata {
 }
 
 /**
- * Render a minimal HTML shell around a JSON blob.
+ * Render an EmailBuilder.js document to email HTML.
  *
- * TODO: replace with @usewaypoint/email-builder render() when available.
- * The real implementation should call the EmailBuilder.js renderer to produce
- * a full email-client-compatible HTML document from the templateJson document.
- * Until that package is integrated, the JSON is serialised and wrapped in a
- * minimal shell so the rest of the pipeline (hashing, manifests, tests) works.
+ * Uses `@usewaypoint/email-builder` `renderToStaticMarkup`. Handlebars is not
+ * the HTML renderer — it only substitutes `{{variable}}` values for preview
+ * validation after this step.
  */
 function renderTemplateHtml(templateJson: unknown): string {
-  // TODO: replace with @usewaypoint/email-builder render() when available
-  const jsonContent = JSON.stringify(templateJson);
-  return [
-    '<!DOCTYPE html>',
-    '<html lang="en">',
-    '<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>',
-    '<body>',
-    `<!-- email-builder-document: ${jsonContent} -->`,
-    '</body>',
-    '</html>',
-  ].join('\n');
+  if (!isReaderDocument(templateJson)) {
+    throw new Error('templateJson must be an EmailBuilder document object with a root block');
+  }
+
+  return renderToStaticMarkup(templateJson, { rootBlockId: 'root' });
+}
+
+function isReaderDocument(value: unknown): value is TReaderDocument {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && 'root' in value;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,8 +84,8 @@ function renderTemplateHtml(templateJson: unknown): string {
  *  1. Metadata shape check — all required string fields present and non-empty.
  *  2. Preview-variable coverage — every variable listed in metadata must have
  *     a corresponding key in previewData.
- *  3. HTML render (placeholder — see renderTemplateHtml).
- *  4. Handlebars subject render for preview validation only.
+ *  3. HTML render via `@usewaypoint/email-builder`.
+ *  4. Handlebars subject and preview-variable render (validation only).
  *  5. SHA-256 content hash of the rendered HTML (compiledAt excluded).
  */
 export async function compile(
@@ -119,9 +116,11 @@ export async function compile(
     );
   }
 
-  // 4. Validate subject renders without error (preview/validation only — not for runtime sending)
+  // 4. Validate Handlebars in subject and compiled HTML (preview only — stored
+  //    HTML keeps {{variable}} placeholders for runtime send).
   try {
     Handlebars.compile(metadata.subject)(source.previewData);
+    Handlebars.compile(templateHtml)(source.previewData);
   } catch (err) {
     throw new CompilerError(
       'RENDER_FAILURE',

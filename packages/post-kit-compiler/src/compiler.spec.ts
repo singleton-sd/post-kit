@@ -11,8 +11,33 @@ const FIXTURES_DIR = join(import.meta.dirname, 'fixtures');
 // Fixtures
 // ---------------------------------------------------------------------------
 
+const CONTACT_US_DOCUMENT = {
+  root: {
+    type: 'EmailLayout',
+    data: {
+      backdropColor: '#F8F8F8',
+      canvasColor: '#FFFFFF',
+      textColor: '#242424',
+      fontFamily: 'MODERN_SANS',
+      childrenIds: ['block-text'],
+    },
+  },
+  'block-text': {
+    type: 'Text',
+    data: {
+      style: {
+        fontWeight: 'normal',
+        padding: { top: 16, bottom: 16, right: 24, left: 24 },
+      },
+      props: {
+        text: 'Hello {{name}}, from {{email}}: {{message}}',
+      },
+    },
+  },
+};
+
 const contactUsSource: TemplateSource = {
-  templateJson: { document: { type: 'EmailLayout', data: {} } },
+  templateJson: CONTACT_US_DOCUMENT,
   metadata: {
     key: 'marketing.contact-us',
     name: 'Contact Us',
@@ -64,7 +89,11 @@ describe('compile()', () => {
 
     assert.equal(result.metadata.key, 'marketing.contact-us');
     assert.ok(result.manifest.contentHash.length > 0, 'contentHash should be non-empty');
-    assert.ok(result.templateHtml.length > 0, 'templateHtml should be non-empty');
+    assert.ok(
+      result.templateHtml.includes('Hello {{name}}'),
+      'HTML should keep Handlebars placeholders',
+    );
+    assert.ok(result.templateHtml.includes('<html'), 'HTML should be a rendered email document');
     assert.equal(result.manifest.key, 'marketing.contact-us');
     assert.equal(result.manifest.schemaVersion, '1');
   });
@@ -151,9 +180,32 @@ describe('compile()', () => {
     );
   });
 
+  it('throws CompilerError(RENDER_FAILURE) when templateJson is not an EmailBuilder document', async () => {
+    const source: TemplateSource = {
+      templateJson: { document: { type: 'EmailLayout' } },
+      metadata: {
+        key: 'test.bad-json',
+        name: 'Bad JSON',
+        subject: 'Hello',
+        variables: [],
+        schemaVersion: '1',
+      },
+      previewData: {},
+    };
+
+    await assert.rejects(
+      () => compile(source),
+      (err: unknown) => {
+        assert.ok(err instanceof CompilerError);
+        assert.equal(err.code, 'RENDER_FAILURE');
+        return true;
+      },
+    );
+  });
+
   it('subject rendered with Handlebars: {{name}} with {name: "Jane"} renders to "Jane"', async () => {
     const source: TemplateSource = {
-      templateJson: {},
+      templateJson: CONTACT_US_DOCUMENT,
       metadata: {
         key: 'test.subject-render',
         name: 'Subject Render Test',

@@ -2,18 +2,13 @@
 
 Template compiler for [PostKit](../../README.md). Reads Git-backed email template source files (`template.json`, `metadata.json`, `preview.json`), validates them, and produces a compiled `CompiledTemplate` artifact for use by `post-kit-publisher` and `apps/api`.
 
-## ⚠️ Placeholder HTML renderer
+## HTML renderer and variable engine
 
-The current HTML rendering uses a JSON serialisation stub wrapped in a minimal HTML shell. **This must be replaced with the real `@usewaypoint/email-builder` renderer** once that package is available in the workspace.
+HTML is produced by [`@usewaypoint/email-builder`](https://www.npmjs.com/package/@usewaypoint/email-builder) `renderToStaticMarkup` (EmailBuilder.js JSON → email HTML).
 
-Look for the comment in `src/compiler.ts`:
-```text
-// TODO: replace with @usewaypoint/email-builder render() when available
-```
+Subject lines and `{{variable}}` substitution in that HTML use [Handlebars](https://handlebarsjs.com/) `^4.7.8` (the version declared in this package). Handlebars is **not** the HTML renderer.
 
-Until then, `templateHtml` contains the raw JSON of the EmailBuilder document rather than a rendered email.
-
-Variable substitution in subject lines and preview rendering uses [Handlebars](https://handlebarsjs.com/) v4.7.x. Runtime sends use the same `{{variable}}` syntax.
+Until send-time substitution, compiled `templateHtml` keeps Handlebars placeholders. `compile()` still renders preview.json through Handlebars to fail fast on invalid templates.
 
 ## Installation
 
