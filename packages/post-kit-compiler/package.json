@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@singleton-sd/post-kit-types": "workspace:*",
-    "@usewaypoint/email-builder": "^0.0.9",
+    "@usewaypoint/email-builder": "0.0.9",
     "handlebars": "^4.7.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
