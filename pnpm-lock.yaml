@@ -123,6 +123,31 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/post-kit-publisher:
+    dependencies:
+      '@azure/identity':
+        specifier: ^4.13.1
+        version: 4.13.2
+      '@azure/storage-blob':
+        specifier: ^12.33.0
+        version: 12.33.0
+      '@singleton-sd/post-kit-compiler':
+        specifier: workspace:*
+        version: link:../post-kit-compiler
+      '@singleton-sd/post-kit-types':
+        specifier: workspace:*
+        version: link:../post-kit-types
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.9
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/post-kit-types:
     devDependencies:
       '@types/node':
