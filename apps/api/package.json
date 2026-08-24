@@ -14,6 +14,7 @@
     "@azure/functions": "^4.6.0",
     "@azure/identity": "^4.13.1",
     "@azure/keyvault-secrets": "^4.11.2",
+    "@azure/storage-blob": "^12.33.0",
     "@singleton-sd/post-kit-email": "workspace:*",
     "@singleton-sd/post-kit-types": "workspace:^"
   },

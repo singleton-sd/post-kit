@@ -14,6 +14,8 @@ describe('loadAppConfiguration', () => {
     'CONTACT_EMAIL_PROFILES_BY_HOST',
     'FORWARD_EMAIL_TOKEN',
     'EMAIL_FROM_ADDRESS',
+    'TEMPLATE_STORAGE_ACCOUNT',
+    'TEMPLATE_STORAGE_CONTAINER',
   ];
   const prior = new Map<string, string | undefined>();
 
@@ -67,11 +69,15 @@ describe('loadAppConfiguration', () => {
             'application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8',
           ),
           setting('unmapped:key', 'ignored'),
+          setting('app:templates:storageAccount', 'ssdpostkitstprodae'),
+          setting('app:templates:storageContainer', 'templates'),
         ),
       getSecret,
     });
 
     assert.equal(process.env.ORIGINS, '*.poc.singletonsd.com');
+    assert.equal(process.env.TEMPLATE_STORAGE_ACCOUNT, 'ssdpostkitstprodae');
+    assert.equal(process.env.TEMPLATE_STORAGE_CONTAINER, 'templates');
     assert.equal(
       process.env.CONTACT_EMAIL_PROFILES_BY_HOST,
       '{"inkads.poc.singletonsd.com":{"fromAddress":"noreply@mail.inkads.poc.singletonsd.com"}}',

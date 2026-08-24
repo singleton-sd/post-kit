@@ -21,6 +21,8 @@ export const APP_CONFIGURATION_ENVIRONMENT_KEYS: Readonly<Record<string, string>
   'app:email:validation:bimiSelector': 'EMAIL_VALIDATION_BIMI_SELECTOR',
   'app:email:validation:bimiLogoUrl': 'EMAIL_VALIDATION_BIMI_LOGO_URL',
   'app:email:validation:requireBimiSvg': 'EMAIL_VALIDATION_REQUIRE_BIMI_SVG',
+  'app:templates:storageAccount': 'TEMPLATE_STORAGE_ACCOUNT',
+  'app:templates:storageContainer': 'TEMPLATE_STORAGE_CONTAINER',
   'secret:forwardemail-api-key': 'FORWARD_EMAIL_TOKEN',
 };
 
