@@ -37,6 +37,7 @@ export async function contactHandler(
       },
       jsonBody: {
         error: 'Contact delivery is temporarily unavailable. Please try again later.',
+        correlationId,
       },
     };
   }
@@ -63,7 +64,10 @@ export async function contactHandler(
         'Retry-After': String(limit.retryAfterSec),
         'X-Correlation-Id': correlationId,
       },
-      jsonBody: { error: 'Too many messages were sent. Please wait a minute and try again.' },
+      jsonBody: {
+        error: 'Too many messages were sent. Please wait a minute and try again.',
+        correlationId,
+      },
     };
   }
 
@@ -92,7 +96,8 @@ export async function contactHandler(
       name: error instanceof Error ? error.name : 'Error',
       kind: error instanceof EmailProviderError ? error.kind : undefined,
       statusCode: error instanceof EmailProviderError ? error.statusCode : undefined,
-      correlationId: error instanceof EmailProviderError ? error.correlationId : undefined,
+      correlationId,
+      emailCorrelationId: error instanceof EmailProviderError ? error.correlationId : undefined,
     });
 
     logger.error('contact.request.failed', {
@@ -109,7 +114,10 @@ export async function contactHandler(
           'Content-Type': 'application/json',
           'X-Correlation-Id': correlationId,
         },
-        jsonBody: { error: error instanceof Error ? error.message : 'Invalid request' },
+        jsonBody: {
+          error: error instanceof Error ? error.message : 'Invalid request',
+          correlationId,
+        },
       };
     }
 
@@ -124,6 +132,7 @@ export async function contactHandler(
         error: unavailable
           ? 'Contact delivery is temporarily unavailable. Please try again later.'
           : 'We could not send your message. Please try again shortly.',
+        correlationId,
       },
     };
   }

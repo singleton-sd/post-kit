@@ -69,6 +69,22 @@ describe('createLogger', () => {
     assert.equal(entry.outcome, 'sent');
   });
 
+  it('omits unsupported extra properties from the serialized entry', () => {
+    const lines: string[] = [];
+    const logger = createLogger('corr-extra', (line) => lines.push(line));
+
+    logger.info('event', {
+      outcome: 'sent',
+      recipientEmail: 'user@example.com',
+      templateVariables: { name: 'Ada' },
+    } as Parameters<typeof logger.info>[1]);
+
+    const entry = JSON.parse(lines[0]!);
+    assert.equal(entry.outcome, 'sent');
+    assert.ok(!('recipientEmail' in entry));
+    assert.ok(!('templateVariables' in entry));
+  });
+
   it('correlationId in fields is not duplicated / overwritten', () => {
     const lines: string[] = [];
     const logger = createLogger('corr-6', (line) => lines.push(line));
