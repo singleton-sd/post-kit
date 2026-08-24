@@ -33,6 +33,13 @@ function assertMetadata(value: unknown): TemplateSourceMetadata {
     }
   }
 
+  if (m['schemaVersion'] !== TEMPLATE_SCHEMA_VERSION) {
+    throw new CompilerError(
+      'INVALID_METADATA',
+      `metadata.schemaVersion must be "${TEMPLATE_SCHEMA_VERSION}" (got ${JSON.stringify(m['schemaVersion'])})`,
+    );
+  }
+
   if (!Array.isArray(m['variables'])) {
     throw new CompilerError('INVALID_METADATA', 'metadata.variables must be an array');
   }
@@ -93,7 +100,7 @@ export async function compile(
 
   // 2. Check preview variable coverage
   for (const variable of metadata.variables) {
-    if (!(variable in source.previewData)) {
+    if (!Object.prototype.hasOwnProperty.call(source.previewData, variable)) {
       throw new CompilerError(
         'MISSING_PREVIEW_VARIABLE',
         `Preview data is missing variable: "${variable}"`,
@@ -219,7 +226,7 @@ export function validateSource(
   // Validate preview variable coverage (only if metadata parsed successfully)
   if (metadata !== undefined) {
     for (const variable of metadata.variables) {
-      if (!(variable in source.previewData)) {
+      if (!Object.prototype.hasOwnProperty.call(source.previewData, variable)) {
         errors.push(`Preview data is missing variable: "${variable}"`);
       }
     }

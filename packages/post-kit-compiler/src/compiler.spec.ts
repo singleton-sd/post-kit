@@ -99,6 +99,58 @@ describe('compile()', () => {
     );
   });
 
+  it('throws CompilerError(INVALID_METADATA) when schemaVersion is not the expected version', async () => {
+    const source: TemplateSource = {
+      templateJson: { document: {} },
+      metadata: {
+        key: 'test.bad-schema',
+        name: 'Bad Schema',
+        subject: 'Hello',
+        variables: [],
+        schemaVersion: '99',
+      } as unknown as TemplateSource['metadata'],
+      previewData: {},
+    };
+
+    await assert.rejects(
+      () => compile(source),
+      (err: unknown) => {
+        assert.ok(err instanceof CompilerError, 'should be a CompilerError');
+        assert.equal(err.code, 'INVALID_METADATA');
+        assert.ok(err.message.includes('schemaVersion'), 'message should mention schemaVersion');
+        return true;
+      },
+    );
+  });
+
+  it('throws CompilerError(MISSING_PREVIEW_VARIABLE) for inherited (non-own) property in previewData', async () => {
+    // Create an object whose prototype has the variable key — hasOwnProperty should reject it
+    const proto = { inheritedVar: 'value' };
+    const previewWithInheritedProp = Object.create(proto) as Record<string, string>;
+
+    const source: TemplateSource = {
+      templateJson: { document: {} },
+      metadata: {
+        key: 'test.inherited',
+        name: 'Inherited Prop Test',
+        subject: 'Hello',
+        variables: ['inheritedVar'],
+        schemaVersion: '1',
+      },
+      previewData: previewWithInheritedProp,
+    };
+
+    await assert.rejects(
+      () => compile(source),
+      (err: unknown) => {
+        assert.ok(err instanceof CompilerError, 'should be a CompilerError');
+        assert.equal(err.code, 'MISSING_PREVIEW_VARIABLE');
+        assert.ok(err.message.includes('inheritedVar'), 'message should name the missing variable');
+        return true;
+      },
+    );
+  });
+
   it('subject rendered with Handlebars: {{name}} with {name: "Jane"} renders to "Jane"', async () => {
     const source: TemplateSource = {
       templateJson: {},

@@ -1,1 +1,10 @@
-{ "extends": "./tsconfig.json", "compilerOptions": { "noEmit": true }, "include": ["src/**/*"] }
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "es2022",
+    "moduleResolution": "bundler"
+  },
+  "include": ["src/**/*"],
+  "exclude": []
+}

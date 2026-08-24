@@ -7,11 +7,13 @@ Template compiler for [PostKit](../../README.md). Reads Git-backed email templat
 The current HTML rendering uses a JSON serialisation stub wrapped in a minimal HTML shell. **This must be replaced with the real `@usewaypoint/email-builder` renderer** once that package is available in the workspace.
 
 Look for the comment in `src/compiler.ts`:
-```
+```text
 // TODO: replace with @usewaypoint/email-builder render() when available
 ```
 
 Until then, `templateHtml` contains the raw JSON of the EmailBuilder document rather than a rendered email.
+
+Variable substitution in subject lines and preview rendering uses [Handlebars](https://handlebarsjs.com/) v4.7.x. Runtime sends use the same `{{variable}}` syntax.
 
 ## Installation
 
@@ -71,7 +73,7 @@ Thrown by `compile()` and `compileFromDirectory()` on validation or render failu
 | Code | Meaning |
 |---|---|
 | `INVALID_TEMPLATE_JSON` | `template.json` is missing or not valid JSON |
-| `INVALID_METADATA` | `metadata.json` is missing, not valid JSON, or fails schema validation |
+| `INVALID_METADATA` | `metadata.json` or `preview.json` is missing, not valid JSON, or fails schema validation |
 | `MISSING_PREVIEW_VARIABLE` | A variable declared in `metadata.variables` is absent from `previewData` |
 | `RENDER_FAILURE` | HTML or subject template rendering failed |
 
