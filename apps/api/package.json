@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-email run build && tsc -p tsconfig.json",
     "lint": "echo \"lint:api — covered by root eslint on staged files\"",
-    "test": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-email run build && pnpm build && node --import tsx --test \"src/**/*.spec.ts\"",
+    "test": "pnpm build && node --import tsx --test \"src/**/*.spec.ts\"",
     "start": "func start"
   },
   "dependencies": {
