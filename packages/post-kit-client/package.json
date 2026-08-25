@@ -1,0 +1,38 @@
+{
+  "name": "@singleton-sd/post-kit-client",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Trusted server-side TypeScript client for the PostKit API",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "pnpm --filter @singleton-sd/post-kit-types run build && tsc -p tsconfig.json",
+    "lint": "echo \"lint:client — covered by root eslint on staged files\"",
+    "test": "pnpm --filter @singleton-sd/post-kit-types run build && tsc -p tsconfig.spec.json && node --import tsx --test src/**/*.spec.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "dependencies": {
+    "@singleton-sd/post-kit-types": "workspace:*"
+  }
+}
