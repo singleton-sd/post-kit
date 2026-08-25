@@ -78,6 +78,7 @@ test('createGitHubReleases creates missing releases and skips existing', () => {
   const createCall = calls.find((a) => a[1] === 'create');
   assert.ok(createCall);
   assert.equal(createCall[2], sample.tag);
+  assert.equal(createCall[3], '--verify-tag');
   assert.equal(createCall[createCall.indexOf('--title') + 1], sample.tag);
   assert.match(createCall[createCall.indexOf('--notes') + 1], /0\.1\.0.*→.*0\.2\.0/);
   assert.match(logs.join('\n'), /Created GitHub Release/);

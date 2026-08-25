@@ -90,6 +90,7 @@ export function createGitHubReleases(releases, options = {}) {
       'release',
       'create',
       release.tag,
+      '--verify-tag',
       '--title',
       formatReleaseTitle(release),
       '--notes',
