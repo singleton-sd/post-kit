@@ -34,25 +34,42 @@ interface CompiledEntry {
   compiled: CompiledTemplate;
 }
 
-/** Test-only injection; not exported from the package root. */
-export interface PublishDependencies {
-  client?: BlobServiceClient;
-}
-
 /**
  * Compile every template under `templatesDir`, then upload artifacts.
  *
  * Fail-fast for publishing: if any compile fails, nothing is uploaded.
- * Auth uses DefaultAzureCredential unless a test injects a client via `deps`.
+ * Storage auth always uses `DefaultAzureCredential` (Managed Identity / az login).
  */
-export async function publishTemplates(
-  options: PublishOptions,
-  deps: PublishDependencies = {},
-): Promise<PublishResult> {
+export async function publishTemplates(options: PublishOptions): Promise<PublishResult> {
   assertSafeTenantId(options.tenant);
   assertSafeEnvironment(options.environment);
   assertSafeStorageAccount(options.storageAccount);
 
+  const client = new BlobServiceClient(
+    `https://${options.storageAccount}.blob.core.windows.net`,
+    new DefaultAzureCredential(),
+  );
+  return runPublish(options, client);
+}
+
+/**
+ * Test-only seam that injects a Blob client. Not re-exported from the package root;
+ * package `exports` only expose `.` so consumers cannot import this via the public API.
+ */
+export async function publishTemplatesWithClient(
+  options: PublishOptions,
+  client: BlobServiceClient,
+): Promise<PublishResult> {
+  assertSafeTenantId(options.tenant);
+  assertSafeEnvironment(options.environment);
+  assertSafeStorageAccount(options.storageAccount);
+  return runPublish(options, client);
+}
+
+async function runPublish(
+  options: PublishOptions,
+  client: BlobServiceClient,
+): Promise<PublishResult> {
   const entries = await listTemplateDirs(options.templatesDir);
   const compiled: CompiledEntry[] = [];
   const failed: PublishResult['failed'] = [];
@@ -84,12 +101,6 @@ export async function publishTemplates(
     return { published: [], failed };
   }
 
-  const client =
-    deps.client ??
-    new BlobServiceClient(
-      `https://${options.storageAccount}.blob.core.windows.net`,
-      new DefaultAzureCredential(),
-    );
   const containerClient = client.getContainerClient(options.container);
   const published: string[] = [];
 

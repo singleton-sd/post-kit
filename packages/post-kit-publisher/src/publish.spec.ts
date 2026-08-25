@@ -11,7 +11,7 @@ import {
   assertSafeTemplateKey,
   blobBasePath,
 } from './path-safety';
-import { publishTemplates } from './publish';
+import { publishTemplatesWithClient } from './publish';
 
 const FIXTURES = join(import.meta.dirname, '../../post-kit-compiler/src/fixtures');
 
@@ -65,7 +65,7 @@ describe('publishTemplates', () => {
       uploads += 1;
     });
 
-    const result = await publishTemplates(
+    const result = await publishTemplatesWithClient(
       {
         templatesDir: root,
         tenant: 'inkads',
@@ -73,7 +73,7 @@ describe('publishTemplates', () => {
         storageAccount: 'ssdpostkitstprodae',
         container: 'templates',
       },
-      { client },
+      client,
     );
 
     assert.equal(result.published.length, 0);
@@ -91,7 +91,7 @@ describe('publishTemplates', () => {
       uploads += 1;
     });
 
-    const result = await publishTemplates(
+    const result = await publishTemplatesWithClient(
       {
         templatesDir: root,
         tenant: 'inkads',
@@ -99,7 +99,7 @@ describe('publishTemplates', () => {
         storageAccount: 'ssdpostkitstprodae',
         container: 'templates',
       },
-      { client },
+      client,
     );
 
     assert.equal(result.published.length, 0);
@@ -118,7 +118,7 @@ describe('publishTemplates', () => {
       uploaded.set(path, body);
     });
 
-    const result = await publishTemplates(
+    const result = await publishTemplatesWithClient(
       {
         templatesDir: root,
         tenant: 'inkads',
@@ -127,7 +127,7 @@ describe('publishTemplates', () => {
         container: 'templates',
         commit: 'abc123',
       },
-      { client },
+      client,
     );
 
     assert.deepEqual(result.published, ['marketing.contact-us']);
