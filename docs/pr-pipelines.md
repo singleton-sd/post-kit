@@ -37,7 +37,7 @@ Tags created before GitHub Releases were enabled can be backfilled with:
 ```bash
 for tag in $(git tag -l '@singleton-sd/*'); do
   gh release view "$tag" >/dev/null 2>&1 && continue
-  gh release create "$tag" --title "$tag" --notes "Backfilled from existing tag. See CHANGELOG.md."
+  gh release create "$tag" --verify-tag --title "$tag" --notes "Backfilled from existing tag. See CHANGELOG.md."
 done
 ```
 
