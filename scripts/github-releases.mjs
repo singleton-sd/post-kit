@@ -39,6 +39,26 @@ export function formatReleaseNotes(release) {
 }
 
 /**
+ * True when `gh release view` failed because the Release does not exist yet.
+ * @param {unknown} err
+ */
+export function isReleaseNotFoundError(err) {
+  const text = [
+    err instanceof Error ? err.message : String(err),
+    err && typeof err === 'object' && 'stderr' in err ? String(err.stderr) : '',
+  ]
+    .join('\n')
+    .toLowerCase();
+
+  return (
+    text.includes('release not found') ||
+    text.includes('could not find') ||
+    text.includes('not found') ||
+    text.includes('http 404')
+  );
+}
+
+/**
  * @param {(args: string[]) => string} runGh
  * @param {string} tag
  * @returns {boolean}
@@ -47,8 +67,11 @@ export function githubReleaseExists(runGh, tag) {
   try {
     runGh(['release', 'view', tag, '--json', 'tagName']);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if (isReleaseNotFoundError(err)) {
+      return false;
+    }
+    throw err;
   }
 }
 

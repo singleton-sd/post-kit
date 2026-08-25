@@ -5,6 +5,7 @@ import {
   formatReleaseNotes,
   formatReleaseTitle,
   githubReleaseExists,
+  isReleaseNotFoundError,
 } from './github-releases.mjs';
 
 /** @type {import('./github-releases.mjs').ReleaseSpec} */
@@ -27,16 +28,28 @@ test('formatReleaseNotes includes bump and npm-disabled note', () => {
   assert.match(notes, /npm publish is not enabled/);
 });
 
+test('isReleaseNotFoundError recognizes gh not-found output', () => {
+  assert.equal(isReleaseNotFoundError(new Error('release not found')), true);
+  assert.equal(isReleaseNotFoundError(new Error('HTTP 401: Bad credentials')), false);
+});
+
 test('githubReleaseExists is true when gh release view succeeds', () => {
   const runGh = () => '{"tagName":"@singleton-sd/post-kit-publisher@0.2.0"}';
   assert.equal(githubReleaseExists(runGh, sample.tag), true);
 });
 
-test('githubReleaseExists is false when gh release view fails', () => {
+test('githubReleaseExists is false when gh release view reports not found', () => {
   const runGh = () => {
-    throw new Error('not found');
+    throw new Error('release not found');
   };
   assert.equal(githubReleaseExists(runGh, sample.tag), false);
+});
+
+test('githubReleaseExists rethrows non-not-found lookup failures', () => {
+  const runGh = () => {
+    throw new Error('HTTP 401: Bad credentials');
+  };
+  assert.throws(() => githubReleaseExists(runGh, sample.tag), /401/);
 });
 
 test('createGitHubReleases creates missing releases and skips existing', () => {
@@ -48,7 +61,7 @@ test('createGitHubReleases creates missing releases and skips existing', () => {
     calls.push(args);
     if (args[0] === 'release' && args[1] === 'view') {
       if (existing.has(args[2])) return JSON.stringify({ tagName: args[2] });
-      throw new Error('HTTP 404');
+      throw new Error('HTTP 404: release not found');
     }
     if (args[0] === 'release' && args[1] === 'create') {
       return '';
