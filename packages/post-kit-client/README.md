@@ -7,8 +7,9 @@ the PostKit API (`POST /emails/send`).
 
 Do **not** ship this package (or long-lived `POSTKIT_API_KEY` values) to the
 browser. Public contact forms and other client UIs must POST to **your own
-server endpoint**; that intermediary then uses `PostKitClient` with credentials
-from your secret store (e.g. Azure Key Vault / app settings).
+server endpoint**; that intermediary then uses `PostKitClient` with
+`POSTKIT_API_KEY` from Azure Key Vault (`ssd-global-kv-prod-ae`) only — never
+from browser code or long-lived app settings.
 
 ## Install
 

@@ -59,28 +59,30 @@ export class PostKitClient {
    */
   async send(request: SendRequest, options?: SendOptions): Promise<SendResponse> {
     const url = `${this.endpoint}/emails/send`;
-    const signal = this.combineSignals(options?.signal);
+    const callerSignal = options?.signal;
 
-    let response: Response;
     try {
-      response = await this.fetchImpl(url, {
+      const response = await this.fetchImpl(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(request),
-        signal,
+        signal: this.combineSignals(callerSignal),
       });
+
+      if (response.ok) {
+        return (await response.json()) as SendResponse;
+      }
+
+      throw await this.mapHttpError(response);
     } catch (err) {
-      throw this.mapFetchError(err, options?.signal);
+      if (err instanceof PostKitRequestError) {
+        throw err;
+      }
+      throw this.mapFetchError(err, callerSignal);
     }
-
-    if (response.ok) {
-      return (await response.json()) as SendResponse;
-    }
-
-    throw await this.mapHttpError(response);
   }
 
   private combineSignals(callerSignal: AbortSignal | undefined): AbortSignal | undefined {
@@ -101,6 +103,17 @@ export class PostKitClient {
   }
 
   private mapFetchError(err: unknown, callerSignal: AbortSignal | undefined): never {
+    if (isTimeoutLikeError(err)) {
+      if (callerSignal?.aborted) {
+        throw err;
+      }
+      throw new PostKitRequestError({
+        message: 'PostKit request timed out',
+        code: 'TIMEOUT',
+        cause: err,
+      });
+    }
+
     if (isAbortError(err)) {
       if (callerSignal?.aborted) {
         throw err;
@@ -148,5 +161,14 @@ function isAbortError(err: unknown): boolean {
     (typeof DOMException !== 'undefined' &&
       err instanceof DOMException &&
       err.name === 'AbortError')
+  );
+}
+
+function isTimeoutLikeError(err: unknown): boolean {
+  return (
+    (err instanceof Error && err.name === 'TimeoutError') ||
+    (typeof DOMException !== 'undefined' &&
+      err instanceof DOMException &&
+      err.name === 'TimeoutError')
   );
 }

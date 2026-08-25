@@ -136,6 +136,61 @@ describe('PostKitClient', () => {
     );
   });
 
+  it('throws TIMEOUT when fetch rejects with native TimeoutError', async () => {
+    const client = new PostKitClient({
+      endpoint: 'https://postkit.example.com',
+      apiKey: 'pk_test_key',
+      fetch: async () => {
+        throw new DOMException('The operation timed out.', 'TimeoutError');
+      },
+    });
+
+    await assert.rejects(
+      () => client.send(SEND_REQUEST),
+      (err: unknown) => {
+        assert.ok(err instanceof PostKitRequestError);
+        assert.equal(err.code, 'TIMEOUT');
+        return true;
+      },
+    );
+  });
+
+  it('throws TIMEOUT when response body read aborts after headers arrive', async () => {
+    const client = new PostKitClient({
+      endpoint: 'https://postkit.example.com',
+      apiKey: 'pk_test_key',
+      timeout: 20,
+      fetch: async (_input, init) =>
+        ({
+          ok: true,
+          json: async () => {
+            await new Promise<void>((_resolve, reject) => {
+              const signal = init?.signal;
+              if (!signal) {
+                reject(new Error('expected AbortSignal'));
+                return;
+              }
+              signal.addEventListener(
+                'abort',
+                () => reject(new DOMException('The operation was aborted.', 'AbortError')),
+                { once: true },
+              );
+            });
+            return SEND_RESPONSE;
+          },
+        }) as Response,
+    });
+
+    await assert.rejects(
+      () => client.send(SEND_REQUEST),
+      (err: unknown) => {
+        assert.ok(err instanceof PostKitRequestError);
+        assert.equal(err.code, 'TIMEOUT');
+        return true;
+      },
+    );
+  });
+
   it('threads a custom AbortSignal through to fetch', async () => {
     const controller = new AbortController();
     let seenSignal: AbortSignal | undefined;
