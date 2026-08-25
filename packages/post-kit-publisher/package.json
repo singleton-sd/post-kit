@@ -1,6 +1,6 @@
 {
   "name": "@singleton-sd/post-kit-publisher",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "description": "Compile and publish PostKit email templates to Azure Blob Storage",
   "license": "MIT",
