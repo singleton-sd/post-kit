@@ -1,0 +1,109 @@
+# EXAMPLE — sample content for a *consumer* repository.
+#
+# This file is documentation. It is intentionally NOT installed in this
+# repository's .github/workflows/. Copy it into your own repository as
+# .github/workflows/publish-email-templates.yml and replace the placeholders
+# marked TODO below.
+#
+# See docs/guides/template-publishing.md for the flags, the blob layout, and
+# the RBAC the publishing identity needs.
+
+name: Publish email templates
+
+on:
+  # Publish whenever template sources change on a publishing branch. Restricting
+  # the paths keeps unrelated commits from touching storage.
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'content/email-templates/**'
+      - '.github/workflows/publish-email-templates.yml'
+  # Manual re-publish, e.g. to promote an already-merged commit to another
+  # environment without a new push.
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (overrides the branch default)'
+        required: false
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+
+# Never run two publishes against the same branch at once — the later run would
+# race the earlier one's uploads.
+concurrency:
+  group: publish-email-templates-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Required: lets the job request the GitHub OIDC token that azure/login
+      # exchanges for an Azure access token. Without it, login fails.
+      id-token: write
+      # Everything else is read-only. This workflow writes nothing to the repo.
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Environment selection. `main` publishes production; any other branch
+      # publishes development. A workflow_dispatch input wins when supplied.
+      # Adjust to match your branching model — the value must be exactly one of
+      # development, staging, or production.
+      - name: Select environment
+        id: env
+        run: |
+          if [ -n "${{ inputs.environment }}" ]; then
+            selected="${{ inputs.environment }}"
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            selected="production"
+          else
+            selected="development"
+          fi
+          echo "name=$selected" >> "$GITHUB_OUTPUT"
+          echo "Publishing to $selected"
+
+      # OIDC federated login. Only non-secret IDs are used, and they are
+      # repository *Variables* (vars.*), never Secrets. Do not add a client
+      # secret, a storage key, a connection string, or AZURE_CREDENTIALS here.
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # post-kit-publish compiles every template under --templates and, only if
+      # all of them compile, uploads template.html + metadata.json to
+      # tenants/<tenant>/<environment>/templates/<key>/ in the given container.
+      # Credentials come from the azure/login step via DefaultAzureCredential;
+      # there is no credential flag.
+      #
+      # TODO: replace --tenant, --storage-account, and --container with your
+      # own values. The storage account is a bare account name (3-24 lowercase
+      # letters and digits), not a URL.
+      - name: Publish templates
+        run: >
+          pnpm exec post-kit-publish
+          --templates ./content/email-templates
+          --tenant acme
+          --environment ${{ steps.env.outputs.name }}
+          --storage-account examplestorageacct
+          --container templates
+          --commit ${{ github.sha }}
