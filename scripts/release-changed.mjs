@@ -4,20 +4,22 @@
  *
  * Bumps each workspace package whose name starts with `@singleton-sd/post-kit-`
  * that has releasable conventional commits since its last `@scope/name@version`
- * tag (reachable from HEAD), then creates one git commit + per-package tags.
+ * tag (reachable from HEAD), then creates one git commit + per-package tags
+ * and matching GitHub Releases (npm publish stays disabled).
  *
  * Push order is commit-then-tags (never `--follow-tags`): a non-fast-forward
  * race must not publish tags without the release commit on main.
  *
  * Usage:
  *   node scripts/release-changed.mjs           # dry-run
- *   node scripts/release-changed.mjs --ci      # bump, commit, tag, push
+ *   node scripts/release-changed.mjs --ci      # bump, commit, tag, push, GitHub Releases
  */
 import { execFileSync, execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import semver from 'semver';
+import { createGitHubReleases } from './github-releases.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CI = process.argv.includes('--ci');
@@ -419,6 +421,8 @@ function main() {
   pushReleaseCommit();
   createAndPushTags(releases.map((r) => r.tag));
   console.log('Release commit and tags pushed.');
+  createGitHubReleases(releases);
+  console.log('GitHub Releases created (or already present).');
 }
 
 main();
