@@ -1,0 +1,7 @@
+{
+  "key": "marketing.contact-us",
+  "name": "Contact Us",
+  "subject": "New contact request from {{name}}",
+  "variables": ["name", "email", "message"],
+  "schemaVersion": "1"
+}

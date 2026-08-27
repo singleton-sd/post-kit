@@ -1,0 +1,21 @@
+{
+  "name": "@singleton-sd/example-marketing-contact-us",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Example: public marketing-site Contact Us form delivered through a trusted server endpoint",
+  "license": "MIT",
+  "scripts": {
+    "test": "pnpm --filter @singleton-sd/post-kit-client run build && tsc -p tsconfig.spec.json && node --import tsx --test src/**/*.spec.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@singleton-sd/post-kit-client": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  }
+}

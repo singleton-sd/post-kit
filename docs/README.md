@@ -41,3 +41,4 @@ docs/
 | [`pr-pipelines.md`](./pr-pipelines.md) | PR CI, release, secrets policy |
 | [`architecture/overview.md`](./architecture/overview.md) | Phase-1 architecture: Functions API, EmailProvider, consumers |
 | [`email-forward-email.md`](./email-forward-email.md) | Forward Email provider, DNS, `pnpm email:provision`, Function contact, branding CI |
+| [`guides/public-forms.md`](./guides/public-forms.md) | Public web forms (Contact Us, waitlist): trusted server endpoint pattern, credential-exposure anti-patterns, consumer-side validation / abuse / rate-limit duties |

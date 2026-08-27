@@ -73,6 +73,22 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  examples/marketing-contact-us:
+    dependencies:
+      '@singleton-sd/post-kit-client':
+        specifier: workspace:*
+        version: link:../../packages/post-kit-client
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.9
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/post-kit-client:
     dependencies:
       '@singleton-sd/post-kit-types':
