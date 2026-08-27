@@ -66,13 +66,6 @@ compatibility when tokens still use them.
 
 OIDC is documented now and provisioned later — see `SETUP.md` human gates.
 
-A sample **consumer-repository** workflow using this OIDC pattern to publish
-email templates lives at
-[`examples/publish-email-templates.yml`](./examples/publish-email-templates.yml).
-It is documentation only and is not installed in this repository's
-`.github/workflows/` — see
-[`guides/template-publishing.md`](./guides/template-publishing.md).
-
 ### Node version
 
 CI uses **Node 24**. Prefer upgrading actions over setting
