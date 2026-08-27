@@ -28,8 +28,11 @@ docs/
 ├── github-project.md         (Project fields, views, labels)
 ├── pr-pipelines.md           (CI, release, secrets)
 ├── email-forward-email.md    (Forward Email runtime + provision CLI)
-└── architecture/
-    └── overview.md           (phase-1 system shape)
+├── architecture/
+│   └── overview.md           (phase-1 system shape)
+└── onboarding/
+    ├── tenant-onboarding.md  (new tenant → first email)
+    └── environments.md       (dev/staging/prod separation, local dev)
 ```
 
 ## Topic docs
@@ -41,3 +44,5 @@ docs/
 | [`pr-pipelines.md`](./pr-pipelines.md) | PR CI, release, secrets policy |
 | [`architecture/overview.md`](./architecture/overview.md) | Phase-1 architecture: Functions API, EmailProvider, consumers |
 | [`email-forward-email.md`](./email-forward-email.md) | Forward Email provider, DNS, `pnpm email:provision`, Function contact, branding CI |
+| [`onboarding/tenant-onboarding.md`](./onboarding/tenant-onboarding.md) | New tenant from nothing configured to first email: identifier, credential, sender, templates, publish, test send, triage |
+| [`onboarding/environments.md`](./onboarding/environments.md) | development/staging/production separation, local development without real delivery |
