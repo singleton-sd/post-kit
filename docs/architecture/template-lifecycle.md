@@ -9,8 +9,9 @@ Implemented in [`packages/post-kit-compiler`](../../packages/post-kit-compiler/)
 
 ## Source files
 
-A template is a directory containing exactly three files. All three are
-required — `post-kit-publish` refuses to run if any is missing.
+A template is a directory containing at least these three files. All three are
+required — `post-kit-publish` refuses to run if any is missing. Additional
+files in the directory are ignored rather than rejected.
 
 | File            | Contents                                                                             |
 | --------------- | ------------------------------------------------------------------------------------ |
@@ -121,8 +122,14 @@ from the hash so identical content hashes stably).
 The manifest is **not** persisted as its own blob. Only `template.html` and
 `metadata.json` are uploaded, so `BlobTemplateStore.load()` reconstructs a
 manifest at read time with `compiledAt`, `sourceCommit`, and `contentHash`
-set to empty strings. Provenance for a published artifact therefore has to
-come from the publish CI logs, not from Blob Storage.
+set to empty strings.
+
+Nor do the publish logs make up the difference: the per-template JSON line
+records `key`, `contentHash`, and the two blob paths, but not `compiledAt` or
+`sourceCommit`. So a published artifact currently carries no retained
+provenance — you cannot tell from Blob Storage or from the publish output
+which commit produced it. `--commit` is threaded into the in-memory
+`TemplateManifest` and then discarded.
 
 ## Validation at read time
 
