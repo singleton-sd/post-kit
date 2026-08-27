@@ -160,46 +160,47 @@ describe('BlobTemplateStore — environment isolation', () => {
   });
 });
 
-describe('BlobTemplateStore — tenant identity is interpolated without path validation', () => {
-  // Documents CURRENT behaviour, not desired behaviour. `tenantId` / `environment`
-  // come from the trusted credential map, so this is not reachable from a request
-  // today, but the store does not apply the publisher's `assertSafeTenantId` /
-  // `assertSafeEnvironment` guards. Tracked separately — see #59.
-  it('lets a traversal-shaped tenantId escape the tenant prefix (known gap)', async () => {
+describe('BlobTemplateStore — tenant identity is interpolated into the blob name verbatim', () => {
+  // Documents CURRENT behaviour, not desired behaviour. Azure Blob Storage has a
+  // flat namespace, so these values are not path traversal — they are literal
+  // parts of the blob name. The point is that `tenantId` / `environment` are
+  // interpolated without the publisher's `assertSafeTenantId` /
+  // `assertSafeEnvironment` guards, so a value containing `/` silently produces a
+  // blob name outside the documented per-tenant prefix shape. Not reachable from
+  // a request today (identity comes from the credential map). Tracked in #59.
+  it('interpolates a slash-bearing tenantId verbatim, producing a blob name outside the documented prefix shape (known gap)', async () => {
     const blobs = new Map<string, string>();
-    seedTemplate(blobs, 'tenant-b', 'production');
+    const tenantId = 'tenant-a/production/templates/shared';
+    const base = `templates/tenants/${tenantId}/production/templates/${TEMPLATE_KEY}`;
+    blobs.set(`${base}/template.html`, HTML);
+    blobs.set(`${base}/metadata.json`, JSON.stringify(METADATA));
     const { client, requestedPaths } = makeRecordingClient(blobs);
 
-    const spoofed = {
-      tenantId: 'tenant-a/production/templates/x/../../../tenant-b',
-      environment: 'production',
-    } as unknown as TenantContext;
+    const unvalidated = { tenantId, environment: 'production' } as unknown as TenantContext;
+    const loaded = await makeStore(client).load(unvalidated, TEMPLATE_KEY);
 
-    // The fake client keys blobs literally, so the traversal does not resolve;
-    // the point of this test is the requested path, not the load outcome.
-    await makeStore(client)
-      .load(spoofed, TEMPLATE_KEY)
-      .catch(() => undefined);
-
-    assert.ok(
-      requestedPaths.some((path) => path.includes('../')),
-      'current behaviour: an unvalidated tenantId is interpolated verbatim into the blob path',
-    );
+    assert.equal(loaded.templateHtml, HTML);
+    for (const path of requestedPaths) {
+      assert.ok(
+        path.startsWith(`tenants/${tenantId}/production/templates/`),
+        'current behaviour: the tenantId is used as-is, extra segments included',
+      );
+    }
   });
 
-  it('lets an unknown environment value form an arbitrary prefix (known gap)', async () => {
+  it('interpolates an environment value that is not a TenantEnvironment (known gap)', async () => {
     const blobs = new Map<string, string>();
-    const base = 'templates/tenants/tenant-a/../../elsewhere/templates/' + TEMPLATE_KEY;
+    const base = `templates/tenants/tenant-a/elsewhere/templates/${TEMPLATE_KEY}`;
     blobs.set(`${base}/template.html`, HTML);
     blobs.set(`${base}/metadata.json`, JSON.stringify(METADATA));
     const { client } = makeRecordingClient(blobs);
 
-    const spoofed = {
+    const unvalidated = {
       tenantId: 'tenant-a',
-      environment: '../../elsewhere',
+      environment: 'elsewhere',
     } as unknown as TenantContext;
 
-    const loaded = await makeStore(client).load(spoofed, TEMPLATE_KEY);
+    const loaded = await makeStore(client).load(unvalidated, TEMPLATE_KEY);
     assert.equal(loaded.templateHtml, HTML);
   });
 });
