@@ -30,9 +30,14 @@ docs/
 ├── email-forward-email.md    (Forward Email runtime + provision CLI)
 ├── architecture/
 │   └── overview.md           (phase-1 system shape)
-└── onboarding/
-    ├── tenant-onboarding.md  (new tenant → first email)
-    └── environments.md       (dev/staging/prod separation, local dev)
+├── guides/
+│   ├── template-authoring.md  (consumer template source files + variables)
+│   └── template-publishing.md (post-kit-publish, blob layout, environments)
+├── onboarding/
+│   ├── tenant-onboarding.md  (new tenant → first email)
+│   └── environments.md       (dev/staging/prod separation, local dev)
+└── examples/
+    └── publish-email-templates.yml (sample consumer publish workflow)
 ```
 
 ## Topic docs
@@ -44,5 +49,8 @@ docs/
 | [`pr-pipelines.md`](./pr-pipelines.md) | PR CI, release, secrets policy |
 | [`architecture/overview.md`](./architecture/overview.md) | Phase-1 architecture: Functions API, EmailProvider, consumers |
 | [`email-forward-email.md`](./email-forward-email.md) | Forward Email provider, DNS, `pnpm email:provision`, Function contact, branding CI |
+| [`guides/template-authoring.md`](./guides/template-authoring.md) | Consumer template layout, `metadata.json` fields, template keys, variables, local validation |
+| [`guides/template-publishing.md`](./guides/template-publishing.md) | `post-kit-publish` flags, blob layout, fail-fast, per-environment promotion, OIDC + RBAC |
+| [`examples/publish-email-templates.yml`](./examples/publish-email-templates.yml) | Sample consumer-repository publish workflow (not installed in this repo) |
 | [`onboarding/tenant-onboarding.md`](./onboarding/tenant-onboarding.md) | New tenant from nothing configured to first email: identifier, credential, sender, templates, publish, test send, triage |
 | [`onboarding/environments.md`](./onboarding/environments.md) | development/staging/production separation, local development without real delivery |

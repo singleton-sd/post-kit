@@ -88,16 +88,16 @@ Rules that the code enforces or that you must uphold:
 - **Server-side only.** The credential must never reach a browser. Public
   forms post to your own server endpoint, which then calls PostKit. See
   [`packages/post-kit-client/README.md`](../../packages/post-kit-client/README.md).
-- **Where it lives:** Azure Key Vault, surfaced to the Function App through
-  App Configuration. **Where it never lives:** browser bundles, this
-  repository, `.env` files that are committed, or GitHub Secrets as a raw
-  token (CI authenticates to Azure with OIDC — see
-  [`docs/pr-pipelines.md`](../pr-pipelines.md)).
-- Unlike the other runtime keys, `TENANT_KEY_MAP` is **not** in
+- **Where it lives:** the Function App's own application settings as
+  `TENANT_KEY_MAP`. Unlike every other runtime key, it is **not** in
   `APP_CONFIGURATION_ENVIRONMENT_KEYS`
   ([`app-configuration.ts`](../../apps/api/src/config/app-configuration.ts)),
-  so it is read from the Function App's own environment rather than pulled
-  from App Configuration.
+  so App Configuration does not populate it — there is no `app:…` key for the
+  map. In production, store the JSON in Key Vault (`ssd-global-kv-prod-ae`) and
+  reference it from the Function App setting (a Key Vault reference), not as a
+  plain-text value. **Where it never lives:** browser bundles, this repository,
+  committed `.env` files, or GitHub Secrets as a raw token (CI authenticates to
+  Azure with OIDC — see [`docs/pr-pipelines.md`](../pr-pipelines.md)).
 
 Rotation is a replace-then-remove edit of the same map: add the new token,
 switch the consumer, delete the old entry. There is no rotation automation.
