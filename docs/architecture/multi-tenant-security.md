@@ -91,14 +91,16 @@ deployment.
 
 ## Path safety
 
-Tenant, environment, template key, and storage account are all validated
-before they reach a blob path.
+Template keys and storage account names are validated before they reach a blob
+path. Tenant ID and environment are validated at **publish** time by
+`post-kit-publish`; the API-side store does not re-validate them today (see
+**What is not enforced yet** and [#59](https://github.com/singleton-sd/post-kit/issues/59)).
 
 | Value           | Rule                                                          | Enforced in                                                   |
 | --------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
 | Template key    | `/^[a-zA-Z0-9._-]+$/`, and not the bare dot-segments `.` or `..` | Send handler (`isSafeTemplateKey`), `BlobTemplateStore.load()`, publisher (`assertSafeTemplateKey`) |
-| Tenant ID       | Alphanumeric with internal hyphens, no `..`                    | Publisher (`assertSafeTenantId`)                              |
-| Environment     | One of `development`, `staging`, `production`                   | Publisher (`assertSafeEnvironment`), and the type system elsewhere |
+| Tenant ID       | Alphanumeric with internal hyphens, no `..`                    | Publisher (`assertSafeTenantId`) at publish time only         |
+| Environment     | One of `development`, `staging`, `production`                   | Publisher (`assertSafeEnvironment`) at publish time only; type system elsewhere |
 | Storage account | `/^[a-z0-9]{3,24}$/`                                           | Publisher (`assertSafeStorageAccount`)                        |
 
 The template-key check is deliberately duplicated: the handler rejects an
@@ -163,7 +165,8 @@ State these plainly; do not assume any of them exist.
 - **No validation of `TENANT_KEY_MAP` contents.** The JSON is cast to
   `TenantKeyMap` and its `tenantId` / `environment` values reach the blob path
   unchecked, so an operator typo can silently point a credential at an
-  unintended prefix instead of failing loudly.
+  unintended prefix instead of failing loudly. Tracked in
+  [#59](https://github.com/singleton-sd/post-kit/issues/59).
 
 Hardening in these areas — additional providers, observability, reliability,
 and security controls — is tracked by
