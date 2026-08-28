@@ -6,7 +6,7 @@
   "license": "MIT",
   "scripts": {
     "build": "pnpm --filter @singleton-sd/post-kit-client run build && tsc -p tsconfig.json",
-    "test": "pnpm --filter @singleton-sd/post-kit-client run build && tsc -p tsconfig.json && node --import tsx --test src/**/*.spec.ts"
+    "test": "pnpm --filter @singleton-sd/post-kit-client run build && tsc -p tsconfig.json && node --import tsx --test src/send-password-reset.spec.ts"
   },
   "devDependencies": {
     "@types/node": "^20.17.9",

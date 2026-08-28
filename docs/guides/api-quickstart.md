@@ -185,22 +185,16 @@ the client's own timeout fires, you get a `PostKitRequestError` with code
 | `STORAGE_FAILURE` | 503 / 500 | yes on 503 | Configuration or template storage is temporarily unavailable |
 | `PROVIDER_FAILURE` | 503 | yes | Transient provider error, rate limit, or provider misconfiguration |
 | `PROVIDER_FAILURE` | 502 / 500 | no | Provider rejected the message permanently, or an unexpected server error — investigate with the correlation id |
-| `TIMEOUT` | — | yes | Client-side timeout; the send may still have happened, so make retries idempotent at your layer |
-| `NETWORK_ERROR` | — | yes | DNS/TCP/TLS failure; nothing reached the API |
+| `TIMEOUT` | — | yes (idempotent) | Client-side timeout; delivery status is unknown — the send may still have happened |
+| `NETWORK_ERROR` | — | yes (idempotent) | Transport failure or a response-body read failure after headers arrived; delivery status is unknown — the API may have accepted the send before the body failed |
 
-Retry the "yes" rows with capped exponential backoff and jitter. Never retry
-a 4xx — the same request will fail identically.
+Retry the "yes" rows with capped exponential backoff and jitter. Treat both
+`TIMEOUT` and `NETWORK_ERROR` as **delivery unknown** — make retries idempotent
+at your layer. Never retry a 4xx — the same request will fail identically.
 
 ```ts
 import { PostKitRequestError } from '@singleton-sd/post-kit-client';
 import { PostKitErrorCode } from '@singleton-sd/post-kit-types';
-
-const RETRYABLE = new Set<string>([
-  PostKitErrorCode.PROVIDER_FAILURE,
-  PostKitErrorCode.STORAGE_FAILURE,
-  'TIMEOUT',
-  'NETWORK_ERROR',
-]);
 
 try {
   await postKit.send(request);
@@ -214,14 +208,20 @@ try {
     correlationId: err.correlationId,
   });
 
-  if (RETRYABLE.has(err.code) && err.status !== 502) {
+  const retryable =
+    err.code === 'TIMEOUT' ||
+    err.code === 'NETWORK_ERROR' ||
+    ((err.code === PostKitErrorCode.STORAGE_FAILURE ||
+      err.code === PostKitErrorCode.PROVIDER_FAILURE) &&
+      err.status === 503);
+  if (retryable) {
     // schedule a retry with backoff
   }
 }
 ```
 
-Note that a `PROVIDER_FAILURE` on 503 is retryable while the same code on 502
-is not, so check `status` alongside `code` for that one.
+`PROVIDER_FAILURE` and `STORAGE_FAILURE` are retryable only on HTTP 503, not
+on 502 or 500.
 
 ### Logging for support
 
