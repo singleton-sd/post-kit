@@ -109,6 +109,11 @@ test('invalid submissions are rejected before any send', async () => {
       field: 'name',
     },
     {
+      label: 'name with embedded newline',
+      input: { ...validSubmission, name: 'Jane\r\nDoe' },
+      field: 'name',
+    },
+    {
       label: 'malformed email',
       input: { ...validSubmission, email: 'jane(at)example' },
       field: 'email',

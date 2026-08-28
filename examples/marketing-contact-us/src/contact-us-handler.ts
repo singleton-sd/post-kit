@@ -25,6 +25,8 @@ export const LIMITS = {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Control characters are rejected outright; newlines are allowed in `message`. */
 const CONTROLS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+/** `name` must not contain any control character, including CR and LF. */
+const NAME_CONTROLS_RE = /[\u0000-\u001f\u007f]/;
 
 export interface ContactUsConfig {
   /**
@@ -108,7 +110,7 @@ export function validateSubmission(submission: unknown): ValidationOutcome {
   if (!name) {
     return { ok: false, field: 'name', error: 'Name is required.' };
   }
-  if (name.length > LIMITS.nameMax || CONTROLS_RE.test(name)) {
+  if (name.length > LIMITS.nameMax || NAME_CONTROLS_RE.test(name)) {
     return {
       ok: false,
       field: 'name',
