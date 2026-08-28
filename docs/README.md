@@ -30,8 +30,13 @@ docs/
 ├── email-forward-email.md    (Forward Email runtime + provision CLI)
 ├── architecture/
 │   └── overview.md           (phase-1 system shape)
-└── operations/
-    └── troubleshooting.md    (send endpoint triage, correlation IDs, runbooks)
+├── guides/
+│   ├── template-authoring.md  (consumer template source files + variables)
+│   └── template-publishing.md (post-kit-publish, blob layout, environments)
+├── operations/
+│   └── troubleshooting.md    (send endpoint triage, correlation IDs, runbooks)
+└── examples/
+    └── publish-email-templates.yml (sample consumer publish workflow)
 ```
 
 ## Topic docs
@@ -43,4 +48,7 @@ docs/
 | [`pr-pipelines.md`](./pr-pipelines.md) | PR CI, release, secrets policy |
 | [`architecture/overview.md`](./architecture/overview.md) | Phase-1 architecture: Functions API, EmailProvider, consumers |
 | [`email-forward-email.md`](./email-forward-email.md) | Forward Email provider, DNS, `pnpm email:provision`, Function contact, branding CI |
+| [`guides/template-authoring.md`](./guides/template-authoring.md) | Consumer template layout, `metadata.json` fields, template keys, variables, local validation |
+| [`guides/template-publishing.md`](./guides/template-publishing.md) | `post-kit-publish` flags, blob layout, fail-fast, per-environment promotion, OIDC + RBAC |
+| [`examples/publish-email-templates.yml`](./examples/publish-email-templates.yml) | Sample consumer-repository publish workflow (not installed in this repo) |
 | [`operations/troubleshooting.md`](./operations/troubleshooting.md) | `POST /emails/send` error triage, correlation-ID tracing, incident runbooks |

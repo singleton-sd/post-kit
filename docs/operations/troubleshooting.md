@@ -1,7 +1,10 @@
 # Operational troubleshooting — `POST /emails/send`
 
-Triage reference for "the email didn't arrive". Everything here can be answered
-from the HTTP response and the structured logs — no source reading required.
+Triage reference for "the email didn't arrive". HTTP responses and structured
+logs identify the outcome and the next check — no source reading required for
+initial triage. The runbooks below also point at Blob Storage, App
+Configuration, Key Vault, DNS, and the recipient mailbox when those are the
+likely cause.
 
 Scope: the send endpoint implemented in `apps/api/src/functions/send.ts`, its
 tenant resolver, template store, App Configuration loader, and the
@@ -34,7 +37,7 @@ ones.
 
 | HTTP | `code` | Symptom | Likely cause | What to check | Retry appropriate? |
 | --- | --- | --- | --- | --- | --- |
-| 401 | `UNAUTHENTICATED` | Rejected before any template work; no `tenantId` in the log entry | No `Authorization` header, header does not use the `Bearer` scheme (case-insensitive), or the token after `Bearer ` is empty | That the caller sends `Authorization: Bearer <token>`. The resolver never logs the token, so confirm header presence on the caller side | No — retrying the same request fails identically |
+| 401 | `UNAUTHENTICATED` | Rejected before any template work; no `tenantId` in the log entry | No `Authorization` header, header does not use the `Bearer` scheme (case-insensitive), or the bearer token is empty | That the caller sends `Authorization: Bearer <token>`. The resolver never logs the token, so confirm header presence on the caller side | No — retrying the same request fails identically |
 | 403 | `UNAUTHORIZED` | Well-formed credential still rejected; no `tenantId` in the log entry | The token is not an own key of the `TENANT_KEY_MAP` entry map (also rejects prototype names such as `toString`) | Whether `TENANT_KEY_MAP` contains the caller's token, and whether it was rotated or the map JSON failed to parse (an unparseable map silently becomes empty, so every token 403s) | No — until the key map is corrected |
 | 400 | `INVALID_TEMPLATE` | Request rejected at body validation, `outcome=validation_error` | `template` missing, not a string, blank, or containing characters outside `[a-zA-Z0-9._-]` (also the bare `.` and `..` keys) | The `template` value the caller sent | No — fix the request |
 | 400 | `INVALID_TEMPLATE` | Rejected after the blob was fetched, `outcome=failed`, `templateKey` present | `metadata.json` is not valid JSON, is missing required fields, has a `key` that differs from the requested key, or declares an unsupported `schemaVersion` | The published `metadata.json` artefact for that tenant/environment/key; re-run the template publish | No — republish the template first |
@@ -45,7 +48,7 @@ ones.
 | 503 | `PROVIDER_FAILURE` | Provider rejected the send; `send provider failed` is logged with `kind=configuration` | Provider credential missing — e.g. `FORWARD_EMAIL_TOKEN` not resolved from Key Vault via App Configuration, or a malformed contact profile configuration | Key Vault reference resolution for `secret:forwardemail-api-key`; the Function App's managed identity access to Key Vault | Only after configuration is fixed |
 | 503 | `PROVIDER_FAILURE` | Intermittent; `kind=transient`, often with `statusCode` 5xx/408/409, or a request timeout (15 s) or transport failure | Provider outage, network failure, or timeout. The provider already retried internally (up to 2 retries with backoff) before surfacing this | Provider status; whether `durationMs` is near the timeout ceiling | Yes — retry with backoff |
 | 503 | `PROVIDER_FAILURE` | Bursty failures under load; `kind=rate_limit`, `statusCode=429` | Provider rate limit reached after internal retries | Send volume for the affected window across all tenants | Yes — back off, then retry |
-| 502 | `PROVIDER_FAILURE` | Consistent failure for a specific request; `kind=permanent` with a provider 4xx `statusCode` (other than 429/408/409) | Provider rejected the message permanently — e.g. unverified sender domain, unauthorised credential, malformed payload | Sender identity and domain setup, see [`email-forward-email.md`](../email-forward-email.md) | No — the same request fails again |
+| 502 | `PROVIDER_FAILURE` | Consistent failure for a specific request; `kind=permanent` with a provider 4xx `statusCode` (other than 429/408/409) | Provider rejected the message permanently — e.g. unverified sender domain, unauthorized credential, malformed payload | Sender identity and domain setup, see [`email-forward-email.md`](../email-forward-email.md) | No — the same request fails again |
 | 502 | `PROVIDER_FAILURE` | Failure before any provider HTTP call; `kind=validation` | A header field (`to`, `from`, `subject`, `replyTo`) is empty after sanitisation or contains CR/LF control characters — typically a template subject rendered from a variable | The rendered subject and the configured sender address for stray newlines | No — fix the template or input |
 | 502 | `PROVIDER_FAILURE` | Rare; `kind=cancelled` | The send was aborted (caller/host cancellation) | Host shutdown, scaling events, or client disconnects in the same window | Yes — the message was probably never sent, but confirm no duplicate first |
 | 503 | `STORAGE_FAILURE` | Fails immediately, before auth; no `tenantId` or `templateKey`; `app configuration load failed` is logged | Azure App Configuration load threw — endpoint unreachable, identity lacks access, or a Key Vault reference is invalid or has no value | `AZURE_APPCONFIGURATION_ENDPOINT`, the Function App managed identity's App Configuration and Key Vault role assignments | Yes — the loader clears its cache on failure and retries on the next request |
@@ -102,7 +105,7 @@ Fields that may appear (only non-`undefined` values are emitted):
 | `providerMessageId` | completed | Provider-assigned message id |
 | `environment` | — | Part of the log entry contract but not currently populated by the send handler |
 
-Two additional diagnostic entries are written through the Functions invocation
+Three additional diagnostic entries are written through the Functions invocation
 context rather than the structured logger, so they are searchable by message
 text: `app configuration load failed` (error `name` only),
 `send provider failed` (`kind`, `statusCode`, `correlationId`), and
