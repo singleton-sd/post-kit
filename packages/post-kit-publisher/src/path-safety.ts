@@ -51,5 +51,40 @@ export function blobBasePath(
   assertSafeTenantId(tenant);
   assertSafeEnvironment(environment);
   assertSafeTemplateKey(templateKey);
-  return `tenants/${tenant}/${environment}/templates/${templateKey}`;
+  return `${templatesPrefix(tenant, environment)}/${templateKey}`;
+}
+
+/** Blob prefix for all templates of a tenant/environment (no trailing slash). */
+export function templatesPrefix(tenant: string, environment: TenantEnvironment): string {
+  assertSafeTenantId(tenant);
+  assertSafeEnvironment(environment);
+  return `tenants/${tenant}/${environment}/templates`;
+}
+
+/** True when `blobPath` is a blob under `templatesPrefix` for a single template key. */
+export function isScopedTemplateBlob(blobPath: string, prefix: string): boolean {
+  if (!blobPath.startsWith(`${prefix}/`)) {
+    return false;
+  }
+  const rest = blobPath.slice(prefix.length + 1);
+  const slash = rest.indexOf('/');
+  if (slash === -1) {
+    return false;
+  }
+  const key = rest.slice(0, slash);
+  try {
+    assertSafeTemplateKey(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Extract the template key from a blob under `templatesPrefix`, or undefined if out of scope. */
+export function templateKeyFromBlobPath(blobPath: string, prefix: string): string | undefined {
+  if (!isScopedTemplateBlob(blobPath, prefix)) {
+    return undefined;
+  }
+  const rest = blobPath.slice(prefix.length + 1);
+  return rest.slice(0, rest.indexOf('/'));
 }

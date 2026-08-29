@@ -10,6 +10,9 @@ import {
   assertSafeTenantId,
   assertSafeTemplateKey,
   blobBasePath,
+  isScopedTemplateBlob,
+  templateKeyFromBlobPath,
+  templatesPrefix,
 } from './path-safety';
 
 export interface PublishOptions {
@@ -21,11 +24,21 @@ export interface PublishOptions {
   container: string;
   /** Passed through to TemplateManifest.sourceCommit. */
   commit?: string;
+  /** Report the change set without uploading or deleting. */
+  dryRun?: boolean;
+  /** Delete blobs for template keys absent from the compiled set (opt-in). */
+  prune?: boolean;
 }
 
 export interface PublishResult {
   published: string[];
   failed: Array<{ key: string; error: string }>;
+  /** Template keys that would be or were created in storage. */
+  added: string[];
+  /** Template keys that would be or were overwritten in storage. */
+  updated: string[];
+  /** Template keys removed (or that would be removed with prune + dry-run). */
+  deleted: string[];
 }
 
 /** Internal batch row — not part of the public package API. */
@@ -37,7 +50,7 @@ interface CompiledEntry {
 /**
  * Compile every template under `templatesDir`, then upload artifacts.
  *
- * Fail-fast for publishing: if any compile fails, nothing is uploaded.
+ * Fail-fast for publishing: if any compile fails, nothing is uploaded or pruned.
  * Storage auth always uses `DefaultAzureCredential` (Managed Identity / az login).
  */
 export async function publishTemplates(options: PublishOptions): Promise<PublishResult> {
@@ -70,6 +83,14 @@ async function runPublish(
   options: PublishOptions,
   client: BlobServiceClient,
 ): Promise<PublishResult> {
+  const emptyResult = (): PublishResult => ({
+    published: [],
+    failed: [],
+    added: [],
+    updated: [],
+    deleted: [],
+  });
+
   const entries = await listTemplateDirs(options.templatesDir);
   const compiled: CompiledEntry[] = [];
   const failed: PublishResult['failed'] = [];
@@ -98,10 +119,58 @@ async function runPublish(
   }
 
   if (failed.length > 0) {
-    return { published: [], failed };
+    return { ...emptyResult(), failed };
   }
 
   const containerClient = client.getContainerClient(options.container);
+  const prefix = templatesPrefix(options.tenant, options.environment);
+  const existingKeys = await listStoredTemplateKeys(containerClient, prefix);
+  const compiledKeys = new Set(compiled.map((e) => e.compiled.metadata.key));
+
+  const added: string[] = [];
+  const updated: string[] = [];
+  for (const entry of compiled) {
+    const key = entry.compiled.metadata.key;
+    if (existingKeys.has(key)) {
+      updated.push(key);
+    } else {
+      added.push(key);
+    }
+  }
+
+  const keysToDelete = options.prune
+    ? [...existingKeys].filter((key) => !compiledKeys.has(key)).sort()
+    : [];
+
+  if (options.dryRun) {
+    for (const entry of compiled) {
+      const key = entry.compiled.metadata.key;
+      const base = blobBasePath(options.tenant, options.environment, key);
+      const action = existingKeys.has(key) ? 'update' : 'add';
+      console.log(
+        JSON.stringify({
+          action,
+          key,
+          contentHash: entry.compiled.manifest.contentHash,
+          templateHtml: `${base}/template.html`,
+          metadataJson: `${base}/metadata.json`,
+        }),
+      );
+    }
+    for (const key of keysToDelete) {
+      const base = blobBasePath(options.tenant, options.environment, key);
+      console.log(
+        JSON.stringify({
+          action: 'delete',
+          key,
+          templateHtml: `${base}/template.html`,
+          metadataJson: `${base}/metadata.json`,
+        }),
+      );
+    }
+    return { published: [], failed: [], added, updated, deleted: keysToDelete };
+  }
+
   const published: string[] = [];
 
   for (const entry of compiled) {
@@ -133,7 +202,43 @@ async function runPublish(
     );
   }
 
-  return { published, failed: [] };
+  const deleted: string[] = [];
+  if (options.prune) {
+    for (const key of keysToDelete) {
+      const base = blobBasePath(options.tenant, options.environment, key);
+      for (const blobPath of [`${base}/template.html`, `${base}/metadata.json`]) {
+        if (!isScopedTemplateBlob(blobPath, prefix)) {
+          continue;
+        }
+        await containerClient.getBlockBlobClient(blobPath).deleteIfExists();
+      }
+      deleted.push(key);
+      console.log(
+        JSON.stringify({
+          action: 'delete',
+          key,
+          templateHtml: `${base}/template.html`,
+          metadataJson: `${base}/metadata.json`,
+        }),
+      );
+    }
+  }
+
+  return { published, failed: [], added, updated, deleted };
+}
+
+async function listStoredTemplateKeys(
+  containerClient: ReturnType<BlobServiceClient['getContainerClient']>,
+  prefix: string,
+): Promise<Set<string>> {
+  const keys = new Set<string>();
+  for await (const blob of containerClient.listBlobsFlat({ prefix: `${prefix}/` })) {
+    const key = templateKeyFromBlobPath(blob.name, prefix);
+    if (key) {
+      keys.add(key);
+    }
+  }
+  return keys;
 }
 
 async function listTemplateDirs(templatesDir: string): Promise<string[]> {

@@ -10,6 +10,9 @@ import {
   assertSafeTenantId,
   assertSafeTemplateKey,
   blobBasePath,
+  templatesPrefix,
+  isScopedTemplateBlob,
+  templateKeyFromBlobPath,
 } from './path-safety';
 import { publishTemplatesWithClient } from './publish';
 
@@ -46,6 +49,42 @@ describe('path safety', () => {
     assert.equal(
       blobBasePath('inkads', 'production', 'marketing.contact-us'),
       'tenants/inkads/production/templates/marketing.contact-us',
+    );
+  });
+
+  it('builds the templates prefix for listing and prune scope', () => {
+    assert.equal(templatesPrefix('inkads', 'production'), 'tenants/inkads/production/templates');
+  });
+
+  it('scopes template blobs under the templates prefix', () => {
+    const prefix = templatesPrefix('inkads', 'production');
+    assert.equal(
+      isScopedTemplateBlob(
+        'tenants/inkads/production/templates/marketing.contact-us/template.html',
+        prefix,
+      ),
+      true,
+    );
+    assert.equal(
+      isScopedTemplateBlob(
+        'tenants/inkads/production/other/marketing.contact-us/template.html',
+        prefix,
+      ),
+      false,
+    );
+    assert.equal(
+      isScopedTemplateBlob(
+        'tenants/other/production/templates/marketing.contact-us/template.html',
+        prefix,
+      ),
+      false,
+    );
+    assert.equal(
+      templateKeyFromBlobPath(
+        'tenants/inkads/production/templates/marketing.contact-us/metadata.json',
+        prefix,
+      ),
+      'marketing.contact-us',
     );
   });
 });
@@ -147,20 +186,289 @@ describe('publishTemplates', () => {
     )!;
     assert.ok(html.includes('<html') || html.includes('<!DOCTYPE') || html.length > 0);
   });
+
+  it('does not prune by default when storage has extra template keys', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'post-kit-publish-'));
+    await cp(join(FIXTURES, 'marketing.contact-us'), join(root, 'marketing.contact-us'), {
+      recursive: true,
+    });
+
+    const prefix = 'tenants/inkads/production/templates';
+    const blobs = new Map<string, string>([
+      [`${prefix}/marketing.contact-us/template.html`, '<html></html>'],
+      [`${prefix}/marketing.contact-us/metadata.json`, '{}'],
+      [`${prefix}/retired.welcome/template.html`, '<html>old</html>'],
+      [`${prefix}/retired.welcome/metadata.json`, '{}'],
+    ]);
+    const deleted: string[] = [];
+    const client = makeFakeClient({
+      blobs,
+      onUpload: () => {},
+      onDelete: (path) => deleted.push(path),
+    });
+
+    const result = await publishTemplatesWithClient(
+      {
+        templatesDir: root,
+        tenant: 'inkads',
+        environment: 'production',
+        storageAccount: 'ssdpostkitstprodae',
+        container: 'templates',
+      },
+      client,
+    );
+
+    assert.deepEqual(result.published, ['marketing.contact-us']);
+    assert.deepEqual(result.deleted, []);
+    assert.equal(deleted.length, 0);
+    assert.ok(blobs.has(`${prefix}/retired.welcome/template.html`));
+  });
+
+  it('prunes blobs for keys absent from the compiled set', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'post-kit-publish-'));
+    await cp(join(FIXTURES, 'marketing.contact-us'), join(root, 'marketing.contact-us'), {
+      recursive: true,
+    });
+
+    const prefix = 'tenants/inkads/production/templates';
+    const blobs = new Map<string, string>([
+      [`${prefix}/marketing.contact-us/template.html`, '<html></html>'],
+      [`${prefix}/marketing.contact-us/metadata.json`, '{}'],
+      [`${prefix}/retired.welcome/template.html`, '<html>old</html>'],
+      [`${prefix}/retired.welcome/metadata.json`, '{}'],
+    ]);
+    const deleted: string[] = [];
+    const client = makeFakeClient({
+      blobs,
+      onUpload: () => {},
+      onDelete: (path) => deleted.push(path),
+    });
+
+    const result = await publishTemplatesWithClient(
+      {
+        templatesDir: root,
+        tenant: 'inkads',
+        environment: 'production',
+        storageAccount: 'ssdpostkitstprodae',
+        container: 'templates',
+        prune: true,
+      },
+      client,
+    );
+
+    assert.deepEqual(result.published, ['marketing.contact-us']);
+    assert.deepEqual(result.deleted, ['retired.welcome']);
+    assert.ok(deleted.includes(`${prefix}/retired.welcome/template.html`));
+    assert.ok(deleted.includes(`${prefix}/retired.welcome/metadata.json`));
+    assert.ok(!blobs.has(`${prefix}/retired.welcome/template.html`));
+  });
+
+  it('does not prune blobs outside the tenant/environment templates prefix', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'post-kit-publish-'));
+    await cp(join(FIXTURES, 'marketing.contact-us'), join(root, 'marketing.contact-us'), {
+      recursive: true,
+    });
+
+    const prefix = 'tenants/inkads/production/templates';
+    const blobs = new Map<string, string>([
+      [`${prefix}/marketing.contact-us/template.html`, '<html></html>'],
+      [`${prefix}/marketing.contact-us/metadata.json`, '{}'],
+      ['tenants/other/production/templates/retired.welcome/template.html', '<html>other</html>'],
+      ['tenants/inkads/staging/templates/retired.welcome/template.html', '<html>staging</html>'],
+      ['tenants/inkads/production/other/retired.welcome/template.html', '<html>wrong</html>'],
+    ]);
+    const deleted: string[] = [];
+    const client = makeFakeClient({
+      blobs,
+      onUpload: () => {},
+      onDelete: (path) => deleted.push(path),
+    });
+
+    await publishTemplatesWithClient(
+      {
+        templatesDir: root,
+        tenant: 'inkads',
+        environment: 'production',
+        storageAccount: 'ssdpostkitstprodae',
+        container: 'templates',
+        prune: true,
+      },
+      client,
+    );
+
+    assert.equal(deleted.length, 0);
+    assert.ok(blobs.has('tenants/other/production/templates/retired.welcome/template.html'));
+    assert.ok(blobs.has('tenants/inkads/staging/templates/retired.welcome/template.html'));
+    assert.ok(blobs.has('tenants/inkads/production/other/retired.welcome/template.html'));
+  });
+
+  it('dry-run reports adds, updates, and deletions without writes or deletes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'post-kit-publish-'));
+    await cp(join(FIXTURES, 'marketing.contact-us'), join(root, 'marketing.contact-us'), {
+      recursive: true,
+    });
+
+    const prefix = 'tenants/inkads/production/templates';
+    const blobs = new Map<string, string>([
+      [`${prefix}/marketing.contact-us/template.html`, '<html>old</html>'],
+      [`${prefix}/marketing.contact-us/metadata.json`, '{}'],
+      [`${prefix}/retired.welcome/template.html`, '<html>gone</html>'],
+      [`${prefix}/retired.welcome/metadata.json`, '{}'],
+    ]);
+    let uploads = 0;
+    const deleted: string[] = [];
+    const client = makeFakeClient({
+      blobs,
+      onUpload: () => {
+        uploads += 1;
+      },
+      onDelete: (path) => deleted.push(path),
+    });
+
+    const result = await publishTemplatesWithClient(
+      {
+        templatesDir: root,
+        tenant: 'inkads',
+        environment: 'production',
+        storageAccount: 'ssdpostkitstprodae',
+        container: 'templates',
+        dryRun: true,
+        prune: true,
+      },
+      client,
+    );
+
+    assert.equal(result.published.length, 0);
+    assert.deepEqual(result.added, []);
+    assert.deepEqual(result.updated, ['marketing.contact-us']);
+    assert.deepEqual(result.deleted, ['retired.welcome']);
+    assert.equal(uploads, 0);
+    assert.equal(deleted.length, 0);
+    assert.ok(blobs.has(`${prefix}/retired.welcome/template.html`));
+  });
+
+  it('dry-run reports a new template as an add', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'post-kit-publish-'));
+    await cp(join(FIXTURES, 'marketing.contact-us'), join(root, 'marketing.contact-us'), {
+      recursive: true,
+    });
+
+    const blobs = new Map<string, string>();
+    let uploads = 0;
+    const client = makeFakeClient({
+      blobs,
+      onUpload: () => {
+        uploads += 1;
+      },
+      onDelete: () => {},
+    });
+
+    const result = await publishTemplatesWithClient(
+      {
+        templatesDir: root,
+        tenant: 'inkads',
+        environment: 'production',
+        storageAccount: 'ssdpostkitstprodae',
+        container: 'templates',
+        dryRun: true,
+      },
+      client,
+    );
+
+    assert.deepEqual(result.added, ['marketing.contact-us']);
+    assert.deepEqual(result.updated, []);
+    assert.deepEqual(result.deleted, []);
+    assert.equal(uploads, 0);
+  });
+
+  it('does not prune when compilation fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'post-kit-publish-'));
+    await cp(join(FIXTURES, 'malformed-metadata'), join(root, 'bad'), { recursive: true });
+    await writeFile(
+      join(root, 'bad', 'template.json'),
+      JSON.stringify({ root: { type: 'EmailLayout', data: { childrenIds: [] } } }),
+    );
+    await writeFile(join(root, 'bad', 'preview.json'), '{}');
+
+    const prefix = 'tenants/inkads/development/templates';
+    const blobs = new Map<string, string>([
+      [`${prefix}/retired.welcome/template.html`, '<html>old</html>'],
+    ]);
+    const deleted: string[] = [];
+    const client = makeFakeClient({
+      blobs,
+      onUpload: () => {},
+      onDelete: (path) => deleted.push(path),
+    });
+
+    const result = await publishTemplatesWithClient(
+      {
+        templatesDir: root,
+        tenant: 'inkads',
+        environment: 'development',
+        storageAccount: 'ssdpostkitstprodae',
+        container: 'templates',
+        prune: true,
+      },
+      client,
+    );
+
+    assert.equal(result.published.length, 0);
+    assert.ok(result.failed.length >= 1);
+    assert.equal(deleted.length, 0);
+  });
 });
 
-function makeFakeClient(onUpload: (path: string, body: string) => void): BlobServiceClient {
+interface FakeClientOptions {
+  blobs?: Map<string, string>;
+  onUpload: (path: string, body: string) => void;
+  onDelete?: (path: string) => void;
+}
+
+function makeFakeClient(
+  options: FakeClientOptions | ((path: string, body: string) => void),
+): BlobServiceClient {
+  const opts: FakeClientOptions =
+    typeof options === 'function' ? { onUpload: options, blobs: new Map() } : options;
+  const blobs = opts.blobs ?? new Map<string, string>();
+
   const getBlockBlobClient = (blobPath: string): BlockBlobClient =>
     ({
       upload: async (body: string | Buffer) => {
         const text = typeof body === 'string' ? body : body.toString('utf8');
-        onUpload(blobPath, text);
+        opts.onUpload(blobPath, text);
+        blobs.set(blobPath, text);
         return {};
+      },
+      delete: async () => {
+        opts.onDelete?.(blobPath);
+        blobs.delete(blobPath);
+        return {};
+      },
+      deleteIfExists: async () => {
+        if (blobs.has(blobPath)) {
+          opts.onDelete?.(blobPath);
+          blobs.delete(blobPath);
+          return { succeeded: true };
+        }
+        return { succeeded: false };
       },
     }) as unknown as BlockBlobClient;
 
   const getContainerClient = (): ContainerClient =>
-    ({ getBlockBlobClient }) as unknown as ContainerClient;
+    ({
+      getBlockBlobClient,
+      listBlobsFlat: (listOptions?: { prefix?: string }) => ({
+        async *[Symbol.asyncIterator]() {
+          const prefix = listOptions?.prefix ?? '';
+          for (const name of [...blobs.keys()].sort()) {
+            if (name.startsWith(prefix)) {
+              yield { name };
+            }
+          }
+        },
+      }),
+    }) as unknown as ContainerClient;
 
   return { getContainerClient } as unknown as BlobServiceClient;
 }
