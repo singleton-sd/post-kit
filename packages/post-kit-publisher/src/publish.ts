@@ -109,6 +109,7 @@ async function runPublish(
     const base = blobBasePath(options.tenant, options.environment, key);
     const htmlPath = `${base}/template.html`;
     const metaPath = `${base}/metadata.json`;
+    const manifestPath = `${base}/manifest.json`;
 
     await containerClient
       .getBlockBlobClient(htmlPath)
@@ -119,6 +120,12 @@ async function runPublish(
     await containerClient
       .getBlockBlobClient(metaPath)
       .upload(metadataJson, Buffer.byteLength(metadataJson, 'utf8'), {
+        blobHTTPHeaders: { blobContentType: 'application/json; charset=utf-8' },
+      });
+    const manifestJson = JSON.stringify(entry.compiled.manifest, null, 2);
+    await containerClient
+      .getBlockBlobClient(manifestPath)
+      .upload(manifestJson, Buffer.byteLength(manifestJson, 'utf8'), {
         blobHTTPHeaders: { blobContentType: 'application/json; charset=utf-8' },
       });
 
