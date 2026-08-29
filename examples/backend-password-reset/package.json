@@ -1,0 +1,23 @@
+{
+  "name": "@singleton-sd/example-backend-password-reset",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Minimal server-side example: send a password-reset email with @singleton-sd/post-kit-client",
+  "license": "MIT",
+  "scripts": {
+    "build": "pnpm --filter @singleton-sd/post-kit-client run build && tsc -p tsconfig.json",
+    "test": "pnpm --filter @singleton-sd/post-kit-client run build && tsc -p tsconfig.json && node --import tsx --test src/send-password-reset.spec.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "dependencies": {
+    "@singleton-sd/post-kit-client": "workspace:*",
+    "@singleton-sd/post-kit-types": "workspace:*"
+  }
+}

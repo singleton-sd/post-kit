@@ -73,6 +73,25 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  examples/backend-password-reset:
+    dependencies:
+      '@singleton-sd/post-kit-client':
+        specifier: workspace:*
+        version: link:../../packages/post-kit-client
+      '@singleton-sd/post-kit-types':
+        specifier: workspace:*
+        version: link:../../packages/post-kit-types
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.9
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   examples/marketing-contact-us:
     dependencies:
       '@singleton-sd/post-kit-client':
@@ -135,6 +154,34 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.7
         version: 18.3.7(@types/react@18.3.31)
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/post-kit-editor:
+    dependencies:
+      '@singleton-sd/post-kit-types':
+        specifier: workspace:*
+        version: link:../post-kit-types
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.9
+        version: 20.19.43
+      '@types/react':
+        specifier: ^18.3.31
+        version: 18.3.31
+      '@types/react-dom':
+        specifier: ^18.3.7
+        version: 18.3.7(@types/react@18.3.31)
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
       tsx:
         specifier: ^4.19.2
         version: 4.23.12
