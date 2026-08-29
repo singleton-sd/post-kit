@@ -1,6 +1,6 @@
 {
   "name": "@singleton-sd/post-kit-editor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "description": "React admin editor component for PostKit email templates",
   "license": "MIT",
