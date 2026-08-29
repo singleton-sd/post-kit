@@ -37,7 +37,7 @@ docs/
 │   ├── template-authoring.md  (consumer template source files + variables)
 │   ├── template-publishing.md (post-kit-publish, blob layout, environments)
 │   ├── api-quickstart.md     (send API + client quick start)
-│   └── template-publishing.md (post-kit-publish, blob layout, environments)
+│   └── public-forms.md       (public web forms: trusted server endpoint pattern)
 ├── onboarding/
 │   ├── tenant-onboarding.md  (new tenant → first email)
 │   └── environments.md       (dev/staging/prod separation, local dev)
@@ -66,3 +66,4 @@ docs/
 | [`architecture/template-lifecycle.md`](./architecture/template-lifecycle.md) | Template source → compiler → publisher → Blob layout → send-time load |
 | [`architecture/multi-tenant-security.md`](./architecture/multi-tenant-security.md) | Tenant resolution, environment separation, path safety, credential boundaries, unimplemented controls |
 | [`operations/troubleshooting.md`](./operations/troubleshooting.md) | `POST /emails/send` error triage, correlation-ID tracing, incident runbooks |
+| [`guides/public-forms.md`](./guides/public-forms.md) | Public web forms (Contact Us, waitlist): trusted server endpoint pattern, credential-exposure anti-patterns, consumer-side validation / abuse / rate-limit duties |
