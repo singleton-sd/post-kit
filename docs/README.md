@@ -33,7 +33,10 @@ docs/
 ├── guides/
 │   ├── template-authoring.md  (consumer template source files + variables)
 │   ├── template-publishing.md (post-kit-publish, blob layout, environments)
-│   └── api-quickstart.md     (send API + client quick start)
+│   ├── api-quickstart.md     (send API + client quick start)
+│   └── template-publishing.md (post-kit-publish, blob layout, environments)
+├── operations/
+│   └── troubleshooting.md    (send endpoint triage, correlation IDs, runbooks)
 └── examples/
     └── publish-email-templates.yml (sample consumer publish workflow)
 ```
@@ -51,3 +54,4 @@ docs/
 | [`guides/template-publishing.md`](./guides/template-publishing.md) | `post-kit-publish` flags, blob layout, fail-fast, per-environment promotion, OIDC + RBAC |
 | [`examples/publish-email-templates.yml`](./examples/publish-email-templates.yml) | Sample consumer-repository publish workflow (not installed in this repo) |
 | [`guides/api-quickstart.md`](./guides/api-quickstart.md) | `POST /emails/send` contract, `PostKitClient` usage, error taxonomy and retries |
+| [`operations/troubleshooting.md`](./operations/troubleshooting.md) | `POST /emails/send` error triage, correlation-ID tracing, incident runbooks |
