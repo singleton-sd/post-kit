@@ -2,20 +2,55 @@
 
 Compile Git-backed PostKit email templates and publish runtime artifacts to Azure Blob Storage for `apps/api` TemplateStore.
 
+Authoring template source files is covered in [`docs/guides/template-authoring.md`](../../docs/guides/template-authoring.md). Publishing flags, blob layout, CI setup, and RBAC are in [`docs/guides/template-publishing.md`](../../docs/guides/template-publishing.md).
+
 ## Install
 
 ```bash
 pnpm add @singleton-sd/post-kit-publisher
 ```
 
+## Template source
+
+Each template is a subdirectory of `--templates` containing `template.json`, `metadata.json`, and `preview.json`. The compiler requires an EmailBuilder.js document with a **`root` block** in `template.json`:
+
+```json
+{
+  "root": {
+    "type": "EmailLayout",
+    "data": {
+      "backdropColor": "#F8F8F8",
+      "canvasColor": "#FFFFFF",
+      "textColor": "#242424",
+      "fontFamily": "MODERN_SANS",
+      "childrenIds": ["block-text"]
+    }
+  },
+  "block-text": {
+    "type": "Text",
+    "data": {
+      "style": {
+        "fontWeight": "normal",
+        "padding": { "top": 16, "bottom": 16, "right": 24, "left": 24 }
+      },
+      "props": {
+        "text": "Hello {{name}}, from {{email}}: {{message}}"
+      }
+    }
+  }
+}
+```
+
+See [`template-authoring.md`](../../docs/guides/template-authoring.md) for `metadata.json`, `preview.json`, variables, and a full worked example.
+
 ## CLI
 
 ```bash
 post-kit-publish \
   --templates ./content/email-templates \
-  --tenant inkads \
+  --tenant acme \
   --environment production \
-  --storage-account ssdpostkitstprodae \
+  --storage-account <storage-account-name> \
   --container templates \
   --commit "$GITHUB_SHA"
 ```
@@ -38,50 +73,17 @@ import { publishTemplates } from '@singleton-sd/post-kit-publisher';
 
 const result = await publishTemplates({
   templatesDir: './content/email-templates',
-  tenant: 'inkads',
+  tenant: 'acme',
   environment: 'production',
-  storageAccount: 'ssdpostkitstprodae',
+  storageAccount: 'examplestorageacct',
   container: 'templates',
   commit: process.env.GITHUB_SHA,
 });
 ```
 
-## GitHub Actions (OIDC) example
+## GitHub Actions (OIDC)
 
-```yaml
-name: Publish email templates
-on:
-  push:
-    paths:
-      - 'content/email-templates/**'
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: azure/login@v2
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - run: >
-          pnpm exec post-kit-publish
-          --templates ./content/email-templates
-          --tenant inkads
-          --environment production
-          --storage-account ssdpostkitstprodae
-          --container templates
-          --commit ${{ github.sha }}
-```
+See [`docs/guides/template-publishing.md`](../../docs/guides/template-publishing.md) and the copy-pasteable workflow at [`docs/examples/publish-email-templates.yml`](../../docs/examples/publish-email-templates.yml).
 
 ## Development
 
