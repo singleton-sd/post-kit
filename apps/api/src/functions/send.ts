@@ -12,10 +12,11 @@ import {
   type SendResponse,
   type TenantBranding,
   type TenantContext,
+  type TenantEnvironment,
   type TemplateVariables,
 } from '@singleton-sd/post-kit-types';
 import { ensureAppConfiguration } from '../config/app-configuration';
-import { createLogger, resolveCorrelationId, type Logger } from '../telemetry';
+import { createLogger, hashRecipient, resolveCorrelationId, type Logger } from '../telemetry';
 import {
   ApiKeyTenantResolver,
   TenantResolverError,
@@ -90,20 +91,42 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       'X-Correlation-Id': correlationId,
     };
 
+    let tenantId: string | undefined;
+    let environment: TenantEnvironment | undefined;
+    let templateKey: string | undefined;
+    let recipientHash: string | undefined;
+
+    const logContext = (): {
+      tenantId?: string;
+      environment?: TenantEnvironment;
+      templateKey?: string;
+      recipientHash?: string;
+    } => ({
+      tenantId,
+      environment,
+      templateKey,
+      recipientHash,
+    });
+
     const errorResponse = (
       status: number,
       code: PostKitErrorCode,
       error: string,
       outcome: 'failed' | 'validation_error' | 'auth_error' = 'failed',
-      extra?: { tenantId?: string; templateKey?: string },
+      extra?: {
+        failureCategory?: string;
+        providerMessageId?: string;
+      },
     ): HttpResponseInit => {
       const durationMs = Date.now() - startMs;
+      const failureCategory = extra?.failureCategory ?? failureCategoryFromErrorCode(code, outcome);
       logger.error('send.request.failed', {
         outcome,
         errorCode: code,
+        failureCategory,
         durationMs,
-        tenantId: extra?.tenantId,
-        templateKey: extra?.templateKey,
+        providerMessageId: extra?.providerMessageId,
+        ...logContext(),
       });
       const body: PostKitErrorResponse = { error, code, correlationId };
       return { status, headers, jsonBody: body };
@@ -122,20 +145,19 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       );
     }
 
-    let tenantId: string | undefined;
-    let templateKey: string | undefined;
-
     try {
       const tenant = await deps.tenantResolver.resolve(request);
       tenantId = tenant.tenantId;
+      environment = tenant.environment;
 
       const body = await request.json().catch(() => null);
       const parsed = parseSendRequest(body);
       if (!parsed.ok) {
-        return errorResponse(400, parsed.code, parsed.error, 'validation_error', { tenantId });
+        return errorResponse(400, parsed.code, parsed.error, 'validation_error');
       }
       const sendRequest = parsed.value;
       templateKey = sendRequest.template;
+      recipientHash = hashRecipient(sendRequest.to);
 
       let compiled;
       try {
@@ -148,10 +170,7 @@ export function createSendHandler(deps: SendHandlerDependencies) {
               : err.code === PostKitErrorCode.INVALID_TEMPLATE
                 ? 400
                 : 500;
-          return errorResponse(status, err.code, err.message, 'failed', {
-            tenantId,
-            templateKey,
-          });
+          return errorResponse(status, err.code, err.message, 'failed');
         }
         throw err;
       }
@@ -172,7 +191,6 @@ export function createSendHandler(deps: SendHandlerDependencies) {
           PostKitErrorCode.MISSING_VARIABLES,
           `Missing required variables: ${missing.join(', ')}`,
           'validation_error',
-          { tenantId, templateKey },
         );
       }
 
@@ -186,7 +204,7 @@ export function createSendHandler(deps: SendHandlerDependencies) {
           PostKitErrorCode.PROVIDER_FAILURE,
           'Email sender is not configured.',
           'failed',
-          { tenantId, templateKey },
+          { failureCategory: 'provider_not_configured' },
         );
       }
 
@@ -206,9 +224,8 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       logger.info('send.request.completed', {
         outcome: 'sent',
         durationMs,
-        tenantId,
-        templateKey,
         providerMessageId: result.providerMessageId,
+        ...logContext(),
       });
 
       const response: SendResponse = { id: correlationId, status: 'sent' };
@@ -221,10 +238,7 @@ export function createSendHandler(deps: SendHandlerDependencies) {
             : error.code === PostKitErrorCode.UNAUTHORIZED
               ? 403
               : 401;
-        return errorResponse(status, error.code, error.message, 'auth_error', {
-          tenantId,
-          templateKey,
-        });
+        return errorResponse(status, error.code, error.message, 'auth_error');
       }
 
       if (error instanceof EmailProviderError) {
@@ -242,7 +256,10 @@ export function createSendHandler(deps: SendHandlerDependencies) {
           PostKitErrorCode.PROVIDER_FAILURE,
           'Email provider failed to send the message.',
           'failed',
-          { tenantId, templateKey },
+          {
+            failureCategory: error.failureCategory,
+            providerMessageId: error.providerRequestId,
+          },
         );
       }
 
@@ -255,10 +272,35 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         PostKitErrorCode.PROVIDER_FAILURE,
         'We could not send your message. Please try again shortly.',
         'failed',
-        { tenantId, templateKey },
+        { failureCategory: 'unhandled' },
       );
     }
   };
+}
+
+function failureCategoryFromErrorCode(
+  code: PostKitErrorCode,
+  outcome: 'failed' | 'validation_error' | 'auth_error',
+): string {
+  if (outcome === 'auth_error') {
+    return code === PostKitErrorCode.UNAUTHENTICATED ? 'auth_unauthenticated' : 'auth_unauthorized';
+  }
+  switch (code) {
+    case PostKitErrorCode.INVALID_TEMPLATE:
+      return 'invalid_template';
+    case PostKitErrorCode.INVALID_RECIPIENT:
+      return 'invalid_recipient';
+    case PostKitErrorCode.MISSING_VARIABLES:
+      return 'missing_variables';
+    case PostKitErrorCode.TEMPLATE_NOT_FOUND:
+      return 'template_not_found';
+    case PostKitErrorCode.STORAGE_FAILURE:
+      return 'storage_failure';
+    case PostKitErrorCode.PROVIDER_FAILURE:
+      return 'provider_failure';
+    default:
+      return 'unknown';
+  }
 }
 
 function isSafeTemplateKey(templateKey: string): boolean {

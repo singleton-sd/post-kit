@@ -102,8 +102,10 @@ Fields that may appear (only non-`undefined` values are emitted):
 | `durationMs` | completed / failed | Milliseconds from handler entry |
 | `tenantId` | completed / failed | Set once the credential resolves; absent on 401/403 and on `STORAGE_FAILURE` |
 | `templateKey` | completed / failed | Set once the body validates |
-| `providerMessageId` | completed | Provider-assigned message id |
-| `environment` | — | Part of the log entry contract but not currently populated by the send handler |
+| `environment` | completed / failed | `development`, `staging`, or `production` from the credential; absent on 401/403 and on `STORAGE_FAILURE` |
+| `providerMessageId` | completed / failed | Provider-assigned message id on success; provider request id on provider failures when available |
+| `failureCategory` | failed | Stable failure bucket — API-level categories (`template_not_found`, `missing_variables`, …) or one of the six provider kinds (`configuration`, `transient`, `rate_limit`, `permanent`, `validation`, `cancelled`) |
+| `recipientHash` | completed / failed | 16-character SHA-256 prefix of the normalized recipient address; see [`send-metrics-queries.md`](./send-metrics-queries.md) |
 
 Three additional diagnostic entries are written through the Functions invocation
 context rather than the structured logger, so they are searchable by message
@@ -119,8 +121,15 @@ The provider adapter logs its own entries — `email.send.accepted`,
 provider API keys, request bodies, recipient addresses, or variable values. The
 tenant resolver deliberately never includes the token in its error messages, and
 the logger only emits a fixed set of known keys for exactly this reason.
+Recipient correlation uses `recipientHash` (documented in
+[`send-metrics-queries.md`](./send-metrics-queries.md)) — never the raw address.
 
 ### Example queries
+
+Operational metrics queries (sends per tenant, success rate, provider failures,
+latency, duplicate/retry behaviour) live in
+[`send-metrics-queries.md`](./send-metrics-queries.md). The examples below cover
+single-request tracing and failure breakdown.
 
 Placeholder names only — substitute your own workspace and table names.
 

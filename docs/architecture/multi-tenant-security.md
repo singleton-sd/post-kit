@@ -49,6 +49,7 @@ Consequences that follow directly from this design:
 - The token value is never included in an error message or a log entry. Logs
   carry only the declared `LogEntry` fields — `correlationId`, `tenantId`,
   `environment`, `templateKey`, `outcome`, `durationMs`, `providerMessageId`,
+  `failureCategory`, `recipientHash`, `errorCode`. Recipient addresses and
   and `errorCode`.
 
 The Azure Functions binding uses `authLevel: 'anonymous'`. That is

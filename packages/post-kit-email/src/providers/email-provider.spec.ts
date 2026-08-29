@@ -97,6 +97,19 @@ describe('loadEmailRuntimeConfig', () => {
   });
 });
 
+describe('EmailProviderError', () => {
+  it('exposes failureCategory as a stable alias of kind', () => {
+    const error = new EmailProviderError({
+      message: 'rate limited',
+      kind: 'rate_limit',
+      provider: 'forward-email',
+      providerRequestId: 'req-1',
+    });
+    assert.equal(error.failureCategory, 'rate_limit');
+    assert.equal(error.kind, error.failureCategory);
+  });
+});
+
 describe('ForwardEmailProvider', () => {
   it('reports unconfigured when FORWARD_EMAIL_TOKEN is missing', () => {
     const provider = new ForwardEmailProvider({ apiToken: '' });

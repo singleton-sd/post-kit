@@ -42,7 +42,8 @@ docs/
 │   ├── tenant-onboarding.md  (new tenant → first email)
 │   └── environments.md       (dev/staging/prod separation, local dev)
 ├── operations/
-│   └── troubleshooting.md    (send endpoint triage, correlation IDs, runbooks)
+│   ├── troubleshooting.md    (send endpoint triage, correlation IDs, runbooks)
+│   └── send-metrics-queries.md (Kusto queries for send telemetry)
 └── examples/
     └── publish-email-templates.yml (sample consumer publish workflow)
 ```
@@ -66,4 +67,5 @@ docs/
 | [`architecture/template-lifecycle.md`](./architecture/template-lifecycle.md) | Template source → compiler → publisher → Blob layout → send-time load |
 | [`architecture/multi-tenant-security.md`](./architecture/multi-tenant-security.md) | Tenant resolution, environment separation, path safety, credential boundaries, unimplemented controls |
 | [`operations/troubleshooting.md`](./operations/troubleshooting.md) | `POST /emails/send` error triage, correlation-ID tracing, incident runbooks |
+| [`operations/send-metrics-queries.md`](./operations/send-metrics-queries.md) | Kusto queries for send volume, success rate, provider failures, latency, duplicates |
 | [`guides/public-forms.md`](./guides/public-forms.md) | Public web forms (Contact Us, waitlist): trusted server endpoint pattern, credential-exposure anti-patterns, consumer-side validation / abuse / rate-limit duties |
