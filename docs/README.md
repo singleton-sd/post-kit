@@ -29,13 +29,20 @@ docs/
 ├── pr-pipelines.md           (CI, release, secrets)
 ├── email-forward-email.md    (Forward Email runtime + provision CLI)
 ├── architecture/
-│   └── overview.md           (phase-1 system shape)
+│   ├── overview.md           (phase-1 system shape)
+│   ├── request-lifecycle.md  (POST /emails/send sequence + error codes)
+│   ├── template-lifecycle.md (source -> compile -> publish -> Blob -> send)
+│   └── multi-tenant-security.md (tenant + environment boundaries)
 ├── guides/
 │   ├── template-authoring.md  (consumer template source files + variables)
+│   ├── template-publishing.md (post-kit-publish, blob layout, environments)
+│   ├── api-quickstart.md     (send API + client quick start)
 │   └── template-publishing.md (post-kit-publish, blob layout, environments)
 ├── onboarding/
 │   ├── tenant-onboarding.md  (new tenant → first email)
 │   └── environments.md       (dev/staging/prod separation, local dev)
+├── operations/
+│   └── troubleshooting.md    (send endpoint triage, correlation IDs, runbooks)
 └── examples/
     └── publish-email-templates.yml (sample consumer publish workflow)
 ```
@@ -49,8 +56,13 @@ docs/
 | [`pr-pipelines.md`](./pr-pipelines.md) | PR CI, release, secrets policy |
 | [`architecture/overview.md`](./architecture/overview.md) | Phase-1 architecture: Functions API, EmailProvider, consumers |
 | [`email-forward-email.md`](./email-forward-email.md) | Forward Email provider, DNS, `pnpm email:provision`, Function contact, branding CI |
+| [`guides/api-quickstart.md`](./guides/api-quickstart.md) | `POST /emails/send` contract, `PostKitClient` usage, error taxonomy and retries |
 | [`guides/template-authoring.md`](./guides/template-authoring.md) | Consumer template layout, `metadata.json` fields, template keys, variables, local validation |
 | [`guides/template-publishing.md`](./guides/template-publishing.md) | `post-kit-publish` flags, blob layout, fail-fast, per-environment promotion, OIDC + RBAC |
 | [`examples/publish-email-templates.yml`](./examples/publish-email-templates.yml) | Sample consumer-repository publish workflow (not installed in this repo) |
 | [`onboarding/tenant-onboarding.md`](./onboarding/tenant-onboarding.md) | New tenant from nothing configured to first email: identifier, credential, sender, templates, publish, test send, triage |
 | [`onboarding/environments.md`](./onboarding/environments.md) | development/staging/production separation, local development without real delivery |
+| [`architecture/request-lifecycle.md`](./architecture/request-lifecycle.md) | `POST /emails/send` runtime sequence, correlation IDs, error-code → HTTP-status table |
+| [`architecture/template-lifecycle.md`](./architecture/template-lifecycle.md) | Template source → compiler → publisher → Blob layout → send-time load |
+| [`architecture/multi-tenant-security.md`](./architecture/multi-tenant-security.md) | Tenant resolution, environment separation, path safety, credential boundaries, unimplemented controls |
+| [`operations/troubleshooting.md`](./operations/troubleshooting.md) | `POST /emails/send` error triage, correlation-ID tracing, incident runbooks |
