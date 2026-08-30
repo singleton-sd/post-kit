@@ -16,6 +16,8 @@ import {
   type TemplateVariables,
 } from '@singleton-sd/post-kit-types';
 import { ensureAppConfiguration } from '../config/app-configuration';
+import { getSendRateLimiter, sendRateLimitKey } from '../contact-rate-limit';
+import { getSendSizeLimits, validateRequestBodySize, validateVariablesSize } from '../send-limits';
 import { createLogger, hashRecipient, resolveCorrelationId, type Logger } from '../telemetry';
 import {
   ApiKeyTenantResolver,
@@ -117,6 +119,7 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         failureCategory?: string;
         providerMessageId?: string;
         providerRequestId?: string;
+        retryAfterSec?: number;
       },
     ): HttpResponseInit => {
       const durationMs = Date.now() - startMs;
@@ -131,7 +134,11 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         ...logContext(),
       });
       const body: PostKitErrorResponse = { error, code, correlationId };
-      return { status, headers, jsonBody: body };
+      const responseHeaders: Record<string, string> = { ...headers };
+      if (extra?.retryAfterSec !== undefined) {
+        responseHeaders['Retry-After'] = String(extra.retryAfterSec);
+      }
+      return { status, headers: responseHeaders, jsonBody: body };
     };
 
     try {
@@ -152,8 +159,42 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       tenantId = tenant.tenantId;
       environment = tenant.environment;
 
-      const body = await request.json().catch(() => null);
-      const parsed = parseSendRequest(body);
+      const limit = getSendRateLimiter().tryConsume(sendRateLimitKey(tenant));
+      if (!limit.allowed) {
+        return errorResponse(
+          429,
+          PostKitErrorCode.RATE_LIMITED,
+          'Too many send requests for this tenant. Please wait and try again.',
+          'failed',
+          { failureCategory: 'rate_limited', retryAfterSec: limit.retryAfterSec },
+        );
+      }
+
+      const sizeLimits = getSendSizeLimits();
+      const rawBody = await request.text().catch(() => '');
+      const bodySize = validateRequestBodySize(rawBody, sizeLimits);
+      if (!bodySize.ok) {
+        return errorResponse(
+          400,
+          PostKitErrorCode.PAYLOAD_TOO_LARGE,
+          bodySize.error,
+          'validation_error',
+        );
+      }
+
+      let body: unknown;
+      try {
+        body = rawBody.trim() ? JSON.parse(rawBody) : null;
+      } catch {
+        return errorResponse(
+          400,
+          PostKitErrorCode.INVALID_RECIPIENT,
+          'Request body must be valid JSON.',
+          'validation_error',
+        );
+      }
+
+      const parsed = parseSendRequest(body, sizeLimits);
       if (!parsed.ok) {
         if (parsed.templateKey) {
           templateKey = parsed.templateKey;
@@ -298,6 +339,10 @@ function failureCategoryFromErrorCode(
       return 'invalid_template';
     case PostKitErrorCode.INVALID_RECIPIENT:
       return 'invalid_recipient';
+    case PostKitErrorCode.PAYLOAD_TOO_LARGE:
+      return 'payload_too_large';
+    case PostKitErrorCode.RATE_LIMITED:
+      return 'rate_limited';
     case PostKitErrorCode.MISSING_VARIABLES:
       return 'missing_variables';
     case PostKitErrorCode.TEMPLATE_NOT_FOUND:
@@ -320,7 +365,10 @@ function isSafeTemplateKey(templateKey: string): boolean {
   );
 }
 
-function parseSendRequest(body: unknown):
+function parseSendRequest(
+  body: unknown,
+  sizeLimits = getSendSizeLimits(),
+):
   | { ok: true; value: SendRequest }
   | {
       ok: false;
@@ -382,6 +430,11 @@ function parseSendRequest(body: unknown):
       return fail(PostKitErrorCode.MISSING_VARIABLES, `variables.${key} must be a string.`);
     }
     variables[key] = value;
+  }
+
+  const variablesSize = validateVariablesSize(variables, sizeLimits);
+  if (!variablesSize.ok) {
+    return fail(PostKitErrorCode.PAYLOAD_TOO_LARGE, variablesSize.error);
   }
 
   return {

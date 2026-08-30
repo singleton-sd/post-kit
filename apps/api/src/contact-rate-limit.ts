@@ -1,6 +1,7 @@
 import { isIP } from 'node:net';
+import type { TenantContext } from '@singleton-sd/post-kit-types';
 
-/** In-memory sliding-window limiter for anonymous Contact (PoC). */
+/** In-memory sliding-window limiter for Contact (PoC) and Send endpoints. */
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -56,7 +57,8 @@ export class SlidingWindowRateLimiter {
   }
 }
 
-const DEFAULT_MAX = 5;
+const DEFAULT_CONTACT_MAX = 5;
+const DEFAULT_SEND_MAX = 60;
 const DEFAULT_WINDOW_MS = 60_000;
 
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
@@ -68,13 +70,17 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
 /**
  * Process-local limiter (resets on cold start / scale-out). A shared store
  * is out of scope for this Y1 PoC; CONTACT_RATE_LIMIT_PER_MIN is best-effort.
- * Constructed lazily so App Configuration can populate env first.
+ *
+ * A durable limiter would need a shared counter store (e.g. Redis or Azure
+ * Cache) with atomic increment per tenant key, consistent across scale-out
+ * instances and cold starts. Constructed lazily so App Configuration can
+ * populate env first.
  */
 let contactRateLimiter: SlidingWindowRateLimiter | undefined;
 
 export function getContactRateLimiter(): SlidingWindowRateLimiter {
   contactRateLimiter ??= new SlidingWindowRateLimiter(
-    parsePositiveInt(process.env.CONTACT_RATE_LIMIT_PER_MIN, DEFAULT_MAX),
+    parsePositiveInt(process.env.CONTACT_RATE_LIMIT_PER_MIN, DEFAULT_CONTACT_MAX),
     parsePositiveInt(process.env.CONTACT_RATE_LIMIT_WINDOW_MS, DEFAULT_WINDOW_MS),
   );
   return contactRateLimiter;
@@ -82,6 +88,30 @@ export function getContactRateLimiter(): SlidingWindowRateLimiter {
 
 export function resetContactRateLimiter(): void {
   contactRateLimiter = undefined;
+}
+
+/**
+ * Per-tenant send limiter keyed on `{tenantId}:{environment}`.
+ *
+ * Same in-memory / per-instance best-effort semantics as the contact limiter.
+ * SEND_RATE_LIMIT_PER_MIN defaults to 60 (server-to-server traffic).
+ */
+let sendRateLimiter: SlidingWindowRateLimiter | undefined;
+
+export function sendRateLimitKey(tenant: TenantContext): string {
+  return `${tenant.tenantId}:${tenant.environment}`;
+}
+
+export function getSendRateLimiter(): SlidingWindowRateLimiter {
+  sendRateLimiter ??= new SlidingWindowRateLimiter(
+    parsePositiveInt(process.env.SEND_RATE_LIMIT_PER_MIN, DEFAULT_SEND_MAX),
+    parsePositiveInt(process.env.SEND_RATE_LIMIT_WINDOW_MS, DEFAULT_WINDOW_MS),
+  );
+  return sendRateLimiter;
+}
+
+export function resetSendRateLimiter(): void {
+  sendRateLimiter = undefined;
 }
 
 /**

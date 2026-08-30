@@ -53,14 +53,23 @@ function fakeRequest(options: {
   headers?: Record<string, string>;
   json?: unknown;
   jsonError?: Error;
+  text?: string;
+  textError?: Error;
 }): HttpRequest {
   const headers = new Headers(options.headers);
+  const jsonBody = options.json ?? null;
+  const textBody =
+    options.text !== undefined ? options.text : jsonBody === null ? '' : JSON.stringify(jsonBody);
   return {
     method: 'POST',
     headers: { get: (name: string) => headers.get(name) },
     json: async () => {
       if (options.jsonError) throw options.jsonError;
-      return options.json ?? null;
+      return jsonBody;
+    },
+    text: async () => {
+      if (options.textError) throw options.textError;
+      return textBody;
     },
   } as unknown as HttpRequest;
 }
@@ -472,22 +481,21 @@ describe('sendHandler — malformed and oversized bodies produce stable typed er
   });
 
   it('returns a typed 400 when the request body exceeds the payload limit', async () => {
-    // Azure Functions surfaces an oversized body as a rejected `request.json()`.
     const { response } = await respondTo({
       headers: auth,
-      jsonError: Object.assign(new Error('request entity too large'), { statusCode: 413 }),
+      text: 'x'.repeat(300_000),
     });
     assert.equal(response.status, 400);
-    assert.equal(errorCode(response), PostKitErrorCode.INVALID_RECIPIENT);
+    assert.equal(errorCode(response), PostKitErrorCode.PAYLOAD_TOO_LARGE);
   });
 
   it('returns a typed 400 for an oversized but well-formed variable payload', async () => {
     const { response } = await respondTo({
       headers: auth,
-      json: body({ variables: { name: 'a'.repeat(2_000_000), extra: 12 } }),
+      json: body({ variables: { name: 'a'.repeat(200_000) } }),
     });
     assert.equal(response.status, 400);
-    assert.equal(errorCode(response), PostKitErrorCode.MISSING_VARIABLES);
+    assert.equal(errorCode(response), PostKitErrorCode.PAYLOAD_TOO_LARGE);
   });
 
   const malformedBodies: Array<[label: string, value: unknown, code: PostKitErrorCode]> = [
