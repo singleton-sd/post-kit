@@ -124,7 +124,10 @@ async function runPublish(
 
   const containerClient = client.getContainerClient(options.container);
   const prefix = templatesPrefix(options.tenant, options.environment);
-  const existingKeys = await listStoredTemplateKeys(containerClient, prefix);
+  const needsStorageListing = Boolean(options.dryRun || options.prune);
+  const existingKeys = needsStorageListing
+    ? await listStoredTemplateKeys(containerClient, prefix)
+    : new Set<string>();
   const compiledKeys = new Set(compiled.map((e) => e.compiled.metadata.key));
 
   const added: string[] = [];
@@ -206,25 +209,39 @@ async function runPublish(
   if (options.prune) {
     for (const key of keysToDelete) {
       const base = blobBasePath(options.tenant, options.environment, key);
-      for (const blobPath of [`${base}/template.html`, `${base}/metadata.json`]) {
-        if (!isScopedTemplateBlob(blobPath, prefix)) {
-          continue;
-        }
+      const blobPaths = await listScopedBlobsForTemplateKey(containerClient, prefix, base);
+      for (const blobPath of blobPaths) {
         await containerClient.getBlockBlobClient(blobPath).deleteIfExists();
       }
-      deleted.push(key);
-      console.log(
-        JSON.stringify({
-          action: 'delete',
-          key,
-          templateHtml: `${base}/template.html`,
-          metadataJson: `${base}/metadata.json`,
-        }),
-      );
+      if (blobPaths.length > 0) {
+        deleted.push(key);
+        console.log(
+          JSON.stringify({
+            action: 'delete',
+            key,
+            blobs: blobPaths,
+          }),
+        );
+      }
     }
   }
 
   return { published, failed: [], added, updated, deleted };
+}
+
+async function listScopedBlobsForTemplateKey(
+  containerClient: ReturnType<BlobServiceClient['getContainerClient']>,
+  prefix: string,
+  templateBasePath: string,
+): Promise<string[]> {
+  const blobs: string[] = [];
+  for await (const blob of containerClient.listBlobsFlat({ prefix: `${templateBasePath}/` })) {
+    if (isScopedTemplateBlob(blob.name, prefix)) {
+      blobs.push(blob.name);
+    }
+  }
+  blobs.sort();
+  return blobs;
 }
 
 async function listStoredTemplateKeys(

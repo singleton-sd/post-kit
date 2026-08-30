@@ -153,8 +153,14 @@ describe('publishTemplates', () => {
     });
 
     const uploaded = new Map<string, string>();
-    const client = makeFakeClient((path, body) => {
-      uploaded.set(path, body);
+    let listCalls = 0;
+    const client = makeFakeClient({
+      onUpload: (path, body) => {
+        uploaded.set(path, body);
+      },
+      onList: () => {
+        listCalls += 1;
+      },
     });
 
     const result = await publishTemplatesWithClient(
@@ -185,6 +191,45 @@ describe('publishTemplates', () => {
       'tenants/inkads/production/templates/marketing.contact-us/template.html',
     )!;
     assert.ok(html.includes('<html') || html.includes('<!DOCTYPE') || html.length > 0);
+    assert.equal(listCalls, 0);
+  });
+
+  it('prunes all scoped blobs for a retired template key, including stale files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'post-kit-publish-'));
+    await cp(join(FIXTURES, 'marketing.contact-us'), join(root, 'marketing.contact-us'), {
+      recursive: true,
+    });
+
+    const prefix = 'tenants/inkads/production/templates';
+    const blobs = new Map<string, string>([
+      [`${prefix}/marketing.contact-us/template.html`, '<html></html>'],
+      [`${prefix}/marketing.contact-us/metadata.json`, '{}'],
+      [`${prefix}/retired.welcome/template.html`, '<html>old</html>'],
+      [`${prefix}/retired.welcome/metadata.json`, '{}'],
+      [`${prefix}/retired.welcome/preview.json`, '{}'],
+    ]);
+    const deleted: string[] = [];
+    const client = makeFakeClient({
+      blobs,
+      onUpload: () => {},
+      onDelete: (path) => deleted.push(path),
+    });
+
+    const result = await publishTemplatesWithClient(
+      {
+        templatesDir: root,
+        tenant: 'inkads',
+        environment: 'production',
+        storageAccount: 'ssdpostkitstprodae',
+        container: 'templates',
+        prune: true,
+      },
+      client,
+    );
+
+    assert.deepEqual(result.deleted, ['retired.welcome']);
+    assert.ok(deleted.includes(`${prefix}/retired.welcome/preview.json`));
+    assert.ok(!blobs.has(`${prefix}/retired.welcome/preview.json`));
   });
 
   it('does not prune by default when storage has extra template keys', async () => {
@@ -423,6 +468,7 @@ interface FakeClientOptions {
   blobs?: Map<string, string>;
   onUpload: (path: string, body: string) => void;
   onDelete?: (path: string) => void;
+  onList?: () => void;
 }
 
 function makeFakeClient(
@@ -460,6 +506,7 @@ function makeFakeClient(
       getBlockBlobClient,
       listBlobsFlat: (listOptions?: { prefix?: string }) => ({
         async *[Symbol.asyncIterator]() {
+          opts.onList?.();
           const prefix = listOptions?.prefix ?? '';
           for (const name of [...blobs.keys()].sort()) {
             if (name.startsWith(prefix)) {
