@@ -121,21 +121,26 @@ const postKit = new PostKitClient({
   apiKey: process.env.POSTKIT_API_KEY!,
 });
 
-const result = await postKit.send({
-  template: 'auth.password-reset',
-  to: 'jane@example.com',
-  variables: {
-    name: 'Jane Doe',
-    resetUrl: 'https://app.example.com/reset?token=REPLACE_ME',
+const result = await postKit.send(
+  {
+    template: 'auth.password-reset',
+    to: 'jane@example.com',
+    variables: {
+      name: 'Jane Doe',
+      resetUrl: 'https://app.example.com/reset?token=REPLACE_ME',
+    },
   },
-});
+  { correlationId: 'my-trace-01' },
+);
 
-console.log(result.id, result.status); // "<correlation-id> sent"
+console.log(result.id, result.status); // "my-trace-01 sent"
 ```
 
-That produces byte-for-byte the request the `curl` above does (minus
-`x-correlation-id`, which the client does not currently set — pass your trace
-id via raw HTTP if you need to control it).
+Pass `correlationId` on `send()` (or as a client constructor default) to send
+`x-correlation-id`. Omit it and the API generates one. `result.id` on success
+contains the server correlation ID. On HTTP failures,
+`PostKitRequestError.correlationId` contains it when the error body or
+`X-Correlation-Id` response header provides it.
 
 ### Constructor options
 
@@ -144,6 +149,7 @@ id via raw HTTP if you need to control it).
 | `endpoint` | — | Required. Base URL; a trailing slash is stripped. `send()` appends `/emails/send` |
 | `apiKey` | — | Required. Sent as `Authorization: Bearer` |
 | `timeout` | `30_000` | Milliseconds. `0` disables the client timeout — the request then runs until your own `AbortSignal` fires, or indefinitely |
+| `correlationId` | — | Optional default `x-correlation-id` for every `send()` |
 | `fetch` | `globalThis.fetch` | Injectable `fetch`. Use it in tests so no socket is opened |
 
 Both `endpoint` and `apiKey` throw synchronously from the constructor if
@@ -151,13 +157,20 @@ empty.
 
 ### `send(request, options?)`
 
-`send(request: SendRequest, options?: { signal?: AbortSignal })` resolves to
-`SendResponse` or throws `PostKitRequestError`. A per-call `signal` is combined
-with the client timeout, so whichever fires first wins:
+`send(request: SendRequest, options?: { signal?: AbortSignal; correlationId?: string })`
+resolves to `SendResponse` or throws `PostKitRequestError`. A per-call `signal`
+is combined with the client timeout, so whichever fires first wins:
 
 ```ts
-await postKit.send(request, { signal: AbortSignal.timeout(5_000) });
+await postKit.send(request, {
+  signal: AbortSignal.timeout(5_000),
+  correlationId: 'my-trace-01',
+});
 ```
+
+Invalid `correlationId` values (empty, over 128 characters, or characters
+other than alphanumeric / hyphen / underscore) throw `PostKitRequestError` with
+code `INVALID_CORRELATION_ID` before any network call.
 
 If **your** signal aborts, the original `AbortError` propagates unchanged; if
 the client's own timeout fires, you get a `PostKitRequestError` with code
@@ -167,7 +180,7 @@ the client's own timeout fires, you get a `PostKitRequestError` with code
 
 | Property | Meaning |
 | --- | --- |
-| `code` | A `PostKitErrorCode` from the API body, or `'TIMEOUT'` / `'NETWORK_ERROR'`, or `HTTP_<status>` when the error body was not JSON |
+| `code` | A `PostKitErrorCode` from the API body, or `'TIMEOUT'` / `'NETWORK_ERROR'` / `'INVALID_CORRELATION_ID'`, or `HTTP_<status>` when the error body was not JSON |
 | `status` | HTTP status; `undefined` for timeouts and network failures |
 | `correlationId` | From the error body when present — log it |
 | `message` | The API's `error` text, or a generated fallback |
@@ -187,6 +200,7 @@ the client's own timeout fires, you get a `PostKitRequestError` with code
 | `PROVIDER_FAILURE` | 502 / 500 | no | Provider rejected the message permanently, or an unexpected server error — investigate with the correlation id |
 | `TIMEOUT` | — | yes (idempotent) | Client-side timeout; delivery status is unknown — the send may still have happened |
 | `NETWORK_ERROR` | — | yes (idempotent) | Transport failure or a response-body read failure after headers arrived; delivery status is unknown — the API may have accepted the send before the body failed |
+| `INVALID_CORRELATION_ID` | — | no | Fix the `correlationId` on `send()` or the client constructor — must be 8–128 alphanumeric / hyphen / underscore characters |
 
 Retry the "yes" rows with capped exponential backoff and jitter. Treat both
 `TIMEOUT` and `NETWORK_ERROR` as **delivery unknown** — make retries idempotent
@@ -225,9 +239,10 @@ on 502 or 500.
 
 ### Logging for support
 
-Log `code`, `status`, and `correlationId` on every failure, and `id` on every
-success — both are the same correlation id the API logs, and it is the only
-handle that ties your request to the server-side trace. Never log the API key,
+Log `code`, `status`, and `correlationId` (when present) on HTTP failures, and
+`id` on every success — both are the same correlation id the API logs when the
+server handled the request, and it is the only handle that ties your request to
+the server-side trace. Never log the API key,
 the rendered email, or a reset/verification URL.
 
 ## Where to go next

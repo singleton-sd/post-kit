@@ -1,4 +1,5 @@
 import type { PostKitErrorResponse, SendRequest, SendResponse } from '@singleton-sd/post-kit-types';
+import { isValidCorrelationId } from './correlation';
 import { PostKitRequestError } from './errors';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -20,6 +21,11 @@ export interface PostKitClientOptions {
    * optional per-call `AbortSignal` fires, or indefinitely if none is given).
    */
   timeout?: number;
+  /**
+   * Default correlation ID sent as `x-correlation-id` on every `send()` call.
+   * Per-request `SendOptions.correlationId` overrides this value.
+   */
+  correlationId?: string;
   /** Injectable `fetch` implementation (defaults to `globalThis.fetch`). */
   fetch?: typeof globalThis.fetch;
 }
@@ -27,6 +33,11 @@ export interface PostKitClientOptions {
 export interface SendOptions {
   /** Optional abort signal threaded through to `fetch`. */
   signal?: AbortSignal;
+  /**
+   * Correlation ID for this request, sent as `x-correlation-id`.
+   * Overrides a client-level default when both are set.
+   */
+  correlationId?: string;
 }
 
 /**
@@ -39,6 +50,7 @@ export class PostKitClient {
   private readonly endpoint: string;
   private readonly apiKey: string;
   private readonly timeoutMs: number;
+  private readonly defaultCorrelationId: string | undefined;
   private readonly fetchImpl: typeof globalThis.fetch;
 
   constructor(options: PostKitClientOptions) {
@@ -51,6 +63,7 @@ export class PostKitClient {
     this.endpoint = options.endpoint.replace(/\/+$/, '');
     this.apiKey = options.apiKey;
     this.timeoutMs = options.timeout ?? DEFAULT_TIMEOUT_MS;
+    this.defaultCorrelationId = options.correlationId;
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
@@ -60,14 +73,24 @@ export class PostKitClient {
   async send(request: SendRequest, options?: SendOptions): Promise<SendResponse> {
     const url = `${this.endpoint}/emails/send`;
     const callerSignal = options?.signal;
+    const correlationId = options?.correlationId ?? this.defaultCorrelationId;
+
+    if (correlationId !== undefined) {
+      this.assertValidCorrelationId(correlationId);
+    }
 
     try {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      };
+      if (correlationId !== undefined) {
+        headers['x-correlation-id'] = correlationId;
+      }
+
       const response = await this.fetchImpl(url, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(request),
         signal: this.combineSignals(callerSignal),
       });
@@ -150,8 +173,17 @@ export class PostKitClient {
       message,
       code: body.code ?? `HTTP_${response.status}`,
       status: response.status,
-      correlationId: body.correlationId,
+      correlationId: body.correlationId ?? response.headers.get('X-Correlation-Id') ?? undefined,
     });
+  }
+
+  private assertValidCorrelationId(correlationId: string): void {
+    if (!isValidCorrelationId(correlationId)) {
+      throw new PostKitRequestError({
+        message: 'Invalid correlation ID',
+        code: 'INVALID_CORRELATION_ID',
+      });
+    }
   }
 }
 

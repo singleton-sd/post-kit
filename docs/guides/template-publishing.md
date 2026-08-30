@@ -16,12 +16,13 @@ content/email-templates/<key>/   (consumer repo, reviewed via PR)
         ▼
    post-kit-publish
         │  compile every template (fail-fast)
-        │  upload template.html + metadata.json
+        │  upload template.html + metadata.json + manifest.json
         │  optional: --prune retired keys
         ▼
 Azure Blob Storage
    tenants/{tenant}/{environment}/templates/{key}/template.html
    tenants/{tenant}/{environment}/templates/{key}/metadata.json
+   tenants/{tenant}/{environment}/templates/{key}/manifest.json
         │
         ▼
    PostKit API (BlobTemplateStore) at send time
@@ -32,21 +33,27 @@ A copy-pasteable workflow implementing the CI step is in
 
 ## Blob layout
 
-The publisher writes, and the API reads, exactly two blobs per template:
+The publisher writes three blobs per template. The API send path reads only
+the first two:
 
 ```text
 tenants/{tenant}/{environment}/templates/{templateKey}/template.html
 tenants/{tenant}/{environment}/templates/{templateKey}/metadata.json
+tenants/{tenant}/{environment}/templates/{templateKey}/manifest.json
 ```
 
 `template.html` is uploaded as `text/html; charset=utf-8` and still contains
 the `{{variable}}` placeholders; `metadata.json` is uploaded as
 `application/json; charset=utf-8` and is the compiled metadata, which the API
-re-validates on load. Uploads overwrite whatever is already at those paths.
+re-validates on load. `manifest.json` is uploaded as
+`application/json; charset=utf-8` and holds the compile manifest
+(`contentHash`, `compiledAt`, `sourceCommit`, and related fields). It is
+operational metadata for provenance and change detection — `BlobTemplateStore`
+does not read it, and templates published before this blob existed still load
+and send unchanged. Uploads overwrite whatever is already at those paths.
 
-The compile manifest (including the SHA-256 `contentHash`) is **not** stored as
-a blob. It is emitted as one JSON line per template on the publisher's stdout,
-which is where CI logs preserve it:
+The publisher also emits one JSON line per template on stdout (unchanged for
+log-scraping compatibility):
 
 ```json
 {

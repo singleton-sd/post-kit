@@ -22,7 +22,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "echo \"lint:types — covered by root eslint on staged files\"",
-    "test": "tsc -p tsconfig.spec.json && node --import tsx --test src/**/*.spec.ts"
+    "test": "tsc -p tsconfig.spec.json && node --import tsx --test \"src/**/*.spec.ts\""
   },
   "devDependencies": {
     "@types/node": "^20.17.9",

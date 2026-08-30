@@ -3,17 +3,17 @@ import type { PostKitErrorCode } from '@singleton-sd/post-kit-types';
 /**
  * Error thrown by {@link PostKitClient} for HTTP, timeout, and network failures.
  *
- * `code` is a {@link PostKitErrorCode} from the API, or `'TIMEOUT'` / `'NETWORK_ERROR'`
- * for client-side failures.
+ * `code` is a {@link PostKitErrorCode} from the API, or `'TIMEOUT'` / `'NETWORK_ERROR'` /
+ * `'INVALID_CORRELATION_ID'` for client-side failures.
  */
 export class PostKitRequestError extends Error {
   readonly status: number | undefined;
-  readonly code: PostKitErrorCode | 'TIMEOUT' | 'NETWORK_ERROR' | string;
+  readonly code: PostKitErrorCode | 'TIMEOUT' | 'NETWORK_ERROR' | 'INVALID_CORRELATION_ID' | string;
   readonly correlationId: string | undefined;
 
   constructor(options: {
     message: string;
-    code: PostKitErrorCode | 'TIMEOUT' | 'NETWORK_ERROR' | string;
+    code: PostKitErrorCode | 'TIMEOUT' | 'NETWORK_ERROR' | 'INVALID_CORRELATION_ID' | string;
     status?: number;
     correlationId?: string;
     cause?: unknown;

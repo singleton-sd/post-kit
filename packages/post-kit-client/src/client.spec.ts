@@ -233,6 +233,141 @@ describe('PostKitClient', () => {
     );
   });
 
+  it('sends x-correlation-id when correlationId is supplied on send()', async () => {
+    let capturedHeaders: Record<string, string> | undefined;
+
+    const client = new PostKitClient({
+      endpoint: 'https://postkit.example.com',
+      apiKey: 'pk_test_key',
+      fetch: async (_input, init) => {
+        capturedHeaders = init?.headers as Record<string, string>;
+        return jsonResponse(200, { id: 'my-trace-01', status: 'sent' });
+      },
+    });
+
+    const result = await client.send(SEND_REQUEST, { correlationId: 'my-trace-01' });
+
+    assert.equal(capturedHeaders?.['x-correlation-id'], 'my-trace-01');
+    assert.equal(result.id, 'my-trace-01');
+    assert.equal(result.status, 'sent');
+  });
+
+  it('does not send x-correlation-id when correlationId is omitted', async () => {
+    let capturedHeaders: Record<string, string> | undefined;
+
+    const client = new PostKitClient({
+      endpoint: 'https://postkit.example.com',
+      apiKey: 'pk_test_key',
+      fetch: async (_input, init) => {
+        capturedHeaders = init?.headers as Record<string, string>;
+        return jsonResponse(200, SEND_RESPONSE);
+      },
+    });
+
+    await client.send(SEND_REQUEST);
+
+    assert.equal(capturedHeaders?.['x-correlation-id'], undefined);
+  });
+
+  it('uses a client-level default correlationId when send() does not override it', async () => {
+    let capturedHeaders: Record<string, string> | undefined;
+
+    const client = new PostKitClient({
+      endpoint: 'https://postkit.example.com',
+      apiKey: 'pk_test_key',
+      correlationId: 'client-default',
+      fetch: async (_input, init) => {
+        capturedHeaders = init?.headers as Record<string, string>;
+        return jsonResponse(200, { id: 'client-default', status: 'sent' });
+      },
+    });
+
+    await client.send(SEND_REQUEST);
+
+    assert.equal(capturedHeaders?.['x-correlation-id'], 'client-default');
+  });
+
+  it('prefers per-request correlationId over the client default', async () => {
+    let capturedHeaders: Record<string, string> | undefined;
+
+    const client = new PostKitClient({
+      endpoint: 'https://postkit.example.com',
+      apiKey: 'pk_test_key',
+      correlationId: 'client-default',
+      fetch: async (_input, init) => {
+        capturedHeaders = init?.headers as Record<string, string>;
+        return jsonResponse(200, { id: 'request-trace', status: 'sent' });
+      },
+    });
+
+    await client.send(SEND_REQUEST, { correlationId: 'request-trace' });
+
+    assert.equal(capturedHeaders?.['x-correlation-id'], 'request-trace');
+  });
+
+  it('rejects invalid correlationId values before the request is sent', async () => {
+    let fetchCalled = false;
+    const client = new PostKitClient({
+      endpoint: 'https://postkit.example.com',
+      apiKey: 'pk_test_key',
+      fetch: async () => {
+        fetchCalled = true;
+        return jsonResponse(200, SEND_RESPONSE);
+      },
+    });
+
+    const invalidValues = [
+      '',
+      'short',
+      'a'.repeat(129),
+      'has spaces',
+      'has/slash',
+      'has:newline\n',
+    ];
+
+    for (const correlationId of invalidValues) {
+      fetchCalled = false;
+      await assert.rejects(
+        () => client.send(SEND_REQUEST, { correlationId }),
+        (err: unknown) => {
+          assert.ok(err instanceof PostKitRequestError);
+          assert.equal(err.code, 'INVALID_CORRELATION_ID');
+          assert.equal(err.status, undefined);
+          assert.equal(err.correlationId, undefined);
+          return true;
+        },
+      );
+      assert.equal(fetchCalled, false, `fetch must not run for ${JSON.stringify(correlationId)}`);
+    }
+  });
+
+  it('surfaces correlationId from the X-Correlation-Id header when the error body omits it', async () => {
+    const client = new PostKitClient({
+      endpoint: 'https://postkit.example.com',
+      apiKey: 'pk_test_key',
+      fetch: async () =>
+        new Response(
+          JSON.stringify({ error: 'Bad gateway', code: PostKitErrorCode.PROVIDER_FAILURE }),
+          {
+            status: 502,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Correlation-Id': 'header-corr-1',
+            },
+          },
+        ),
+    });
+
+    await assert.rejects(
+      () => client.send(SEND_REQUEST),
+      (err: unknown) => {
+        assert.ok(err instanceof PostKitRequestError);
+        assert.equal(err.correlationId, 'header-corr-1');
+        return true;
+      },
+    );
+  });
+
   it('rethrows when the caller AbortSignal aborts the request', async () => {
     const controller = new AbortController();
     const client = new PostKitClient({
