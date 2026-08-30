@@ -32,6 +32,9 @@ await postKit.send({
   to: 'hello@example.com',
   variables: { name, email, message },
 });
+
+// Optional: pass your own trace id (8–128 alphanumeric / hyphen / underscore)
+await postKit.send(request, { correlationId: 'my-trace-01' });
 ```
 
 ### Options
@@ -41,17 +44,29 @@ await postKit.send({
 | `endpoint` | Base URL of the PostKit API (trailing slash stripped) |
 | `apiKey` | Bearer token for `Authorization` |
 | `timeout` | Request timeout ms (default `30_000`). Pass `0` to disable; with no per-call `AbortSignal`, the request then runs indefinitely |
+| `correlationId` | Default `x-correlation-id` for every `send()`; per-call `SendOptions.correlationId` overrides |
 | `fetch` | Injectable `fetch` (for tests); defaults to `globalThis.fetch` |
 
 Auth lives on the constructor so the strategy can evolve without changing
 `send()`.
+
+### `send(request, options?)`
+
+| Option | Description |
+| --- | --- |
+| `signal` | Optional `AbortSignal` combined with the client timeout |
+| `correlationId` | Per-request trace id sent as `x-correlation-id`; overrides a client default |
+
+On success, `SendResponse.id` is the correlation id the API used (yours if
+supplied and valid, or server-generated). Invalid values are rejected before
+the request with `PostKitRequestError` code `INVALID_CORRELATION_ID`.
 
 ### Errors
 
 Non-2xx responses and client-side failures throw `PostKitRequestError`:
 
 - `status` — HTTP status when available
-- `code` — API `PostKitErrorCode`, or `'TIMEOUT'` / `'NETWORK_ERROR'`
+- `code` — API `PostKitErrorCode`, or `'TIMEOUT'` / `'NETWORK_ERROR'` / `'INVALID_CORRELATION_ID'`
 - `correlationId` — from the error body when present
 
 ```ts
