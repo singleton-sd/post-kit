@@ -11,5 +11,5 @@ Public npm packages under `@singleton-sd/post-kit-*`.
 | [`post-kit-publisher`](./post-kit-publisher/README.md) | `@singleton-sd/post-kit-publisher` | Compile and publish PostKit email templates to Azure Blob Storage |
 | [`post-kit-types`](./post-kit-types/README.md) | `@singleton-sd/post-kit-types` | Shared TypeScript contracts for the PostKit platform |
 
-All packages above are configured for public npm publication (`"private": false`).
-The workspace root stays private and is not published.
+All packages above are public npm packages (`"private": false` in each
+`package.json`). The workspace root is private and is not published.
