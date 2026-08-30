@@ -107,54 +107,90 @@ describe('publishTemplates', () => {
     assert.equal(uploads, 0);
   });
 
-  it('uploads template.html and metadata.json for a valid fixture', async () => {
+  it('uploads template.html, metadata.json, and manifest.json for a valid fixture', async () => {
     const root = await mkdtemp(join(tmpdir(), 'post-kit-publish-'));
     await cp(join(FIXTURES, 'marketing.contact-us'), join(root, 'marketing.contact-us'), {
       recursive: true,
     });
 
-    const uploaded = new Map<string, string>();
-    const client = makeFakeClient((path, body) => {
-      uploaded.set(path, body);
+    const uploaded = new Map<string, UploadedBlob>();
+    const client = makeFakeClient((path, body, headers) => {
+      uploaded.set(path, { body, contentType: headers?.blobContentType });
     });
 
-    const result = await publishTemplatesWithClient(
-      {
-        templatesDir: root,
-        tenant: 'inkads',
-        environment: 'production',
-        storageAccount: 'ssdpostkitstprodae',
-        container: 'templates',
-        commit: 'abc123',
-      },
-      client,
-    );
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => {
+      logs.push(args.map(String).join(' '));
+    };
 
-    assert.deepEqual(result.published, ['marketing.contact-us']);
-    assert.equal(result.failed.length, 0);
-    assert.ok(
-      uploaded.has('tenants/inkads/production/templates/marketing.contact-us/template.html'),
-    );
-    assert.ok(
-      uploaded.has('tenants/inkads/production/templates/marketing.contact-us/metadata.json'),
-    );
-    const meta = JSON.parse(
-      uploaded.get('tenants/inkads/production/templates/marketing.contact-us/metadata.json')!,
-    );
-    assert.equal(meta.key, 'marketing.contact-us');
-    const html = uploaded.get(
-      'tenants/inkads/production/templates/marketing.contact-us/template.html',
-    )!;
-    assert.ok(html.includes('<html') || html.includes('<!DOCTYPE') || html.length > 0);
+    try {
+      const result = await publishTemplatesWithClient(
+        {
+          templatesDir: root,
+          tenant: 'inkads',
+          environment: 'production',
+          storageAccount: 'ssdpostkitstprodae',
+          container: 'templates',
+          commit: 'abc123',
+        },
+        client,
+      );
+
+      assert.deepEqual(result.published, ['marketing.contact-us']);
+      assert.equal(result.failed.length, 0);
+
+      const base = 'tenants/inkads/production/templates/marketing.contact-us';
+      assert.ok(uploaded.has(`${base}/template.html`));
+      assert.ok(uploaded.has(`${base}/metadata.json`));
+      assert.ok(uploaded.has(`${base}/manifest.json`));
+
+      const meta = JSON.parse(uploaded.get(`${base}/metadata.json`)!.body);
+      assert.equal(meta.key, 'marketing.contact-us');
+
+      const manifest = JSON.parse(uploaded.get(`${base}/manifest.json`)!.body);
+      assert.equal(manifest.key, 'marketing.contact-us');
+      assert.equal(manifest.sourceCommit, 'abc123');
+      assert.ok(manifest.contentHash.length > 0);
+      assert.ok(manifest.compiledAt.length > 0);
+      assert.equal(
+        uploaded.get(`${base}/manifest.json`)!.contentType,
+        'application/json; charset=utf-8',
+      );
+
+      const html = uploaded.get(`${base}/template.html`)!.body;
+      assert.ok(html.includes('<html') || html.includes('<!DOCTYPE') || html.length > 0);
+
+      assert.equal(logs.length, 1);
+      const stdoutLine = JSON.parse(logs[0]!);
+      assert.equal(stdoutLine.key, 'marketing.contact-us');
+      assert.equal(stdoutLine.contentHash, manifest.contentHash);
+      assert.equal(stdoutLine.templateHtml, `${base}/template.html`);
+      assert.equal(stdoutLine.metadataJson, `${base}/metadata.json`);
+      assert.equal(Object.keys(stdoutLine).length, 4);
+    } finally {
+      console.log = originalLog;
+    }
   });
 });
 
-function makeFakeClient(onUpload: (path: string, body: string) => void): BlobServiceClient {
+interface UploadedBlob {
+  body: string;
+  contentType?: string;
+}
+
+function makeFakeClient(
+  onUpload: (path: string, body: string, headers?: { blobContentType?: string }) => void,
+): BlobServiceClient {
   const getBlockBlobClient = (blobPath: string): BlockBlobClient =>
     ({
-      upload: async (body: string | Buffer) => {
+      upload: async (
+        body: string | Buffer,
+        _length: number,
+        options?: { blobHTTPHeaders?: { blobContentType?: string } },
+      ) => {
         const text = typeof body === 'string' ? body : body.toString('utf8');
-        onUpload(blobPath, text);
+        onUpload(blobPath, text, options?.blobHTTPHeaders);
         return {};
       },
     }) as unknown as BlockBlobClient;
