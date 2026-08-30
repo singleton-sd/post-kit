@@ -137,9 +137,10 @@ console.log(result.id, result.status); // "my-trace-01 sent"
 ```
 
 Pass `correlationId` on `send()` (or as a client constructor default) to send
-`x-correlation-id`. Omit it and the API generates one; `result.id` on success
-and `PostKitRequestError.correlationId` on failure always carry the id the
-server used.
+`x-correlation-id`. Omit it and the API generates one. `result.id` on success
+contains the server correlation ID. On HTTP failures,
+`PostKitRequestError.correlationId` contains it when the error body or
+`X-Correlation-Id` response header provides it.
 
 ### Constructor options
 
@@ -238,9 +239,10 @@ on 502 or 500.
 
 ### Logging for support
 
-Log `code`, `status`, and `correlationId` on every failure, and `id` on every
-success — both are the same correlation id the API logs, and it is the only
-handle that ties your request to the server-side trace. Never log the API key,
+Log `code`, `status`, and `correlationId` (when present) on HTTP failures, and
+`id` on every success — both are the same correlation id the API logs when the
+server handled the request, and it is the only handle that ties your request to
+the server-side trace. Never log the API key,
 the rendered email, or a reset/verification URL.
 
 ## Where to go next
