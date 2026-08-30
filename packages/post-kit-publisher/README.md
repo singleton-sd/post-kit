@@ -50,7 +50,7 @@ post-kit-publish \
   --templates ./content/email-templates \
   --tenant acme \
   --environment production \
-  --storage-account <storage-account-name> \
+  --storage-account examplestorageacct \
   --container templates \
   --commit "$GITHUB_SHA"
 ```
