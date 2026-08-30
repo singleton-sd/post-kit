@@ -30,6 +30,8 @@ export enum PostKitErrorCode {
   PROVIDER_FAILURE = 'PROVIDER_FAILURE',
   /** The template storage backend returned an error. */
   STORAGE_FAILURE = 'STORAGE_FAILURE',
+  /** The authenticated tenant has no email sender configuration for this environment. */
+  TENANT_CONFIG_NOT_FOUND = 'TENANT_CONFIG_NOT_FOUND',
 }
 
 /**

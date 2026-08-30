@@ -4,3 +4,11 @@ export {
   TenantResolverError,
   type TenantKeyMap,
 } from './api-key-tenant-resolver';
+export {
+  clearTenantEmailConfigCache,
+  resolveTenantEmailConfig,
+  TenantEmailConfigError,
+  type ResolvedTenantEmailConfig,
+  type TenantEmailConfig,
+  type TenantEmailConfigOverride,
+} from './tenant-email-config';

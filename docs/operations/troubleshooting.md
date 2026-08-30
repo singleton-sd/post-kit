@@ -44,6 +44,7 @@ ones.
 | 400 | `INVALID_RECIPIENT` | Rejected at body validation, `outcome=validation_error` | Request body is not a JSON object (null, array, or unparseable), or `to` is not a string matching basic `local@domain.tld` validation | The caller's request shape and `Content-Type`. Do not paste the body into a ticket — it contains a recipient address | No — fix the request |
 | 400 | `MISSING_VARIABLES` | Rejected at validation, message lists the offending names | `variables` is absent/not an object, one of its values is not a string, or a variable declared in the template metadata is not supplied (after tenant branding defaults are merged in) | The `variables` declared in the template's `metadata.json` against the caller's keys. Values are never logged | No — fix the request or the template metadata |
 | 404 | `TEMPLATE_NOT_FOUND` | Valid key, `outcome=failed`, `templateKey` present | No blob at `tenants/{tenantId}/{environment}/templates/{templateKey}/template.html` or `/metadata.json` | See [Runbook 1](#runbook-1--template-not-found) | No — until the template is published |
+| 503 | `TENANT_CONFIG_NOT_FOUND` | Fails after template compilation, before the provider is constructed; `failureCategory=tenant_config_not_found` | The authenticated tenant/environment has no entry in `TENANT_EMAIL_CONFIG_BY_ID`, the entry is incomplete (no resolvable `fromAddress` after merge), or a configured `providerAccount` cannot be resolved from `TENANT_PROVIDER_ACCOUNT_SECRETS` | `TENANT_EMAIL_CONFIG_BY_ID` for the `tenantId` and `environment` from the credential; platform `EMAIL_FROM_ADDRESS` when the tenant entry omits `fromAddress`; Key Vault-backed env vars referenced by `TENANT_PROVIDER_ACCOUNT_SECRETS` | Only after configuration is fixed |
 | 503 | `PROVIDER_FAILURE` | Message `Email sender is not configured.`; fails after template compilation, before the provider is constructed | `EMAIL_FROM_ADDRESS` is unset in Function App settings and in App Configuration (`app:email:fromAddress`) | The Function App application settings and App Configuration key | Only after configuration is fixed |
 | 503 | `PROVIDER_FAILURE` | Provider rejected the send; `send provider failed` is logged with `kind=configuration` | Provider credential missing — e.g. `FORWARD_EMAIL_TOKEN` not resolved from Key Vault via App Configuration, or a malformed contact profile configuration | Key Vault reference resolution for `secret:forwardemail-api-key`; the Function App's managed identity access to Key Vault | Only after configuration is fixed |
 | 503 | `PROVIDER_FAILURE` | Intermittent; `kind=transient`, often with `statusCode` 5xx/408/409, or a request timeout (15 s) or transport failure | Provider outage, network failure, or timeout. The provider already retried internally (up to 2 retries with backoff) before surfacing this | Provider status; whether `durationMs` is near the timeout ceiling | Yes — retry with backoff |
@@ -62,10 +63,10 @@ Notes on reading this table:
   `kind`.
 - `STORAGE_FAILURE` is currently returned **only** for App Configuration load
   failure. Blob Storage failures other than "not found" surface as `500`.
-- All eight `PostKitErrorCode` values are reachable from this endpoint and all
-  eight appear above: `UNAUTHENTICATED`, `UNAUTHORIZED`, `INVALID_TEMPLATE`,
+- All nine `PostKitErrorCode` values are reachable from this endpoint and all
+  nine appear above: `UNAUTHENTICATED`, `UNAUTHORIZED`, `INVALID_TEMPLATE`,
   `INVALID_RECIPIENT`, `MISSING_VARIABLES`, `TEMPLATE_NOT_FOUND`,
-  `PROVIDER_FAILURE`, `STORAGE_FAILURE`.
+  `TENANT_CONFIG_NOT_FOUND`, `PROVIDER_FAILURE`, `STORAGE_FAILURE`.
 
 ## Correlation IDs and log fields
 

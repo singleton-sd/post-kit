@@ -174,13 +174,14 @@ describe('PostKitErrorCode', () => {
     assert.equal(PostKitErrorCode.INVALID_RECIPIENT, 'INVALID_RECIPIENT');
     assert.equal(PostKitErrorCode.PROVIDER_FAILURE, 'PROVIDER_FAILURE');
     assert.equal(PostKitErrorCode.STORAGE_FAILURE, 'STORAGE_FAILURE');
+    assert.equal(PostKitErrorCode.TENANT_CONFIG_NOT_FOUND, 'TENANT_CONFIG_NOT_FOUND');
   });
 
-  it('has exactly 8 codes', () => {
+  it('has exactly 9 codes', () => {
     const codes = Object.keys(PostKitErrorCode).filter(
       (k) => typeof PostKitErrorCode[k as keyof typeof PostKitErrorCode] === 'string',
     );
-    assert.equal(codes.length, 8);
+    assert.equal(codes.length, 9);
   });
 });
 

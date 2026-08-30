@@ -77,11 +77,14 @@ export function loadEmailRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Em
   };
 }
 
-export function createEmailProvider(env: NodeJS.ProcessEnv = process.env): EmailProvider {
+export function createEmailProvider(
+  env: NodeJS.ProcessEnv = process.env,
+  options: { apiToken?: string } = {},
+): EmailProvider {
   const config = loadEmailRuntimeConfig(env);
   if (config.provider === 'forward-email') {
     return new ForwardEmailProvider({
-      apiToken: env.FORWARD_EMAIL_TOKEN ?? env.FORWARDEMAIL_API_KEY,
+      apiToken: options.apiToken ?? env.FORWARD_EMAIL_TOKEN ?? env.FORWARDEMAIL_API_KEY,
       baseUrl: env.FORWARD_EMAIL_BASE_URL ?? env.FORWARDEMAIL_BASE_URL,
     });
   }
