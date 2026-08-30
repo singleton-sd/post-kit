@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 import { PostKitErrorCode } from '@singleton-sd/post-kit-types';
-import { createLogger } from './logger';
+import { createLogger, hashRecipient } from './logger';
 
 describe('createLogger', () => {
   it('info() emits JSON containing msg and correlationId', () => {
@@ -101,5 +102,65 @@ describe('createLogger', () => {
     const logger = createLogger('corr-default');
     assert.doesNotThrow(() => logger.info('smoke'));
     assert.doesNotThrow(() => logger.error('smoke'));
+  });
+
+  it('includes failureCategory and recipientHash in the contract', () => {
+    const lines: string[] = [];
+    const logger = createLogger('corr-fc', (line) => lines.push(line));
+
+    logger.error('send.request.failed', {
+      outcome: 'failed',
+      failureCategory: 'permanent',
+      recipientHash: 'a'.repeat(16),
+      durationMs: 10,
+    });
+
+    const entry = JSON.parse(lines[0]!);
+    assert.equal(entry.failureCategory, 'permanent');
+    assert.equal(entry.recipientHash, 'a'.repeat(16));
+  });
+
+  it('omits recipientHash values that are not a 16-char hex digest', () => {
+    const lines: string[] = [];
+    const logger = createLogger('corr-rh', (line) => lines.push(line));
+
+    logger.error('send.request.failed', {
+      outcome: 'failed',
+      recipientHash: 'user@example.com',
+    });
+
+    const entry = JSON.parse(lines[0]!);
+    assert.ok(!('recipientHash' in entry));
+  });
+
+  it('includes providerRequestId in the contract', () => {
+    const lines: string[] = [];
+    const logger = createLogger('corr-pr', (line) => lines.push(line));
+
+    logger.error('send.request.failed', {
+      outcome: 'failed',
+      providerRequestId: 'req-99',
+    });
+
+    const entry = JSON.parse(lines[0]!);
+    assert.equal(entry.providerRequestId, 'req-99');
+  });
+});
+
+describe('hashRecipient', () => {
+  it('returns a deterministic 16-char hex digest of the normalized address', () => {
+    const expected = createHash('sha256')
+      .update('user@example.com', 'utf8')
+      .digest('hex')
+      .slice(0, 16);
+    assert.equal(hashRecipient('user@example.com'), expected);
+    assert.equal(hashRecipient('  User@Example.COM  '), expected);
+  });
+
+  it('does not return the raw email address', () => {
+    const hash = hashRecipient('secret.user@acme.com');
+    assert.ok(!hash.includes('secret'));
+    assert.ok(!hash.includes('@'));
+    assert.equal(hash.length, 16);
   });
 });

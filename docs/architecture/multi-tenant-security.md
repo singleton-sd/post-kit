@@ -49,7 +49,8 @@ Consequences that follow directly from this design:
 - The token value is never included in an error message or a log entry. Logs
   carry only the declared `LogEntry` fields — `correlationId`, `tenantId`,
   `environment`, `templateKey`, `outcome`, `durationMs`, `providerMessageId`,
-  and `errorCode`.
+  `failureCategory`, `recipientHash`, and `errorCode`. Recipient addresses and
+  variable values are never logged.
 
 The Azure Functions binding uses `authLevel: 'anonymous'`. That is
 deliberate: PostKit performs its own authentication, and no Functions host key

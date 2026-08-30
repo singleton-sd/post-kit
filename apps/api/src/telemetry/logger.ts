@@ -6,9 +6,31 @@
  *   write function (default: console.log, suitable for Azure Functions).
  * - Logger instances are per-request — never use as a singleton.
  * - Never log PII: no recipient addresses, variable values, or tokens.
+ *
+ * Recipient privacy: `recipientHash` is a 16-character hex prefix of the
+ * SHA-256 digest of the trimmed, lowercased recipient address. The raw address
+ * is never logged; the hash is deterministic so duplicate/retry analysis can
+ * correlate sends to the same recipient without exposing PII.
  */
 
+import { createHash } from 'node:crypto';
 import type { PostKitErrorCode } from '@singleton-sd/post-kit-types';
+
+/**
+ * Privacy-safe recipient identifier for structured logs.
+ * See module header for the documented approach.
+ */
+export function hashRecipient(email: string): string {
+  const normalized = email.trim().toLowerCase();
+  return createHash('sha256').update(normalized, 'utf8').digest('hex').slice(0, 16);
+}
+
+/** 16-character lowercase hex digest emitted by `hashRecipient`. */
+export const RECIPIENT_HASH_PATTERN = /^[a-f0-9]{16}$/;
+
+export function isValidRecipientHash(value: string): boolean {
+  return RECIPIENT_HASH_PATTERN.test(value);
+}
 
 /**
  * Structured fields that may appear in a log entry.
@@ -22,6 +44,9 @@ export interface LogEntry {
   outcome?: 'sent' | 'failed' | 'validation_error' | 'auth_error';
   durationMs?: number;
   providerMessageId?: string;
+  providerRequestId?: string;
+  failureCategory?: string;
+  recipientHash?: string;
   errorCode?: PostKitErrorCode | string;
   // NOTE: never log recipient addresses, variable values, or tokens
 }
@@ -34,6 +59,9 @@ const LOG_ENTRY_KEYS: ReadonlyArray<keyof Omit<LogEntry, 'correlationId'>> = [
   'outcome',
   'durationMs',
   'providerMessageId',
+  'providerRequestId',
+  'failureCategory',
+  'recipientHash',
   'errorCode',
 ];
 
@@ -62,9 +90,13 @@ export function createLogger(
     if (fields) {
       for (const key of LOG_ENTRY_KEYS) {
         const value = fields[key];
-        if (value !== undefined) {
-          entry[key] = value;
+        if (value === undefined) {
+          continue;
         }
+        if (key === 'recipientHash' && typeof value === 'string' && !isValidRecipientHash(value)) {
+          continue;
+        }
+        entry[key] = value;
       }
     }
 

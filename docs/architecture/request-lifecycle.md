@@ -92,8 +92,10 @@ template variables.
 - The success body's `id` field is the same correlation ID.
 - Logs are newline-delimited JSON. The logger emits only the fields declared
   on `LogEntry` (`correlationId`, `tenantId`, `environment`, `templateKey`,
-  `outcome`, `durationMs`, `providerMessageId`, `errorCode`). Recipient
-  addresses, variable values, and tokens are never logged.
+  `outcome`, `durationMs`, `providerMessageId`, `failureCategory`,
+  `recipientHash`, `errorCode`). Recipient addresses, variable values, and
+  tokens are never logged. See [`send-metrics-queries.md`](../operations/send-metrics-queries.md)
+  for the field contract and operational queries.
 
 ## Error codes and HTTP statuses
 

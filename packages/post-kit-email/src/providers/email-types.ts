@@ -41,6 +41,11 @@ export class EmailProviderError extends Error {
 
   readonly cause?: unknown;
 
+  /** Stable failure category for delivery telemetry — alias of `kind`. */
+  get failureCategory(): EmailProviderErrorKind {
+    return this.kind;
+  }
+
   constructor(options: {
     message: string;
     kind: EmailProviderErrorKind;

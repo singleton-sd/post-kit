@@ -14,6 +14,7 @@ import {
 } from '@singleton-sd/post-kit-types';
 import { TenantResolverError, type TenantResolver } from '../tenant';
 import { TemplateStoreError, type TemplateStore } from '../templates';
+import { createLogger } from '../telemetry';
 import { createSendHandler } from './send';
 
 const TENANT: TenantContext = { tenantId: 'inkads', environment: 'development' };
@@ -281,6 +282,136 @@ describe('sendHandler', () => {
     assert.equal(response.status, 200);
     assert.equal(sent[0]?.subject, 'From InkAds');
     assert.equal(sent[0]?.html, '<p>InkAds</p>');
+  });
+
+  it('emits the full structured log contract on success', async () => {
+    const lines: string[] = [];
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(COMPILED),
+      emailProvider: fakeProvider(),
+      fromAddress: () => 'noreply@example.com',
+      createLogger: (correlationId) => createLogger(correlationId, (line) => lines.push(line)),
+    });
+
+    await handler(
+      fakeRequest({
+        headers: { 'x-correlation-id': 'corr-log-success' },
+        json: validBody(),
+      }),
+      fakeContext(),
+    );
+
+    const completed = lines
+      .map((l) => JSON.parse(l))
+      .find((e) => e.msg === 'send.request.completed');
+    assert.ok(completed, 'send.request.completed must be logged');
+    assert.equal(completed.correlationId, 'corr-log-success');
+    assert.equal(completed.tenantId, 'inkads');
+    assert.equal(completed.environment, 'development');
+    assert.equal(completed.templateKey, 'marketing.contact-us');
+    assert.equal(completed.outcome, 'sent');
+    assert.equal(typeof completed.durationMs, 'number');
+    assert.equal(completed.providerMessageId, 'msg-1');
+    assert.equal(typeof completed.recipientHash, 'string');
+    assert.equal(completed.recipientHash.length, 16);
+    assert.ok(!('failureCategory' in completed));
+    assert.ok(!JSON.stringify(completed).includes('user@example.com'));
+    assert.ok(!JSON.stringify(completed).includes('Ada'));
+  });
+
+  it('emits the full structured log contract on validation failure', async () => {
+    const lines: string[] = [];
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(COMPILED),
+      emailProvider: fakeProvider(),
+      fromAddress: () => 'noreply@example.com',
+      createLogger: (correlationId) => createLogger(correlationId, (line) => lines.push(line)),
+    });
+
+    await handler(
+      fakeRequest({
+        headers: { 'x-correlation-id': 'corr-log-validation' },
+        json: { template: 'marketing.contact-us', to: 'user@example.com', variables: {} },
+      }),
+      fakeContext(),
+    );
+
+    const failed = lines.map((l) => JSON.parse(l)).find((e) => e.msg === 'send.request.failed');
+    assert.ok(failed);
+    assert.equal(failed.correlationId, 'corr-log-validation');
+    assert.equal(failed.tenantId, 'inkads');
+    assert.equal(failed.environment, 'development');
+    assert.equal(failed.templateKey, 'marketing.contact-us');
+    assert.equal(failed.outcome, 'validation_error');
+    assert.equal(failed.errorCode, PostKitErrorCode.MISSING_VARIABLES);
+    assert.equal(failed.failureCategory, 'missing_variables');
+    assert.equal(typeof failed.durationMs, 'number');
+    assert.equal(typeof failed.recipientHash, 'string');
+    assert.ok(!JSON.stringify(failed).includes('user@example.com'));
+  });
+
+  it('emits templateKey and recipientHash when variables validation fails after template and recipient succeed', async () => {
+    const lines: string[] = [];
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(COMPILED),
+      emailProvider: fakeProvider(),
+      fromAddress: () => 'noreply@example.com',
+      createLogger: (correlationId) => createLogger(correlationId, (line) => lines.push(line)),
+    });
+
+    await handler(
+      fakeRequest({
+        headers: { 'x-correlation-id': 'corr-log-variables-null' },
+        json: { template: 'marketing.contact-us', to: 'user@example.com', variables: null },
+      }),
+      fakeContext(),
+    );
+
+    const failed = lines.map((l) => JSON.parse(l)).find((e) => e.msg === 'send.request.failed');
+    assert.ok(failed);
+    assert.equal(failed.templateKey, 'marketing.contact-us');
+    assert.equal(failed.errorCode, PostKitErrorCode.MISSING_VARIABLES);
+    assert.equal(typeof failed.recipientHash, 'string');
+    assert.equal(failed.recipientHash.length, 16);
+    assert.ok(!JSON.stringify(failed).includes('user@example.com'));
+  });
+
+  it('emits provider failureCategory and providerRequestId on provider errors', async () => {
+    const { EmailProviderError } = await import('@singleton-sd/post-kit-email');
+    const lines: string[] = [];
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(COMPILED),
+      emailProvider: {
+        name: 'development',
+        isConfigured: () => true,
+        send: async () => {
+          throw new EmailProviderError({
+            message: 'boom',
+            kind: 'permanent',
+            provider: 'development',
+            providerRequestId: 'req-42',
+          });
+        },
+      },
+      fromAddress: () => 'noreply@example.com',
+      createLogger: (correlationId) => createLogger(correlationId, (line) => lines.push(line)),
+    });
+
+    await handler(fakeRequest({ json: validBody() }), fakeContext());
+
+    const failed = lines.map((l) => JSON.parse(l)).find((e) => e.msg === 'send.request.failed');
+    assert.ok(failed);
+    assert.equal(failed.outcome, 'failed');
+    assert.equal(failed.failureCategory, 'permanent');
+    assert.equal(failed.providerRequestId, 'req-42');
+    assert.ok(!('providerMessageId' in failed));
+    assert.equal(failed.environment, 'development');
+    assert.ok(!JSON.stringify(failed).includes('user@example.com'));
+    assert.ok(!JSON.stringify(failed).includes('Ada'));
   });
 
   it('returns PROVIDER_FAILURE when the provider throws', async () => {
