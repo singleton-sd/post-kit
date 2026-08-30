@@ -5,4 +5,7 @@ export {
   assertSafeTemplateKey,
   assertSafeStorageAccount,
   blobBasePath,
+  templatesPrefix,
+  isScopedTemplateBlob,
+  templateKeyFromBlobPath,
 } from './path-safety';

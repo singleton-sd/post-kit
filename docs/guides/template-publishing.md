@@ -17,6 +17,7 @@ content/email-templates/<key>/   (consumer repo, reviewed via PR)
    post-kit-publish
         │  compile every template (fail-fast)
         │  upload template.html + metadata.json + manifest.json
+        │  optional: --prune retired keys
         ▼
 Azure Blob Storage
    tenants/{tenant}/{environment}/templates/{key}/template.html
@@ -85,12 +86,11 @@ Every flag the CLI implements:
 | `--storage-account <name>` | yes | Azure Storage account **name** (not a URL, not a connection string). Must match `/^[a-z0-9]{3,24}$/`. The endpoint `https://<name>.blob.core.windows.net` is derived from it. |
 | `--container <name>` | yes | Blob container holding the `tenants/…` prefix. |
 | `--commit <sha>` | no | Recorded as the compiled manifest's `sourceCommit`. Omitted, it defaults to an empty string. Pass `${{ github.sha }}` in CI so every artifact is traceable to the source revision it was built from. |
+| `--dry-run` | no | Compile every template and print the full change set (adds, updates, and — when combined with `--prune` — deletions) as JSON lines on stdout. Performs no uploads and no deletes. Exit 1 if any template fails to compile, same as a normal run. |
+| `--prune` | no | After a successful upload pass, delete blobs for template keys that exist in storage under `tenants/{tenant}/{environment}/templates/` but are absent from the compiled set. **Off by default** — a publish of a subset must not remove sibling templates. Each pruned key is reported as one JSON line on stdout with `"action": "delete"`. Scoped strictly to the tenant/environment templates prefix; never deletes outside it. |
 | `--help`, `-h` | no | Print usage and exit 2. |
 
-There are no other flags. In particular there is **no** dry-run, no
-validate-only, no per-template selector, no delete/prune, and no way to supply
-credentials on the command line. Missing any required flag prints usage and
-exits 2.
+Missing any required flag prints usage and exits 2. Credentials cannot be supplied on the command line.
 
 Exit codes: `0` on success, `1` when any template failed (or an unexpected
 error was thrown), `2` for a usage error. Successful runs print a summary line
@@ -104,9 +104,10 @@ Publishing is all-or-nothing per run:
    files. A missing file throws immediately, before any compilation.
 2. It then compiles every template. Compile failures and duplicate keys are
    collected rather than thrown.
-3. **If any template failed, nothing is uploaded at all** — the run returns an
+3. **If any template failed, nothing is uploaded or pruned** — the run returns an
    empty published list and the CLI exits 1.
-4. Only when every template compiled cleanly does the upload loop start.
+4. Only when every template compiled cleanly does the upload loop start (and,
+   when `--prune` is set, the delete pass after uploads).
 
 Uploads themselves are not transactional: once step 4 begins, a failure
 mid-loop leaves earlier templates already written. Re-running a fixed publish
@@ -115,6 +116,28 @@ is safe and idempotent, because uploads overwrite by path.
 Practical consequence: a single broken template blocks publication of its
 siblings. Validate on the pull request (see the compiler script in the
 authoring guide) so this never surfaces at publish time.
+
+## Dry run and retiring templates
+
+Use `--dry-run` before a production publish to see what would change without
+writing anything:
+
+```bash
+pnpm exec post-kit-publish --templates ./content/email-templates \
+  --tenant acme --environment production \
+  --storage-account <storage-account-name> --container templates \
+  --dry-run --prune
+```
+
+Stdout receives one JSON line per add, update, or (with `--prune`) delete.
+Adds and updates include `contentHash`; deletes use `"action": "delete"`.
+Stderr prints a short summary (for example `Dry run: 1 update(s), 1 delete(s)`).
+
+When a template directory is removed from source, its blobs remain in storage
+until you publish again **with `--prune`**. Prune is opt-in so a workflow that
+publishes only part of the tree cannot silently delete the rest. Only pass
+`--prune` when the `--templates` directory is the full authoritative set for
+that tenant and environment.
 
 ## Environments and promotion
 

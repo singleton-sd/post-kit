@@ -260,9 +260,8 @@ These are limitations of the current implementation, not of this guide:
 
 - **The compiler ships no CLI binary.** Local validation requires the small
   script above; there is no `post-kit-compile` command.
-- **The publisher has no dry-run or validate-only flag.** `post-kit-publish`
-  either publishes or fails; use the compiler script to validate without
-  touching storage.
-- **Deleting a template directory does not delete the published blobs.** The
-  publisher only uploads; removing a template from the repository leaves its
-  artifacts in place, and the send endpoint will keep serving them.
+- **Use `--dry-run` on `post-kit-publish` to validate the change set without
+  touching storage** (see [`template-publishing.md`](./template-publishing.md)).
+- **Removing a template from source does not delete published blobs unless you
+  pass `--prune`.** Without prune, retired templates remain sendable until you
+  publish again with `--prune` (see the publishing guide).
