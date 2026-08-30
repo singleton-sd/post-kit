@@ -4,6 +4,7 @@ import { DefaultAzureCredential } from '@azure/identity';
 import type {
   CompiledTemplate,
   TenantContext,
+  TenantEnvironment,
   TemplateSourceMetadata,
 } from '@singleton-sd/post-kit-types';
 import { PostKitErrorCode, TEMPLATE_SCHEMA_VERSION } from '@singleton-sd/post-kit-types';
@@ -12,6 +13,9 @@ import type { TemplateStore } from './template-store';
 
 /** Allowlist regex for safe template keys — alphanumeric, dots, hyphens, underscores only. */
 const SAFE_TEMPLATE_KEY = /^[a-zA-Z0-9._-]+$/;
+/** Matches publisher `assertSafeTenantId` — single path segment, no slashes or `..`. */
+const SAFE_TENANT_SEGMENT = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/;
+const VALID_ENVIRONMENTS = new Set<TenantEnvironment>(['development', 'staging', 'production']);
 
 /**
  * Error thrown by BlobTemplateStore on load failures.
@@ -110,6 +114,8 @@ export class BlobTemplateStore implements TemplateStore {
    */
   async load(tenant: TenantContext, templateKey: string): Promise<CompiledTemplate> {
     validateTemplateKey(templateKey);
+    validateTenantId(tenant.tenantId);
+    validateEnvironment(tenant.environment);
 
     const { tenantId, environment } = tenant;
     const basePath = `tenants/${tenantId}/${environment}/templates/${templateKey}`;
@@ -153,6 +159,24 @@ function validateTemplateKey(templateKey: string): void {
   ) {
     throw new TemplateStoreError(
       `Invalid templateKey: "${templateKey}". Must match /^[a-zA-Z0-9._-]+$/ and must not be a bare dot-segment.`,
+      PostKitErrorCode.INVALID_TEMPLATE,
+    );
+  }
+}
+
+function validateTenantId(tenantId: string): void {
+  if (!tenantId || !SAFE_TENANT_SEGMENT.test(tenantId) || tenantId.includes('..')) {
+    throw new TemplateStoreError(
+      `Invalid tenantId: "${tenantId}". Use alphanumeric characters and hyphens only (no path segments).`,
+      PostKitErrorCode.INVALID_TEMPLATE,
+    );
+  }
+}
+
+function validateEnvironment(environment: string): void {
+  if (!VALID_ENVIRONMENTS.has(environment as TenantEnvironment)) {
+    throw new TemplateStoreError(
+      `Invalid environment: "${environment}". Must be one of: development, staging, production.`,
       PostKitErrorCode.INVALID_TEMPLATE,
     );
   }

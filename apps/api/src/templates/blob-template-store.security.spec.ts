@@ -160,15 +160,20 @@ describe('BlobTemplateStore — environment isolation', () => {
   });
 });
 
-describe('BlobTemplateStore — tenant identity is interpolated into the blob name verbatim', () => {
-  // Documents CURRENT behaviour, not desired behaviour. Azure Blob Storage has a
-  // flat namespace, so these values are not path traversal — they are literal
-  // parts of the blob name. The point is that `tenantId` / `environment` are
-  // interpolated without the publisher's `assertSafeTenantId` /
-  // `assertSafeEnvironment` guards, so a value containing `/` silently produces a
-  // blob name outside the documented per-tenant prefix shape. Not reachable from
-  // a request today (identity comes from the credential map). Tracked in #59.
-  it('interpolates a slash-bearing tenantId verbatim, producing a blob name outside the documented prefix shape (known gap)', async () => {
+describe('BlobTemplateStore — tenant identity path validation', () => {
+  async function expectInvalidTemplate(
+    run: () => Promise<unknown>,
+    requestedPaths: string[],
+  ): Promise<void> {
+    await assert.rejects(run, (err: unknown) => {
+      assert.ok(err instanceof TemplateStoreError, 'expected TemplateStoreError');
+      assert.equal(err.code, PostKitErrorCode.INVALID_TEMPLATE);
+      return true;
+    });
+    assert.deepEqual(requestedPaths, [], 'no blob access may happen for an unsafe tenant path');
+  }
+
+  it('rejects a slash-bearing tenantId before storage access', async () => {
     const blobs = new Map<string, string>();
     const tenantId = 'tenant-a/production/templates/shared';
     const base = `templates/tenants/${tenantId}/production/templates/${TEMPLATE_KEY}`;
@@ -177,32 +182,52 @@ describe('BlobTemplateStore — tenant identity is interpolated into the blob na
     const { client, requestedPaths } = makeRecordingClient(blobs);
 
     const unvalidated = { tenantId, environment: 'production' } as unknown as TenantContext;
-    const loaded = await makeStore(client).load(unvalidated, TEMPLATE_KEY);
-
-    assert.equal(loaded.templateHtml, HTML);
-    for (const path of requestedPaths) {
-      assert.ok(
-        path.startsWith(`tenants/${tenantId}/production/templates/`),
-        'current behaviour: the tenantId is used as-is, extra segments included',
-      );
-    }
+    await expectInvalidTemplate(
+      () => makeStore(client).load(unvalidated, TEMPLATE_KEY),
+      requestedPaths,
+    );
   });
 
-  it('interpolates an environment value that is not a TenantEnvironment (known gap)', async () => {
+  it('rejects an environment value that is not a TenantEnvironment before storage access', async () => {
     const blobs = new Map<string, string>();
     const base = `templates/tenants/tenant-a/elsewhere/templates/${TEMPLATE_KEY}`;
     blobs.set(`${base}/template.html`, HTML);
     blobs.set(`${base}/metadata.json`, JSON.stringify(METADATA));
-    const { client } = makeRecordingClient(blobs);
+    const { client, requestedPaths } = makeRecordingClient(blobs);
 
     const unvalidated = {
       tenantId: 'tenant-a',
       environment: 'elsewhere',
     } as unknown as TenantContext;
 
-    const loaded = await makeStore(client).load(unvalidated, TEMPLATE_KEY);
-    assert.equal(loaded.templateHtml, HTML);
+    await expectInvalidTemplate(
+      () => makeStore(client).load(unvalidated, TEMPLATE_KEY),
+      requestedPaths,
+    );
   });
+
+  const unsafeTenantIds: Array<[label: string, tenantId: string]> = [
+    ['empty tenantId', ''],
+    ['parent traversal', '../tenant-b'],
+    ['nested slash', 'a/b'],
+    ['leading hyphen', '-acme'],
+    ['trailing hyphen', 'acme-'],
+    ['double dot segment', 'a..b'],
+  ];
+
+  for (const [label, tenantId] of unsafeTenantIds) {
+    it(`rejects ${label} with INVALID_TEMPLATE and makes no blob call`, async () => {
+      const { client, requestedPaths } = makeRecordingClient(new Map());
+      await expectInvalidTemplate(
+        () =>
+          makeStore(client).load(
+            { tenantId, environment: 'production' } as unknown as TenantContext,
+            TEMPLATE_KEY,
+          ),
+        requestedPaths,
+      );
+    });
+  }
 });
 
 describe('BlobTemplateStore — unsafe template keys are rejected before storage access', () => {
