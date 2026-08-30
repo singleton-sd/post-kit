@@ -103,7 +103,8 @@ Fields that may appear (only non-`undefined` values are emitted):
 | `tenantId` | completed / failed | Set once the credential resolves; absent on 401/403 and on `STORAGE_FAILURE` |
 | `templateKey` | completed / failed | Set once the body validates |
 | `environment` | completed / failed | `development`, `staging`, or `production` from the credential; absent on 401/403 and on `STORAGE_FAILURE` |
-| `providerMessageId` | completed / failed | Provider-assigned message id on success; provider request id on provider failures when available |
+| `providerMessageId` | completed | Provider-assigned message id on successful sends |
+| `providerRequestId` | failed | Provider trace/request id on provider failures when available |
 | `failureCategory` | failed | Stable failure bucket — API-level categories (`template_not_found`, `missing_variables`, …) or one of the six provider kinds (`configuration`, `transient`, `rate_limit`, `permanent`, `validation`, `cancelled`) |
 | `recipientHash` | completed / failed | 16-character SHA-256 prefix of the normalized recipient address; see [`send-metrics-queries.md`](./send-metrics-queries.md) |
 

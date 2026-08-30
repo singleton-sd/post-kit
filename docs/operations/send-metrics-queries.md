@@ -16,7 +16,8 @@ column in Application Insights `traces`.
 | `templateKey` | Requested template key (absent when body validation fails early) |
 | `outcome` | `sent`, `failed`, `validation_error`, or `auth_error` |
 | `durationMs` | Handler wall time in milliseconds |
-| `providerMessageId` | Provider-assigned message or request id when available |
+| `providerMessageId` | Provider-assigned message id on successful sends |
+| `providerRequestId` | Provider trace/request id on provider failures when available |
 | `failureCategory` | Stable failure bucket (see below) |
 | `recipientHash` | 16-char SHA-256 prefix of normalized recipient (never the raw address) |
 | `errorCode` | `PostKitErrorCode` on failures |
@@ -83,25 +84,26 @@ SendEvents
 
 ## Provider failures
 
-All terminal failures where the provider rejected or could not deliver:
-
-```kusto
-SendEvents
-| where tostring(payload.msg) == "send.request.failed"
-| where tostring(payload.errorCode) == "PROVIDER_FAILURE"
-| extend failureCategory = tostring(payload.failureCategory)
-| summarize count() by failureCategory, bin(timestamp, 1h)
-| order by timestamp asc
-```
-
-Provider-kind breakdown (the six `EmailProviderError` kinds):
+Provider-kind failures (the six `EmailProviderError` kinds). Excludes
+`provider_not_configured`, `unhandled`, and other API-level categories that also
+use `errorCode == "PROVIDER_FAILURE"`:
 
 ```kusto
 SendEvents
 | where tostring(payload.msg) == "send.request.failed"
 | where tostring(payload.failureCategory) in (
     "configuration", "transient", "rate_limit", "permanent", "validation", "cancelled")
-| summarize count() by failureCategory = tostring(payload.failureCategory)
+| summarize count() by failureCategory = tostring(payload.failureCategory), bin(timestamp, 1h)
+| order by timestamp asc
+```
+
+Misconfigured sender (`provider_not_configured`) separately:
+
+```kusto
+SendEvents
+| where tostring(payload.msg) == "send.request.failed"
+| where tostring(payload.failureCategory) == "provider_not_configured"
+| summarize count() by tenantId = tostring(payload.tenantId), bin(timestamp, 1h)
 ```
 
 ## Template not found
@@ -176,7 +178,11 @@ SendEvents
 | extend recipientHash = tostring(payload.recipientHash)
 | where isnotempty(recipientHash)
 | summarize sendCount = count(), correlationIds = make_set(tostring(payload.correlationId), 10)
-    by recipientHash, templateKey = tostring(payload.templateKey), bin(timestamp, 1h)
+    by recipientHash,
+       templateKey = tostring(payload.templateKey),
+       tenantId = tostring(payload.tenantId),
+       environment = tostring(payload.environment),
+       bin(timestamp, 1h)
 | where sendCount > 1
 | order by sendCount desc
 ```
@@ -191,6 +197,7 @@ traces
 | project timestamp, msg = tostring(payload.msg), outcome = tostring(payload.outcome),
     failureCategory = tostring(payload.failureCategory),
     providerMessageId = tostring(payload.providerMessageId),
+    providerRequestId = tostring(payload.providerRequestId),
     durationMs = toint(payload.durationMs)
 | order by timestamp asc
 ```

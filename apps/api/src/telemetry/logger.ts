@@ -25,6 +25,13 @@ export function hashRecipient(email: string): string {
   return createHash('sha256').update(normalized, 'utf8').digest('hex').slice(0, 16);
 }
 
+/** 16-character lowercase hex digest emitted by `hashRecipient`. */
+export const RECIPIENT_HASH_PATTERN = /^[a-f0-9]{16}$/;
+
+export function isValidRecipientHash(value: string): boolean {
+  return RECIPIENT_HASH_PATTERN.test(value);
+}
+
 /**
  * Structured fields that may appear in a log entry.
  * All fields are optional except correlationId (carried by the logger instance).
@@ -37,6 +44,7 @@ export interface LogEntry {
   outcome?: 'sent' | 'failed' | 'validation_error' | 'auth_error';
   durationMs?: number;
   providerMessageId?: string;
+  providerRequestId?: string;
   failureCategory?: string;
   recipientHash?: string;
   errorCode?: PostKitErrorCode | string;
@@ -51,6 +59,7 @@ const LOG_ENTRY_KEYS: ReadonlyArray<keyof Omit<LogEntry, 'correlationId'>> = [
   'outcome',
   'durationMs',
   'providerMessageId',
+  'providerRequestId',
   'failureCategory',
   'recipientHash',
   'errorCode',
@@ -81,9 +90,13 @@ export function createLogger(
     if (fields) {
       for (const key of LOG_ENTRY_KEYS) {
         const value = fields[key];
-        if (value !== undefined) {
-          entry[key] = value;
+        if (value === undefined) {
+          continue;
         }
+        if (key === 'recipientHash' && typeof value === 'string' && !isValidRecipientHash(value)) {
+          continue;
+        }
+        entry[key] = value;
       }
     }
 

@@ -116,6 +116,7 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       extra?: {
         failureCategory?: string;
         providerMessageId?: string;
+        providerRequestId?: string;
       },
     ): HttpResponseInit => {
       const durationMs = Date.now() - startMs;
@@ -126,6 +127,7 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         failureCategory,
         durationMs,
         providerMessageId: extra?.providerMessageId,
+        providerRequestId: extra?.providerRequestId,
         ...logContext(),
       });
       const body: PostKitErrorResponse = { error, code, correlationId };
@@ -153,6 +155,12 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       const body = await request.json().catch(() => null);
       const parsed = parseSendRequest(body);
       if (!parsed.ok) {
+        if (parsed.templateKey) {
+          templateKey = parsed.templateKey;
+        }
+        if (parsed.recipientHash) {
+          recipientHash = parsed.recipientHash;
+        }
         return errorResponse(400, parsed.code, parsed.error, 'validation_error');
       }
       const sendRequest = parsed.value;
@@ -258,7 +266,7 @@ export function createSendHandler(deps: SendHandlerDependencies) {
           'failed',
           {
             failureCategory: error.failureCategory,
-            providerMessageId: error.providerRequestId,
+            providerRequestId: error.providerRequestId,
           },
         );
       }
@@ -312,53 +320,66 @@ function isSafeTemplateKey(templateKey: string): boolean {
   );
 }
 
-function parseSendRequest(
-  body: unknown,
-): { ok: true; value: SendRequest } | { ok: false; code: PostKitErrorCode; error: string } {
+function parseSendRequest(body: unknown):
+  | { ok: true; value: SendRequest }
+  | {
+      ok: false;
+      code: PostKitErrorCode;
+      error: string;
+      templateKey?: string;
+      recipientHash?: string;
+    } {
+  let templateKey: string | undefined;
+  let recipientHash: string | undefined;
+
+  const fail = (
+    code: PostKitErrorCode,
+    error: string,
+  ): {
+    ok: false;
+    code: PostKitErrorCode;
+    error: string;
+    templateKey?: string;
+    recipientHash?: string;
+  } => ({
+    ok: false,
+    code,
+    error,
+    templateKey,
+    recipientHash,
+  });
+
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-    return {
-      ok: false,
-      code: PostKitErrorCode.INVALID_RECIPIENT,
-      error: 'Request body must be a JSON object.',
-    };
+    return fail(PostKitErrorCode.INVALID_RECIPIENT, 'Request body must be a JSON object.');
   }
   const obj = body as Record<string, unknown>;
   if (typeof obj['template'] !== 'string' || !obj['template'].trim()) {
-    return { ok: false, code: PostKitErrorCode.INVALID_TEMPLATE, error: 'template is required.' };
+    return fail(PostKitErrorCode.INVALID_TEMPLATE, 'template is required.');
   }
   if (!isSafeTemplateKey(obj['template'])) {
-    return {
-      ok: false,
-      code: PostKitErrorCode.INVALID_TEMPLATE,
-      error: 'template key contains unsafe path characters.',
-    };
+    return fail(PostKitErrorCode.INVALID_TEMPLATE, 'template key contains unsafe path characters.');
   }
+  templateKey = obj['template'];
+
   if (typeof obj['to'] !== 'string' || !BASIC_EMAIL.test(obj['to'])) {
-    return {
-      ok: false,
-      code: PostKitErrorCode.INVALID_RECIPIENT,
-      error: 'to must be a valid email address.',
-    };
+    return fail(PostKitErrorCode.INVALID_RECIPIENT, 'to must be a valid email address.');
   }
+  recipientHash = hashRecipient(obj['to']);
+
   if (
     obj['variables'] === null ||
     typeof obj['variables'] !== 'object' ||
     Array.isArray(obj['variables'])
   ) {
-    return {
-      ok: false,
-      code: PostKitErrorCode.MISSING_VARIABLES,
-      error: 'variables must be an object of string values.',
-    };
+    return fail(
+      PostKitErrorCode.MISSING_VARIABLES,
+      'variables must be an object of string values.',
+    );
   }
   const variables: Record<string, string> = {};
   for (const [key, value] of Object.entries(obj['variables'] as Record<string, unknown>)) {
     if (typeof value !== 'string') {
-      return {
-        ok: false,
-        code: PostKitErrorCode.MISSING_VARIABLES,
-        error: `variables.${key} must be a string.`,
-      };
+      return fail(PostKitErrorCode.MISSING_VARIABLES, `variables.${key} must be a string.`);
     }
     variables[key] = value;
   }

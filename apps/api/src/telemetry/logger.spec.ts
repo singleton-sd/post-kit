@@ -111,13 +111,39 @@ describe('createLogger', () => {
     logger.error('send.request.failed', {
       outcome: 'failed',
       failureCategory: 'permanent',
-      recipientHash: 'abc123',
+      recipientHash: 'a'.repeat(16),
       durationMs: 10,
     });
 
     const entry = JSON.parse(lines[0]!);
     assert.equal(entry.failureCategory, 'permanent');
-    assert.equal(entry.recipientHash, 'abc123');
+    assert.equal(entry.recipientHash, 'a'.repeat(16));
+  });
+
+  it('omits recipientHash values that are not a 16-char hex digest', () => {
+    const lines: string[] = [];
+    const logger = createLogger('corr-rh', (line) => lines.push(line));
+
+    logger.error('send.request.failed', {
+      outcome: 'failed',
+      recipientHash: 'user@example.com',
+    });
+
+    const entry = JSON.parse(lines[0]!);
+    assert.ok(!('recipientHash' in entry));
+  });
+
+  it('includes providerRequestId in the contract', () => {
+    const lines: string[] = [];
+    const logger = createLogger('corr-pr', (line) => lines.push(line));
+
+    logger.error('send.request.failed', {
+      outcome: 'failed',
+      providerRequestId: 'req-99',
+    });
+
+    const entry = JSON.parse(lines[0]!);
+    assert.equal(entry.providerRequestId, 'req-99');
   });
 });
 

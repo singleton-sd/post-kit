@@ -352,7 +352,34 @@ describe('sendHandler', () => {
     assert.ok(!JSON.stringify(failed).includes('user@example.com'));
   });
 
-  it('emits provider failureCategory and providerMessageId on provider errors', async () => {
+  it('emits templateKey and recipientHash when variables validation fails after template and recipient succeed', async () => {
+    const lines: string[] = [];
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(COMPILED),
+      emailProvider: fakeProvider(),
+      fromAddress: () => 'noreply@example.com',
+      createLogger: (correlationId) => createLogger(correlationId, (line) => lines.push(line)),
+    });
+
+    await handler(
+      fakeRequest({
+        headers: { 'x-correlation-id': 'corr-log-variables-null' },
+        json: { template: 'marketing.contact-us', to: 'user@example.com', variables: null },
+      }),
+      fakeContext(),
+    );
+
+    const failed = lines.map((l) => JSON.parse(l)).find((e) => e.msg === 'send.request.failed');
+    assert.ok(failed);
+    assert.equal(failed.templateKey, 'marketing.contact-us');
+    assert.equal(failed.errorCode, PostKitErrorCode.MISSING_VARIABLES);
+    assert.equal(typeof failed.recipientHash, 'string');
+    assert.equal(failed.recipientHash.length, 16);
+    assert.ok(!JSON.stringify(failed).includes('user@example.com'));
+  });
+
+  it('emits provider failureCategory and providerRequestId on provider errors', async () => {
     const { EmailProviderError } = await import('@singleton-sd/post-kit-email');
     const lines: string[] = [];
     const handler = createSendHandler({
@@ -380,7 +407,8 @@ describe('sendHandler', () => {
     assert.ok(failed);
     assert.equal(failed.outcome, 'failed');
     assert.equal(failed.failureCategory, 'permanent');
-    assert.equal(failed.providerMessageId, 'req-42');
+    assert.equal(failed.providerRequestId, 'req-42');
+    assert.ok(!('providerMessageId' in failed));
     assert.equal(failed.environment, 'development');
     assert.ok(!JSON.stringify(failed).includes('user@example.com'));
     assert.ok(!JSON.stringify(failed).includes('Ada'));
