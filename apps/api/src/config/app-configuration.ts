@@ -11,6 +11,8 @@ export const APP_CONFIGURATION_ENVIRONMENT_KEYS: Readonly<Record<string, string>
   'app:email:allowProductionSend': 'EMAIL_ALLOW_PRODUCTION_SEND',
   'app:email:fromAddress': 'EMAIL_FROM_ADDRESS',
   'app:email:fromName': 'EMAIL_FROM_NAME',
+  'app:email:tenantConfigById': 'TENANT_EMAIL_CONFIG_BY_ID',
+  'app:email:tenantProviderAccountSecrets': 'TENANT_PROVIDER_ACCOUNT_SECRETS',
   'app:email:contactInboxAddress': 'CONTACT_INBOX_ADDRESS',
   'app:email:profilesByHost': 'CONTACT_EMAIL_PROFILES_BY_HOST',
   'app:email:rateLimitPerMin': 'CONTACT_RATE_LIMIT_PER_MIN',

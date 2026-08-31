@@ -13,6 +13,7 @@ import {
   type TenantContext,
 } from '@singleton-sd/post-kit-types';
 import { TenantResolverError, type TenantResolver } from '../tenant';
+import type { ResolvedTenantEmailConfig } from '../tenant/tenant-email-config';
 import { TemplateStoreError, type TemplateStore } from '../templates';
 import { resetSendRateLimiter } from '../contact-rate-limit';
 import { resetSendSizeLimitsCache } from '../send-limits';
@@ -76,6 +77,17 @@ function fakeStore(result: CompiledTemplate | TemplateStoreError): TemplateStore
   };
 }
 
+function stubTenantSender(
+  config: Partial<ResolvedTenantEmailConfig> = {},
+): Pick<Parameters<typeof createSendHandler>[0], 'resolveTenantEmailConfig'> {
+  return {
+    resolveTenantEmailConfig: async () => ({
+      fromAddress: 'noreply@example.com',
+      fromDisplayName: 'PostKit',
+      ...config,
+    }),
+  };
+}
 function fakeProvider(capture?: EmailSendRequest[]): EmailProvider {
   return {
     name: 'development',
@@ -94,8 +106,7 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(sent),
-      fromAddress: () => 'noreply@example.com',
-      fromName: () => 'PostKit',
+      ...stubTenantSender(),
     });
 
     const response = await handler(
@@ -122,7 +133,7 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(sent),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     await handler(
@@ -145,7 +156,7 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(false),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
     const response = await handler(fakeRequest({ json: {} }), fakeContext());
     assert.equal(response.status, 401);
@@ -162,7 +173,7 @@ describe('sendHandler', () => {
       },
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
     const response = await handler(fakeRequest({ json: validBody() }), fakeContext());
     assert.equal(response.status, 403);
@@ -176,7 +187,7 @@ describe('sendHandler', () => {
         new TemplateStoreError('missing', PostKitErrorCode.TEMPLATE_NOT_FOUND),
       ),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
     const response = await handler(fakeRequest({ json: validBody() }), fakeContext());
     assert.equal(response.status, 404);
@@ -188,7 +199,7 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(),
       templateStore: fakeStore(new TemplateStoreError('bad', PostKitErrorCode.INVALID_TEMPLATE)),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
     const response = await handler(fakeRequest({ json: validBody() }), fakeContext());
     assert.equal(response.status, 400);
@@ -200,7 +211,7 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
     const response = await handler(
       fakeRequest({
@@ -217,7 +228,7 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
     const response = await handler(
       fakeRequest({
@@ -240,7 +251,7 @@ describe('sendHandler', () => {
         },
       },
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
     const response = await handler(
       fakeRequest({
@@ -270,7 +281,7 @@ describe('sendHandler', () => {
       templateStore: fakeStore(withBrandingVar),
       emailProvider: fakeProvider(sent),
       resolveBranding: async () => ({ companyName: 'InkAds' }),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     const response = await handler(
@@ -295,7 +306,7 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
       createLogger: (correlationId) => createLogger(correlationId, (line) => lines.push(line)),
     });
 
@@ -331,7 +342,7 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
       createLogger: (correlationId) => createLogger(correlationId, (line) => lines.push(line)),
     });
 
@@ -363,7 +374,7 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
       createLogger: (correlationId) => createLogger(correlationId, (line) => lines.push(line)),
     });
 
@@ -402,7 +413,7 @@ describe('sendHandler', () => {
           });
         },
       },
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
       createLogger: (correlationId) => createLogger(correlationId, (line) => lines.push(line)),
     });
 
@@ -426,7 +437,7 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     const body = validBody();
@@ -451,13 +462,13 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
     const handlerB = createSendHandler({
       tenantResolver: tenantB,
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     assert.equal((await handlerA(fakeRequest({ json: validBody() }), fakeContext())).status, 200);
@@ -480,7 +491,7 @@ describe('sendHandler', () => {
         },
       },
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     const response = await handler(
@@ -509,7 +520,7 @@ describe('sendHandler', () => {
       tenantResolver: fakeResolver(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     const response = await handler(
@@ -546,7 +557,7 @@ describe('sendHandler', () => {
           });
         },
       },
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
     const response = await handler(fakeRequest({ json: validBody() }), fakeContext());
     assert.equal(response.status, 502);

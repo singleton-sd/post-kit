@@ -93,6 +93,8 @@ describe('getSendSizeLimits', () => {
 
   it('uses documented defaults when env is unset', async () => {
     await withEnv(touched, () => {
+      for (const key of touched) delete process.env[key];
+      resetSendSizeLimitsCache();
       const limits = getSendSizeLimits();
       assert.equal(limits.maxBodyBytes, DEFAULT_SEND_MAX_BODY_BYTES);
       assert.equal(limits.maxVariablesBytes, DEFAULT_SEND_MAX_VARIABLES_BYTES);

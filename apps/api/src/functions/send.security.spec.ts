@@ -9,6 +9,7 @@ import {
   type TenantContext,
 } from '@singleton-sd/post-kit-types';
 import { ApiKeyTenantResolver, type TenantKeyMap } from '../tenant';
+import type { ResolvedTenantEmailConfig } from '../tenant/tenant-email-config';
 import type { TemplateStore } from '../templates';
 import { createSendHandler } from './send';
 
@@ -106,6 +107,17 @@ function tenantScopedStore(
   };
 }
 
+function stubTenantSender(
+  config: Partial<ResolvedTenantEmailConfig> = {},
+): Pick<Parameters<typeof createSendHandler>[0], 'resolveTenantEmailConfig'> {
+  return {
+    resolveTenantEmailConfig: async () => ({
+      fromAddress: 'noreply@example.com',
+      ...config,
+    }),
+  };
+}
+
 function fakeProvider(capture?: EmailSendRequest[]): EmailProvider {
   return {
     name: 'development',
@@ -143,7 +155,7 @@ describe('sendHandler — cross-tenant isolation', () => {
       tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(sent),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     const response = await handler(
@@ -169,7 +181,7 @@ describe('sendHandler — cross-tenant isolation', () => {
       tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(sent),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     const response = await handler(
@@ -192,7 +204,7 @@ describe('sendHandler — cross-tenant isolation', () => {
       tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     const response = await handler(
@@ -248,7 +260,7 @@ describe('sendHandler — tenant spoofing has no effect', () => {
         tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
         templateStore: store,
         emailProvider: fakeProvider(),
-        fromAddress: () => 'noreply@example.com',
+        ...stubTenantSender(),
       });
 
       const response = await handler(fakeRequest(options), fakeContext());
@@ -270,7 +282,7 @@ describe('sendHandler — tenant spoofing has no effect', () => {
       tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     const response = await handler(
@@ -300,7 +312,7 @@ describe('sendHandler — environment isolation', () => {
       tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(sent),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     const response = await handler(
@@ -351,7 +363,7 @@ describe('sendHandler — unsafe template keys are rejected before storage acces
         tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
         templateStore: store,
         emailProvider: fakeProvider(),
-        fromAddress: () => 'noreply@example.com',
+        ...stubTenantSender(),
       });
 
       const response = await handler(
@@ -393,7 +405,7 @@ describe('sendHandler — hostile variable values cannot inject markup', () => {
         tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
         templateStore: store,
         emailProvider: fakeProvider(sent),
-        fromAddress: () => 'noreply@example.com',
+        ...stubTenantSender(),
       });
 
       const response = await handler(
@@ -433,7 +445,7 @@ describe('sendHandler — hostile variable values cannot inject markup', () => {
       tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(sent),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
 
     await handler(
@@ -462,7 +474,7 @@ describe('sendHandler — malformed and oversized bodies produce stable typed er
       tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(),
-      fromAddress: () => 'noreply@example.com',
+      ...stubTenantSender(),
     });
     const response = await handler(fakeRequest(options), fakeContext());
     return { response, calls };

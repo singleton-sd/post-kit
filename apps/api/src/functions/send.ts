@@ -22,6 +22,9 @@ import { createLogger, hashRecipient, resolveCorrelationId, type Logger } from '
 import {
   ApiKeyTenantResolver,
   TenantResolverError,
+  resolveTenantEmailConfig,
+  TenantEmailConfigError,
+  type ResolvedTenantEmailConfig,
   type TenantKeyMap,
   type TenantResolver,
 } from '../tenant';
@@ -35,7 +38,7 @@ export interface SendHandlerDependencies {
   tenantResolver: TenantResolver;
   templateStore: TemplateStore;
   /** Prefer injecting a factory so App Configuration can populate env first. */
-  createEmailProvider?: () => EmailProvider;
+  createEmailProvider?: (options?: { apiToken?: string }) => EmailProvider;
   /** Direct provider injection for unit tests. */
   emailProvider?: EmailProvider;
   /**
@@ -45,9 +48,14 @@ export interface SendHandlerDependencies {
   resolveBranding?: (tenant: TenantContext) => Promise<TenantBranding> | TenantBranding;
   /** Static branding for tests (applied after resolveBranding). */
   branding?: TenantBranding;
+  /**
+   * Resolve tenant sender identity after auth. Merged with platform defaults in
+   * `resolveTenantEmailConfig`; request bodies cannot override sender fields.
+   */
+  resolveTenantEmailConfig?: (
+    tenant: TenantContext,
+  ) => Promise<ResolvedTenantEmailConfig> | ResolvedTenantEmailConfig;
   createLogger?: typeof createLogger;
-  fromAddress?: () => string;
-  fromName?: () => string | undefined;
 }
 
 function parseTenantKeyMap(raw: string | undefined): TenantKeyMap {
@@ -68,10 +76,9 @@ export function createDefaultSendDependencies(
       return new ApiKeyTenantResolver(parseTenantKeyMap(process.env.TENANT_KEY_MAP));
     },
     templateStore,
-    createEmailProvider: () => createEmailProvider(process.env),
+    createEmailProvider: (options) => createEmailProvider(process.env, options),
     resolveBranding: async () => ({}),
-    fromAddress: () => process.env.EMAIL_FROM_ADDRESS ?? '',
-    fromName: () => process.env.EMAIL_FROM_NAME,
+    resolveTenantEmailConfig: (tenant) => resolveTenantEmailConfig(tenant),
   };
 }
 
@@ -246,24 +253,22 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       const subject = Handlebars.compile(compiled.metadata.subject, { noEscape: false })(variables);
       const html = Handlebars.compile(compiled.templateHtml, { noEscape: false })(variables);
 
-      const fromAddress = (deps.fromAddress ?? (() => process.env.EMAIL_FROM_ADDRESS ?? ''))();
-      if (!fromAddress) {
-        return errorResponse(
-          503,
-          PostKitErrorCode.PROVIDER_FAILURE,
-          'Email sender is not configured.',
-          'failed',
-          { failureCategory: 'provider_not_configured' },
-        );
-      }
+      const resolveTenantEmailConfigFn =
+        deps.resolveTenantEmailConfig ?? ((tenant) => resolveTenantEmailConfig(tenant));
+      const tenantEmailConfig = await resolveTenantEmailConfigFn(tenant);
 
       const provider =
         deps.emailProvider ??
-        (deps.createEmailProvider ?? (() => createEmailProvider(process.env)))();
+        (deps.createEmailProvider ?? ((options) => createEmailProvider(process.env, options)))(
+          tenantEmailConfig.providerApiToken
+            ? { apiToken: tenantEmailConfig.providerApiToken }
+            : undefined,
+        );
       const result = await provider.send({
         to: sendRequest.to,
-        from: fromAddress,
-        fromName: (deps.fromName ?? (() => process.env.EMAIL_FROM_NAME))(),
+        from: tenantEmailConfig.fromAddress,
+        fromName: tenantEmailConfig.fromDisplayName,
+        replyTo: tenantEmailConfig.replyTo,
         subject,
         html,
         correlationId,
@@ -280,6 +285,12 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       const response: SendResponse = { id: correlationId, status: 'sent' };
       return { status: 200, headers, jsonBody: response };
     } catch (error) {
+      if (error instanceof TenantEmailConfigError) {
+        return errorResponse(503, error.code, error.message, 'failed', {
+          failureCategory: 'tenant_config_not_found',
+        });
+      }
+
       if (error instanceof TenantResolverError) {
         const status =
           error.code === PostKitErrorCode.UNAUTHENTICATED
@@ -349,6 +360,8 @@ function failureCategoryFromErrorCode(
       return 'template_not_found';
     case PostKitErrorCode.STORAGE_FAILURE:
       return 'storage_failure';
+    case PostKitErrorCode.TENANT_CONFIG_NOT_FOUND:
+      return 'tenant_config_not_found';
     case PostKitErrorCode.PROVIDER_FAILURE:
       return 'provider_failure';
     default:
