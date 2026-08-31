@@ -185,6 +185,24 @@ describe('resolveTenantEmailConfig', () => {
     );
   });
 
+  it('does not expose provider account identifiers in malformed secret map errors', () => {
+    process.env.TENANT_EMAIL_CONFIG_BY_ID = JSON.stringify({
+      inkads: { production: { fromAddress: 'noreply@inkads.example.com' } },
+    });
+    process.env.TENANT_PROVIDER_ACCOUNT_SECRETS = JSON.stringify({
+      'configured-account-id': 123,
+    });
+
+    assert.throws(
+      () => resolveTenantEmailConfig(INKADS_PROD),
+      (error: unknown) => {
+        assert.ok(error instanceof TenantEmailConfigError);
+        assert.ok(!error.message.includes('configured-account-id'));
+        return true;
+      },
+    );
+  });
+
   it('scopes configuration per environment', () => {
     process.env.TENANT_EMAIL_CONFIG_BY_ID = JSON.stringify({
       inkads: {

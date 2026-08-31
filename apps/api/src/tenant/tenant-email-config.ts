@@ -226,10 +226,7 @@ function parseProviderAccountSecretMap(raw: string): ProviderAccountSecretMap {
 
   const out: ProviderAccountSecretMap = {};
   for (const [accountId, envVarName] of Object.entries(parsed)) {
-    out[accountId] = parseOptionalString(
-      envVarName,
-      `Tenant provider account configuration["${accountId}"]`,
-    );
+    out[accountId] = parseOptionalString(envVarName, 'Tenant provider account configuration entry');
   }
   return out;
 }

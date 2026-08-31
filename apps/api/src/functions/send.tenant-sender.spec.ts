@@ -255,4 +255,34 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
     assert.ok(!serialized.includes('super-secret-token'));
     assert.ok(!serialized.includes('FORWARD_EMAIL_TOKEN_INKADS'));
   });
+
+  it('does not expose provider account identifiers when provider secret map is malformed', async () => {
+    process.env.TENANT_EMAIL_CONFIG_BY_ID = JSON.stringify({
+      inkads: {
+        production: { fromAddress: 'noreply@inkads.example.com' },
+      },
+    });
+    process.env.TENANT_PROVIDER_ACCOUNT_SECRETS = JSON.stringify({
+      'configured-account-id': 123,
+    });
+
+    const handler = createSendHandler({
+      tenantResolver: { resolve: async () => TENANT },
+      templateStore: { load: async () => COMPILED },
+      emailProvider: fakeProvider(),
+    });
+
+    const response = await handler(
+      fakeRequest({
+        template: 'marketing.contact-us',
+        to: 'user@example.com',
+        variables: { name: 'Ada' },
+      }),
+      fakeContext(),
+    );
+
+    assert.equal(response.status, 503);
+    const body = response.jsonBody as { error: string };
+    assert.ok(!body.error.includes('configured-account-id'));
+  });
 });
