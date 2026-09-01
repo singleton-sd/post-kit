@@ -9,7 +9,6 @@ import {
   type TenantContext,
 } from '@singleton-sd/post-kit-types';
 import { clearTenantEmailConfigCache } from '../tenant';
-import { TemplateStoreError, type TemplateStore } from '../templates';
 import { createLogger } from '../telemetry';
 import { createSendHandler } from './send';
 
@@ -35,10 +34,12 @@ const COMPILED: CompiledTemplate = {
 };
 
 function fakeRequest(json: unknown): HttpRequest {
+  const textBody = JSON.stringify(json);
   return {
     method: 'POST',
     headers: { get: () => null },
     json: async () => json,
+    text: async () => textBody,
   } as unknown as HttpRequest;
 }
 
@@ -63,6 +64,7 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
     'TENANT_PROVIDER_ACCOUNT_SECRETS',
     'EMAIL_FROM_ADDRESS',
     'EMAIL_FROM_NAME',
+    'FORWARD_EMAIL_TOKEN_INKADS',
   ];
   const prior = new Map<string, string | undefined>();
 
@@ -217,6 +219,7 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
   });
 
   it('does not expose provider credentials in error responses or logs', async () => {
+    const { EmailProviderError } = await import('@singleton-sd/post-kit-email');
     process.env.TENANT_EMAIL_CONFIG_BY_ID = JSON.stringify({
       inkads: {
         production: {
@@ -233,12 +236,18 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
     const lines: string[] = [];
     const handler = createSendHandler({
       tenantResolver: { resolve: async () => TENANT },
-      templateStore: {
-        load: async () => {
-          throw new TemplateStoreError('missing', PostKitErrorCode.TEMPLATE_NOT_FOUND);
+      templateStore: { load: async () => COMPILED },
+      emailProvider: {
+        name: 'development',
+        isConfigured: () => true,
+        send: async () => {
+          throw new EmailProviderError({
+            message: 'boom',
+            kind: 'permanent',
+            provider: 'development',
+          });
         },
       },
-      emailProvider: fakeProvider(),
       createLogger: (correlationId) => createLogger(correlationId, (line) => lines.push(line)),
     });
 
@@ -251,6 +260,7 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
       fakeContext(),
     );
 
+    assert.equal(response.status, 502);
     const serialized = JSON.stringify({ body: response.jsonBody, logs: lines });
     assert.ok(!serialized.includes('super-secret-token'));
     assert.ok(!serialized.includes('FORWARD_EMAIL_TOKEN_INKADS'));
@@ -259,7 +269,10 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
   it('does not expose provider account identifiers when provider secret map is malformed', async () => {
     process.env.TENANT_EMAIL_CONFIG_BY_ID = JSON.stringify({
       inkads: {
-        production: { fromAddress: 'noreply@inkads.example.com' },
+        production: {
+          fromAddress: 'noreply@inkads.example.com',
+          providerAccount: 'configured-account-id',
+        },
       },
     });
     process.env.TENANT_PROVIDER_ACCOUNT_SECRETS = JSON.stringify({

@@ -15,6 +15,8 @@ import {
 import { TenantResolverError, type TenantResolver } from '../tenant';
 import type { ResolvedTenantEmailConfig } from '../tenant/tenant-email-config';
 import { TemplateStoreError, type TemplateStore } from '../templates';
+import { resetSendRateLimiter } from '../contact-rate-limit';
+import { resetSendSizeLimitsCache } from '../send-limits';
 import { createLogger } from '../telemetry';
 import { createSendHandler } from './send';
 
@@ -41,10 +43,13 @@ const COMPILED: CompiledTemplate = {
 
 function fakeRequest(options: { headers?: Record<string, string>; json?: unknown }): HttpRequest {
   const headers = new Headers(options.headers);
+  const jsonBody = options.json ?? null;
+  const textBody = jsonBody === null ? '' : JSON.stringify(jsonBody);
   return {
     method: 'POST',
     headers: { get: (name: string) => headers.get(name) },
-    json: async () => options.json ?? null,
+    json: async () => jsonBody,
+    text: async () => textBody,
   } as unknown as HttpRequest;
 }
 
@@ -423,6 +428,139 @@ describe('sendHandler', () => {
     assert.equal(failed.environment, 'development');
     assert.ok(!JSON.stringify(failed).includes('user@example.com'));
     assert.ok(!JSON.stringify(failed).includes('Ada'));
+  });
+
+  it('returns 429 RATE_LIMITED with Retry-After when the tenant exceeds the send limit', async () => {
+    resetSendRateLimiter();
+    process.env.SEND_RATE_LIMIT_PER_MIN = '1';
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(COMPILED),
+      emailProvider: fakeProvider(),
+      ...stubTenantSender(),
+    });
+
+    const body = validBody();
+    const first = await handler(fakeRequest({ json: body }), fakeContext());
+    assert.equal(first.status, 200);
+
+    const second = await handler(fakeRequest({ json: body }), fakeContext());
+    assert.equal(second.status, 429);
+    assert.equal((second.jsonBody as { code: string }).code, PostKitErrorCode.RATE_LIMITED);
+    assert.ok(Number((second.headers as Record<string, string>)['Retry-After']) >= 1);
+    delete process.env.SEND_RATE_LIMIT_PER_MIN;
+    resetSendRateLimiter();
+  });
+
+  it('isolates rate limits per tenant', async () => {
+    resetSendRateLimiter();
+    process.env.SEND_RATE_LIMIT_PER_MIN = '1';
+    const tenantB: TenantResolver = {
+      resolve: async () => ({ tenantId: 'other', environment: 'development' }),
+    };
+    const handlerA = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(COMPILED),
+      emailProvider: fakeProvider(),
+      ...stubTenantSender(),
+    });
+    const handlerB = createSendHandler({
+      tenantResolver: tenantB,
+      templateStore: fakeStore(COMPILED),
+      emailProvider: fakeProvider(),
+      ...stubTenantSender(),
+    });
+
+    assert.equal((await handlerA(fakeRequest({ json: validBody() }), fakeContext())).status, 200);
+    assert.equal((await handlerB(fakeRequest({ json: validBody() }), fakeContext())).status, 200);
+    assert.equal((await handlerA(fakeRequest({ json: validBody() }), fakeContext())).status, 429);
+    delete process.env.SEND_RATE_LIMIT_PER_MIN;
+    resetSendRateLimiter();
+  });
+
+  it('rejects oversized request bodies before template load', async () => {
+    resetSendSizeLimitsCache();
+    process.env.SEND_MAX_BODY_BYTES = '50';
+    let loaded = false;
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: {
+        load: async () => {
+          loaded = true;
+          return COMPILED;
+        },
+      },
+      emailProvider: fakeProvider(),
+      ...stubTenantSender(),
+    });
+
+    const response = await handler(
+      fakeRequest({
+        json: {
+          template: 'marketing.contact-us',
+          to: 'user@example.com',
+          variables: { name: 'a'.repeat(100) },
+        },
+      }),
+      fakeContext(),
+    );
+
+    assert.equal(response.status, 400);
+    assert.equal((response.jsonBody as { code: string }).code, PostKitErrorCode.PAYLOAD_TOO_LARGE);
+    assert.match((response.jsonBody as { error: string }).error, /50/);
+    assert.equal(loaded, false);
+    delete process.env.SEND_MAX_BODY_BYTES;
+    resetSendSizeLimitsCache();
+  });
+
+  it('rejects oversized variable values with PAYLOAD_TOO_LARGE', async () => {
+    resetSendSizeLimitsCache();
+    process.env.SEND_MAX_VARIABLE_VALUE_BYTES = '10';
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(COMPILED),
+      emailProvider: fakeProvider(),
+      ...stubTenantSender(),
+    });
+
+    const response = await handler(
+      fakeRequest({
+        json: {
+          template: 'marketing.contact-us',
+          to: 'user@example.com',
+          variables: { name: '12345678901' },
+        },
+      }),
+      fakeContext(),
+    );
+
+    assert.equal(response.status, 400);
+    assert.equal((response.jsonBody as { code: string }).code, PostKitErrorCode.PAYLOAD_TOO_LARGE);
+    assert.match((response.jsonBody as { error: string }).error, /name/);
+    delete process.env.SEND_MAX_VARIABLE_VALUE_BYTES;
+    resetSendSizeLimitsCache();
+  });
+
+  it('returns 400 when request.text() fails instead of treating it as an empty body', async () => {
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(COMPILED),
+      emailProvider: fakeProvider(),
+      ...stubTenantSender(),
+    });
+
+    const request = {
+      method: 'POST',
+      headers: { get: () => null },
+      json: async () => validBody(),
+      text: async () => {
+        throw new Error('stream failed');
+      },
+    } as unknown as HttpRequest;
+
+    const response = await handler(request, fakeContext());
+    assert.equal(response.status, 400);
+    assert.match((response.jsonBody as { error: string }).error, /could not be read/i);
   });
 
   it('returns PROVIDER_FAILURE when the provider throws', async () => {

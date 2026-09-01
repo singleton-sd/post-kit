@@ -26,6 +26,10 @@ export enum PostKitErrorCode {
   MISSING_VARIABLES = 'MISSING_VARIABLES',
   /** The `to` recipient address failed basic validation. */
   INVALID_RECIPIENT = 'INVALID_RECIPIENT',
+  /** The request body or variables exceed configured size limits. */
+  PAYLOAD_TOO_LARGE = 'PAYLOAD_TOO_LARGE',
+  /** The authenticated tenant exceeded the send rate limit. */
+  RATE_LIMITED = 'RATE_LIMITED',
   /** The email provider accepted the request but returned an error or unexpected response. */
   PROVIDER_FAILURE = 'PROVIDER_FAILURE',
   /** The template storage backend returned an error. */
