@@ -4,17 +4,16 @@ import { ColumnsContainerPropsSchema as BaseColumnsContainerPropsSchema } from '
 
 const BasePropsShape = BaseColumnsContainerPropsSchema.shape.props.unwrap().unwrap().shape;
 
+const ColumnSchema = z.object({ childrenIds: z.array(z.string()) }).passthrough();
+
 const ColumnsContainerPropsSchema = z.object({
   style: BaseColumnsContainerPropsSchema.shape.style,
   props: z
     .object({
       ...BasePropsShape,
-      columns: z.tuple([
-        z.object({ childrenIds: z.array(z.string()) }),
-        z.object({ childrenIds: z.array(z.string()) }),
-        z.object({ childrenIds: z.array(z.string()) }),
-      ]),
+      columns: z.tuple([ColumnSchema, ColumnSchema, ColumnSchema]),
     })
+    .passthrough()
     .optional()
     .nullable(),
 });

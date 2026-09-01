@@ -8,6 +8,7 @@ const ContainerPropsSchema = z.object({
     .object({
       childrenIds: z.array(z.string()).optional().nullable(),
     })
+    .passthrough()
     .optional()
     .nullable(),
 });

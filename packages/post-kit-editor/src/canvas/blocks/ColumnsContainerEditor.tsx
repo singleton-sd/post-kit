@@ -28,7 +28,10 @@ export default function ColumnsContainerEditor({
     { block, blockId, childrenIds }: EditorChildrenChange,
   ) => {
     const nextColumns = [...columnsValue];
-    nextColumns[columnIndex] = { childrenIds };
+    nextColumns[columnIndex] = {
+      ...columnsValue[columnIndex],
+      childrenIds,
+    };
     patchDocument({
       [blockId]: block,
       [currentBlockId]: {

@@ -30,7 +30,10 @@ export default function ContainerEditor({ style, props }: ContainerProps): JSX.E
               type: 'Container',
               data: {
                 ...currentBlock.data,
-                props: { childrenIds: nextChildrenIds },
+                props: {
+                  ...currentBlock.data.props,
+                  childrenIds: nextChildrenIds,
+                },
               },
             },
           });

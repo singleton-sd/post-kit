@@ -75,16 +75,30 @@ const EDITOR_DICTIONARY = buildBlockConfigurationDictionary({
   Image: {
     schema: ImagePropsSchema,
     Component: (data) => {
-      const props = {
-        ...data,
-        props: {
-          ...data.props,
-          url: data.props?.url ?? 'https://placehold.co/600x400@2x/F8F8F8/CCC?text=Your%20image',
-        },
-      };
+      if (!data.props?.url) {
+        return (
+          <EditorBlockWrapper>
+            <div
+              data-testid="pk-editor-image-empty"
+              aria-hidden
+              style={{
+                backgroundColor: '#F8F8F8',
+                color: '#AAAAAA',
+                fontSize: '14px',
+                lineHeight: '400px',
+                textAlign: 'center',
+                width: '100%',
+                minHeight: '120px',
+              }}
+            >
+              Image
+            </div>
+          </EditorBlockWrapper>
+        );
+      }
       return (
         <EditorBlockWrapper>
-          <Image {...props} />
+          <Image {...data} />
         </EditorBlockWrapper>
       );
     },

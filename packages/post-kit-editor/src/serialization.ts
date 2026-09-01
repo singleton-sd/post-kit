@@ -28,6 +28,19 @@ function assertTemplateJson(value: unknown): Record<string, unknown> {
     );
   }
 
+  const root = value.root;
+  if (
+    !isPlainObject(root) ||
+    typeof root.type !== 'string' ||
+    root.type.trim() === '' ||
+    !isPlainObject(root.data)
+  ) {
+    throw new TemplateSourceError(
+      'template.json',
+      'must be an EmailBuilder document object with a root block',
+    );
+  }
+
   return value;
 }
 

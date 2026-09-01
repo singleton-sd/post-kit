@@ -51,6 +51,30 @@ describe('loadTemplateSource()', () => {
     );
   });
 
+  for (const [label, root] of [
+    ['null', null],
+    ['array', []],
+    ['missing type', { data: {} }],
+    ['empty type', { type: '  ', data: {} }],
+    ['missing data', { type: 'EmailLayout' }],
+  ] as const) {
+    it(`throws TemplateSourceError naming template.json when root is ${label}`, () => {
+      assert.throws(
+        () =>
+          loadTemplateSource({
+            templateJson: { root },
+            metadata: { key: 'a', name: 'A', subject: 'Hi', variables: [], schemaVersion: '1' },
+            previewData: {},
+          }),
+        (err: unknown) => {
+          assert.ok(err instanceof TemplateSourceError);
+          assert.equal(err.file, 'template.json');
+          return true;
+        },
+      );
+    });
+  }
+
   it('throws TemplateSourceError naming metadata.json when schemaVersion is unknown', () => {
     assert.throws(
       () =>
