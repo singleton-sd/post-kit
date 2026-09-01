@@ -178,7 +178,17 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       }
 
       const sizeLimits = getSendSizeLimits();
-      const rawBody = await request.text().catch(() => '');
+      let rawBody: string;
+      try {
+        rawBody = await request.text();
+      } catch {
+        return errorResponse(
+          400,
+          PostKitErrorCode.INVALID_RECIPIENT,
+          'Request body could not be read.',
+          'validation_error',
+        );
+      }
       const bodySize = validateRequestBodySize(rawBody, sizeLimits);
       if (!bodySize.ok) {
         return errorResponse(

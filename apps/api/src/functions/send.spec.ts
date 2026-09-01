@@ -541,6 +541,28 @@ describe('sendHandler', () => {
     resetSendSizeLimitsCache();
   });
 
+  it('returns 400 when request.text() fails instead of treating it as an empty body', async () => {
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(COMPILED),
+      emailProvider: fakeProvider(),
+      ...stubTenantSender(),
+    });
+
+    const request = {
+      method: 'POST',
+      headers: { get: () => null },
+      json: async () => validBody(),
+      text: async () => {
+        throw new Error('stream failed');
+      },
+    } as unknown as HttpRequest;
+
+    const response = await handler(request, fakeContext());
+    assert.equal(response.status, 400);
+    assert.match((response.jsonBody as { error: string }).error, /could not be read/i);
+  });
+
   it('returns PROVIDER_FAILURE when the provider throws', async () => {
     const { EmailProviderError } = await import('@singleton-sd/post-kit-email');
     const handler = createSendHandler({
