@@ -38,6 +38,8 @@ docs/
 │   ├── template-publishing.md (post-kit-publish, blob layout, environments)
 │   ├── api-quickstart.md     (send API + client quick start)
 │   └── public-forms.md       (public web forms: trusted server endpoint pattern)
+├── integrations/
+│   └── inkads-marketing.md   (InkAds PoC site → POST /contact)
 ├── onboarding/
 │   ├── tenant-onboarding.md  (new tenant → first email)
 │   └── environments.md       (dev/staging/prod separation, local dev)

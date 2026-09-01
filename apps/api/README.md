@@ -22,5 +22,6 @@ pnpm --filter @singleton-sd/post-kit-api test
 pnpm --filter @singleton-sd/post-kit-api start
 ```
 
-See [`docs/email-forward-email.md`](../../docs/email-forward-email.md) and
-[`infra/README.md`](../../infra/README.md).
+See [`docs/email-forward-email.md`](../../docs/email-forward-email.md),
+[`docs/integrations/inkads-marketing.md`](../../docs/integrations/inkads-marketing.md),
+and [`infra/README.md`](../../infra/README.md).
