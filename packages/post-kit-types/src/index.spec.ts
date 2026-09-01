@@ -172,16 +172,18 @@ describe('PostKitErrorCode', () => {
     assert.equal(PostKitErrorCode.INVALID_TEMPLATE, 'INVALID_TEMPLATE');
     assert.equal(PostKitErrorCode.MISSING_VARIABLES, 'MISSING_VARIABLES');
     assert.equal(PostKitErrorCode.INVALID_RECIPIENT, 'INVALID_RECIPIENT');
+    assert.equal(PostKitErrorCode.PAYLOAD_TOO_LARGE, 'PAYLOAD_TOO_LARGE');
+    assert.equal(PostKitErrorCode.RATE_LIMITED, 'RATE_LIMITED');
     assert.equal(PostKitErrorCode.PROVIDER_FAILURE, 'PROVIDER_FAILURE');
     assert.equal(PostKitErrorCode.STORAGE_FAILURE, 'STORAGE_FAILURE');
     assert.equal(PostKitErrorCode.TENANT_CONFIG_NOT_FOUND, 'TENANT_CONFIG_NOT_FOUND');
   });
 
-  it('has exactly 9 codes', () => {
+  it('has exactly 11 codes', () => {
     const codes = Object.keys(PostKitErrorCode).filter(
       (k) => typeof PostKitErrorCode[k as keyof typeof PostKitErrorCode] === 'string',
     );
-    assert.equal(codes.length, 9);
+    assert.equal(codes.length, 11);
   });
 });
 
