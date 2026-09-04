@@ -1,0 +1,26 @@
+{
+  "root": {
+    "type": "EmailLayout",
+    "data": {
+      "backdropColor": "#F8F8F8",
+      "canvasColor": "#FFFFFF",
+      "childrenIds": ["block-text"]
+    }
+  },
+  "block-text": {
+    "type": "Text",
+    "data": {
+      "style": {
+        "padding": { "top": 16, "bottom": 16, "right": 24, "left": 24 }
+      },
+      "props": {
+        "text": "Hello",
+        "futureEditorFlag": true,
+        "experimentalLayout": { "version": 2, "enabled": true }
+      }
+    }
+  },
+  "_editorMeta": {
+    "lastOpenedAt": "2026-01-01T00:00:00.000Z"
+  }
+}
