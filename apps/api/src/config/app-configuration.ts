@@ -30,6 +30,9 @@ export const APP_CONFIGURATION_ENVIRONMENT_KEYS: Readonly<Record<string, string>
   'app:email:validation:requireBimiSvg': 'EMAIL_VALIDATION_REQUIRE_BIMI_SVG',
   'app:templates:storageAccount': 'TEMPLATE_STORAGE_ACCOUNT',
   'app:templates:storageContainer': 'TEMPLATE_STORAGE_CONTAINER',
+  'app:idempotency:storageAccount': 'IDEMPOTENCY_STORAGE_ACCOUNT',
+  'app:idempotency:storageContainer': 'IDEMPOTENCY_STORAGE_CONTAINER',
+  'app:idempotency:ttlMs': 'IDEMPOTENCY_TTL_MS',
   'secret:forwardemail-api-key': 'FORWARD_EMAIL_TOKEN',
 };
 

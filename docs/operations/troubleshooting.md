@@ -54,6 +54,8 @@ ones.
 | 502 | `PROVIDER_FAILURE` | Rare; `kind=cancelled` | The send was aborted (caller/host cancellation) | Host shutdown, scaling events, or client disconnects in the same window | Yes — the message was probably never sent, but confirm no duplicate first |
 | 503 | `STORAGE_FAILURE` | Fails immediately, before auth; no `tenantId` or `templateKey`; `app configuration load failed` is logged | Azure App Configuration load threw — endpoint unreachable, identity lacks access, or a Key Vault reference is invalid or has no value | `AZURE_APPCONFIGURATION_ENDPOINT`, the Function App managed identity's App Configuration and Key Vault role assignments | Yes — the loader clears its cache on failure and retries on the next request |
 | 500 | `PROVIDER_FAILURE` | Unexpected failure; `send failed` is logged with only the error `name` | Any unhandled exception — e.g. a Blob Storage error that is not a not-found (auth, throttling, network), or a Handlebars compilation failure | The `send failed` entry's error `name` for that correlation ID, plus Function App exception telemetry | Yes once, but escalate if it repeats |
+| 409 | `IDEMPOTENCY_IN_PROGRESS` | Same `Idempotency-Key` replayed while the first send is still running; no second provider call | A concurrent or overlapping retry for the same tenant + key before the first request completes (or before a failed claim is released) | Whether another in-flight send shares the key; wait for the first response or for the claim TTL (default 24h) documented in [`send-idempotency.md`](../architecture/send-idempotency.md) | Yes — after a short wait, retry the **same** key; do not mint a new key for the same logical send |
+| 400 | `INVALID_RECIPIENT` | Rejected before storage; message mentions `Idempotency-Key`; `failureCategory=invalid_idempotency_key` | Header present but empty, longer than 128 characters, or outside `[A-Za-z0-9._:~-]` | The caller's `Idempotency-Key` value (not a secret, but still avoid pasting production keys into tickets unnecessarily) | No — fix the header |
 
 Notes on reading this table:
 
@@ -63,10 +65,9 @@ Notes on reading this table:
   `kind`.
 - `STORAGE_FAILURE` is currently returned **only** for App Configuration load
   failure. Blob Storage failures other than "not found" surface as `500`.
-- All nine `PostKitErrorCode` values are reachable from this endpoint and all
-  nine appear above: `UNAUTHENTICATED`, `UNAUTHORIZED`, `INVALID_TEMPLATE`,
-  `INVALID_RECIPIENT`, `MISSING_VARIABLES`, `TEMPLATE_NOT_FOUND`,
-  `TENANT_CONFIG_NOT_FOUND`, `PROVIDER_FAILURE`, `STORAGE_FAILURE`.
+- `PostKitErrorCode` values reachable from this endpoint appear above, including
+  `IDEMPOTENCY_IN_PROGRESS` (409) and invalid `Idempotency-Key` (400,
+  `INVALID_RECIPIENT` with `failureCategory=invalid_idempotency_key`).
 
 ## Correlation IDs and log fields
 
