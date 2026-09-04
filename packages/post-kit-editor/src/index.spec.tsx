@@ -72,9 +72,31 @@ describe('EmailTemplateEditor', () => {
     assert.match(html, /Hello \{\{name\}\}/);
   });
 
+  it('renders the metadata panel and variable catalogue beside the canvas', () => {
+    const html = renderToStaticMarkup(<EmailTemplateEditor {...baseProps} />);
+    assert.match(html, new RegExp(`${EDITOR_CLASS_PREFIX}metadata`));
+    assert.match(html, new RegExp(`${EDITOR_CLASS_PREFIX}variables`));
+    assert.match(html, /value="marketing\.contact-us"/);
+    assert.match(html, /value="Contact Us"/);
+    assert.match(html, /Preview: New message from Jane Doe/);
+    assert.match(html, /\{\{name\}\}/);
+  });
+
+  it('lists availableVariables when the consumer supplies them', () => {
+    const html = renderToStaticMarkup(
+      <EmailTemplateEditor
+        {...baseProps}
+        availableVariables={[{ name: 'resetUrl', label: 'Reset URL' }]}
+      />,
+    );
+    assert.match(html, /Reset URL/);
+    assert.match(html, /\{\{resetUrl\}\}/);
+  });
+
   it('does not render save or send-test chrome yet', () => {
     const html = renderToStaticMarkup(<EmailTemplateEditor {...baseProps} />);
-    assert.doesNotMatch(html, /save/i);
+    assert.doesNotMatch(html, /send test/i);
+    assert.doesNotMatch(html, /data-testid="[^"]*save/);
   });
 });
 
