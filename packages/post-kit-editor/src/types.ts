@@ -1,4 +1,15 @@
+import type { TReaderDocument } from '@usewaypoint/email-builder';
 import type { TemplateSourceMetadata, TemplatePreviewData } from '@singleton-sd/post-kit-types';
+
+/**
+ * EmailBuilder.js reader document — the editable `template.json` payload.
+ *
+ * Re-exported from `@usewaypoint/email-builder` so editor and compiler share the
+ * same structural type accepted by `renderToStaticMarkup` / `compile()`.
+ * Additional top-level keys are allowed so forward-compatible fields survive
+ * load/serialize round-trips.
+ */
+export type EmailBuilderDocument = TReaderDocument & Record<string, unknown>;
 
 /**
  * The in-memory triple of Git-backed template source files the editor works on.
@@ -9,8 +20,7 @@ import type { TemplateSourceMetadata, TemplatePreviewData } from '@singleton-sd/
  *   - preview.json  — TemplatePreviewData
  */
 export interface TemplateSourceFiles {
-  /** EmailBuilder.js document — typed in the canvas issue. */
-  templateJson: unknown;
+  templateJson: EmailBuilderDocument;
   metadata: TemplateSourceMetadata;
   previewData: TemplatePreviewData;
 }

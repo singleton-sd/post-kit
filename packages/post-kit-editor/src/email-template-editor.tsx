@@ -1,7 +1,9 @@
 // `tsx` (the test runner's loader) compiles JSX with the classic runtime, so
 // React must be in scope even though `tsc` is configured for `react-jsx`.
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 
+import { EmailBuilderCanvas } from './canvas/EmailBuilderCanvas';
+import type { EmailBuilderDocument } from './types';
 import type { TemplateSourceFiles, TemplateVariable } from './types';
 
 /**
@@ -23,14 +25,31 @@ export interface EmailTemplateEditorProps {
 }
 
 /**
- * Placeholder editor surface.
+ * Email template editor with an EmailBuilder.js canvas.
  *
- * Renders the root container only — the canvas, metadata form, preview pane and
- * validation surfaces arrive in later issues. Persistence is consumer-supplied
- * via `onSave`.
+ * Holds the working `TemplateSourceFiles` in local state, seeded from the
+ * `template` prop. Canvas edits update `templateJson`; metadata and preview
+ * data are passed through unchanged until dedicated editing surfaces land in
+ * later issues. Persistence is consumer-supplied via `onSave`.
  */
-export function EmailTemplateEditor({ className }: EmailTemplateEditorProps): JSX.Element {
+export function EmailTemplateEditor({
+  template,
+  className,
+}: EmailTemplateEditorProps): JSX.Element {
+  const [workingFiles, setWorkingFiles] = useState<TemplateSourceFiles>(template);
+
+  const handleDocumentChange = useCallback((document: EmailBuilderDocument) => {
+    setWorkingFiles((current) => ({
+      ...current,
+      templateJson: document,
+    }));
+  }, []);
+
   const rootClassName = [`${EDITOR_CLASS_PREFIX}root`, className].filter(Boolean).join(' ');
 
-  return <div className={rootClassName} data-testid={`${EDITOR_CLASS_PREFIX}root`} />;
+  return (
+    <div className={rootClassName} data-testid={`${EDITOR_CLASS_PREFIX}root`}>
+      <EmailBuilderCanvas document={workingFiles.templateJson} onChange={handleDocumentChange} />
+    </div>
+  );
 }
