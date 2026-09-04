@@ -71,3 +71,4 @@ docs/
 | [`operations/troubleshooting.md`](./operations/troubleshooting.md) | `POST /emails/send` error triage, correlation-ID tracing, incident runbooks |
 | [`operations/send-metrics-queries.md`](./operations/send-metrics-queries.md) | Kusto queries for send volume, success rate, provider failures, latency, duplicates |
 | [`guides/public-forms.md`](./guides/public-forms.md) | Public web forms (Contact Us, waitlist): trusted server endpoint pattern, credential-exposure anti-patterns, consumer-side validation / abuse / rate-limit duties |
+| [`integrations/inkads-marketing.md`](./integrations/inkads-marketing.md) | InkAds PoC site → `POST /contact` integration |

@@ -55,16 +55,45 @@ InkAds maps the contact form role select to these values (venue →
 
 ## PR preview behaviour
 
-PR previews are served on `inkads.poc.singletonsd.com` (subpath previews), not
-raw `azurestaticapps.net` hosts. Contact submissions from previews therefore use
-the production email provider and the InkAds inbox, subject to PostKit rate
-limits (`app:email:rateLimitPerMin`).
+PR previews are served on `inkads.poc.singletonsd.com` under `/pr-preview/pr-*`,
+not raw `azurestaticapps.net` hosts. The HTTP `Origin` header is only
+`scheme://host[:port]` — it never includes that path — so PostKit cannot tell
+production and same-host preview apart from `Origin` alone. The default browser
+Referrer-Policy also strips the path on cross-origin POSTs to the Function App.
 
-To capture instead of send on localhost dev, use `http://localhost:4321` — PostKit
+**Required for preview pages:** the InkAds client must send:
+
+```http
+X-PostKit-Contact-Preview: true
+```
+
+When that header is present (or when `Origin` is `*.azurestaticapps.net` /
+`localhost`), PostKit uses `DevelopmentEmailProvider` and does **not** deliver
+to `inkads-support@singletonsd.com`, unless the operator override below is set.
+Production pages omit the header and use the configured provider + InkAds inbox
+(rate-limited via `app:email:rateLimitPerMin`).
+
+CORS allows the header (`Access-Control-Allow-Headers` includes
+`x-postkit-contact-preview`). Example fetch from a preview page:
+
+```ts
+await fetch(`${import.meta.env.PUBLIC_POSTKIT_API_BASE_URL}/contact`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    ...(location.pathname.includes('/pr-preview/')
+      ? { 'X-PostKit-Contact-Preview': 'true' }
+      : {}),
+  },
+  body: JSON.stringify(payload),
+});
+```
+
+Localhost (`http://localhost:4321`) is always treated as preview traffic and
 returns success via `DevelopmentEmailProvider` without outbound email.
 
 Optional operator override: `EMAIL_ALLOW_PREVIEW_SEND=true` on the Function App
-also allows real sends from `azurestaticapps.net` and localhost (see
+allows real sends from preview hosts / preview-marked requests (see
 [`apps/api/src/contact.ts`](../../apps/api/src/contact.ts)).
 
 ## Operator verification

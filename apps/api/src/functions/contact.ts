@@ -1,7 +1,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { EmailProviderError } from '@singleton-sd/post-kit-email';
 import { ensureAppConfiguration } from '../config/app-configuration';
-import { contactCorsHeaders, submitContactInquiry } from '../contact';
+import { CONTACT_PREVIEW_HEADER, contactCorsHeaders, submitContactInquiry } from '../contact';
 import { clientIpFromHeaders, getContactRateLimiter } from '../contact-rate-limit';
 import { createLogger, resolveCorrelationId } from '../telemetry';
 
@@ -16,6 +16,8 @@ export async function contactHandler(
   logger.info('contact.request.received');
 
   const origin = request.headers.get('origin');
+  const referer = request.headers.get('referer');
+  const previewHeader = request.headers.get(CONTACT_PREVIEW_HEADER);
   try {
     await ensureAppConfiguration();
   } catch (error) {
@@ -73,7 +75,11 @@ export async function contactHandler(
 
   try {
     const body = await request.json().catch(() => null);
-    const result = await submitContactInquiry(body, { requestOrigin: origin });
+    const result = await submitContactInquiry(body, {
+      requestOrigin: origin,
+      requestReferer: referer,
+      previewHeader,
+    });
     const durationMs = Date.now() - startMs;
     logger.info('contact.request.completed', { outcome: 'sent', durationMs });
     return {
