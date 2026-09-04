@@ -46,22 +46,69 @@ export function resolveTrustedContactHost(
 }
 
 /**
- * Preview SWA hosts must not trigger real outbound email against the shared
+ * Header marketing PR-preview pages must set so PostKit can tell them apart from
+ * production on the same host. `Origin` never includes the URL path, and the
+ * default browser Referrer-Policy strips the path on cross-origin POSTs, so a
+ * dedicated header is the only reliable same-host preview signal.
+ */
+export const CONTACT_PREVIEW_HEADER = 'x-postkit-contact-preview';
+
+/**
+ * True when the request should use DevelopmentEmailProvider unless the operator
+ * has set EMAIL_ALLOW_PREVIEW_SEND=true.
+ *
+ * Covers:
+ * - SWA default / PR hosts (`*.azurestaticapps.net`)
+ * - localhost
+ * - same-host path previews that send `X-PostKit-Contact-Preview: 1|true`
+ * - Referer paths containing `/pr-preview/` when a full Referer URL is present
+ */
+export function isPreviewContactTraffic(
+  requestOrigin: string | null | undefined,
+  options: {
+    requestReferer?: string | null;
+    previewHeader?: string | null;
+  } = {},
+): boolean {
+  const previewHeader = options.previewHeader?.trim().toLowerCase();
+  if (previewHeader === '1' || previewHeader === 'true') {
+    return true;
+  }
+
+  if (options.requestReferer) {
+    try {
+      const refererPath = new URL(options.requestReferer).pathname;
+      if (/(?:^|\/)pr-preview(?:\/|$)/.test(refererPath)) {
+        return true;
+      }
+    } catch {
+      // ignore malformed Referer
+    }
+  }
+
+  if (!requestOrigin) return false;
+  try {
+    const host = new URL(requestOrigin).host.toLowerCase();
+    return host.endsWith('.azurestaticapps.net') || host.startsWith('localhost');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Preview traffic must not trigger real outbound email against the shared
  * Function App unless EMAIL_ALLOW_PREVIEW_SEND=true.
  */
 export function resolveContactEmailProvider(
   requestOrigin: string | null,
   env: NodeJS.ProcessEnv = process.env,
+  options: {
+    requestReferer?: string | null;
+    previewHeader?: string | null;
+  } = {},
 ): EmailProvider {
-  if (requestOrigin && env.EMAIL_ALLOW_PREVIEW_SEND !== 'true') {
-    try {
-      const host = new URL(requestOrigin).host.toLowerCase();
-      if (host.endsWith('.azurestaticapps.net') || host.startsWith('localhost')) {
-        return new DevelopmentEmailProvider({ logMetadata: true });
-      }
-    } catch {
-      // fall through to configured provider
-    }
+  if (env.EMAIL_ALLOW_PREVIEW_SEND !== 'true' && isPreviewContactTraffic(requestOrigin, options)) {
+    return new DevelopmentEmailProvider({ logMetadata: true });
   }
   return createEmailProvider(env);
 }
@@ -70,6 +117,8 @@ export async function submitContactInquiry(
   body: unknown,
   options: {
     requestOrigin?: string | null;
+    requestReferer?: string | null;
+    previewHeader?: string | null;
     email?: EmailProvider;
     env?: NodeJS.ProcessEnv;
   } = {},
@@ -82,7 +131,12 @@ export async function submitContactInquiry(
   }
 
   const env = options.env ?? process.env;
-  const email = options.email ?? resolveContactEmailProvider(options.requestOrigin ?? null, env);
+  const email =
+    options.email ??
+    resolveContactEmailProvider(options.requestOrigin ?? null, env, {
+      requestReferer: options.requestReferer,
+      previewHeader: options.previewHeader,
+    });
   const result = await sendContactInquiryEmail(validated.value, email, env, {
     trustedRequestHost: resolveTrustedContactHost(options.requestOrigin ?? null, env),
   });
@@ -93,7 +147,7 @@ export async function submitContactInquiry(
 export function contactCorsHeaders(requestOrigin: string | null): Record<string, string> {
   const headers: Record<string, string> = {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Accept',
+    'Access-Control-Allow-Headers': `Content-Type, Accept, ${CONTACT_PREVIEW_HEADER}`,
     'Access-Control-Max-Age': '86400',
   };
   if (!requestOrigin) return headers;

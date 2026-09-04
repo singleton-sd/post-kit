@@ -4,6 +4,7 @@ import { DevelopmentEmailProvider } from '@singleton-sd/post-kit-email';
 import {
   buildContactEmailRequest,
   contactCorsHeaders,
+  isPreviewContactTraffic,
   resolveContactEmailProvider,
   resolveTrustedContactHost,
   submitContactInquiry,
@@ -56,6 +57,67 @@ describe('contact send', () => {
       EMAIL_ALLOW_PRODUCTION_SEND: 'true',
     });
     assert.equal(provider.name, 'development');
+  });
+
+  it('forces development provider for same-host PR previews via preview header', () => {
+    const provider = resolveContactEmailProvider(
+      'https://inkads.poc.singletonsd.com',
+      {
+        EMAIL_PROVIDER: 'forward-email',
+        FORWARD_EMAIL_TOKEN: 'secret',
+        EMAIL_ALLOW_PRODUCTION_SEND: 'true',
+      },
+      { previewHeader: 'true' },
+    );
+    assert.equal(provider.name, 'development');
+  });
+
+  it('forces development provider when Referer path is /pr-preview/', () => {
+    const provider = resolveContactEmailProvider(
+      'https://inkads.poc.singletonsd.com',
+      {
+        EMAIL_PROVIDER: 'forward-email',
+        FORWARD_EMAIL_TOKEN: 'secret',
+        EMAIL_ALLOW_PRODUCTION_SEND: 'true',
+      },
+      {
+        requestReferer: 'https://inkads.poc.singletonsd.com/pr-preview/pr-72/',
+      },
+    );
+    assert.equal(provider.name, 'development');
+  });
+
+  it('keeps the configured provider for production origin without preview signals', () => {
+    const provider = resolveContactEmailProvider('https://inkads.poc.singletonsd.com', {
+      EMAIL_PROVIDER: 'forward-email',
+      FORWARD_EMAIL_TOKEN: 'secret',
+      EMAIL_ALLOW_PRODUCTION_SEND: 'true',
+    });
+    assert.equal(provider.name, 'forward-email');
+    assert.equal(
+      isPreviewContactTraffic('https://inkads.poc.singletonsd.com', {
+        requestReferer: 'https://inkads.poc.singletonsd.com/contact',
+      }),
+      false,
+    );
+  });
+
+  it('allows real preview sends when EMAIL_ALLOW_PREVIEW_SEND=true', () => {
+    const provider = resolveContactEmailProvider(
+      'https://inkads.poc.singletonsd.com',
+      {
+        EMAIL_PROVIDER: 'forward-email',
+        FORWARD_EMAIL_TOKEN: 'secret',
+        EMAIL_ALLOW_PRODUCTION_SEND: 'true',
+        EMAIL_ALLOW_PREVIEW_SEND: 'true',
+      },
+      { previewHeader: '1' },
+    );
+    assert.equal(provider.name, 'forward-email');
+    assert.equal(
+      isPreviewContactTraffic('https://inkads.poc.singletonsd.com', { previewHeader: '1' }),
+      true,
+    );
   });
 
   it('applies host-based sender profile override when configured', async () => {
@@ -149,6 +211,7 @@ describe('contactCorsHeaders', () => {
         headers['Access-Control-Allow-Origin'],
         'https://plattform-kit.poc.singletonsd.com',
       );
+      assert.match(headers['Access-Control-Allow-Headers'] ?? '', /x-postkit-contact-preview/i);
     });
   });
 
