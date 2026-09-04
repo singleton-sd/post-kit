@@ -7,7 +7,8 @@ supporting behaviour lives in `apps/api/src/tenant/`,
 `apps/api/src/telemetry/`.
 
 For the wider system picture see [`overview.md`](./overview.md); for the
-tenant boundary see [`multi-tenant-security.md`](./multi-tenant-security.md).
+tenant boundary see [`multi-tenant-security.md`](./multi-tenant-security.md);
+for send idempotency see [`send-idempotency.md`](./send-idempotency.md).
 
 ## Route
 
@@ -66,12 +67,20 @@ credential.
         html    = Handlebars.compile(templateHtml)(variables)
         HTML-escaping stays on (noEscape: false)
         |
-9.  from address
-        EMAIL_FROM_ADDRESS required; EMAIL_FROM_NAME optional
-        missing -> 503 PROVIDER_FAILURE
+9.  from address / tenant sender config
+        resolveTenantEmailConfig(tenant)
+        missing -> 503 TENANT_CONFIG_NOT_FOUND / PROVIDER_FAILURE
+        |
+9b. Idempotency-Key (optional)
+        absent -> skip (at-least-once)
+        invalid -> 400 before storage
+        begin claim in Blob ledger (see send-idempotency.md)
+        completed replay -> 200 original SendResponse (no provider call)
+        in flight -> 409 IDEMPOTENCY_IN_PROGRESS
         |
 10. provider.send({ to, from, fromName, subject, html, correlationId })
         createEmailProvider(process.env) -> development sink or Forward Email
+        on success with claim -> complete ledger; on failure -> release claim
         failure -> 502/503 PROVIDER_FAILURE
         |
 11. log send.request.completed (outcome, durationMs, tenantId, templateKey,
@@ -117,6 +126,8 @@ Consumers should branch on `code`, not on the message text or the status.
 | `EMAIL_FROM_ADDRESS` is not configured                           | `503` | `PROVIDER_FAILURE`   | Service-side misconfiguration. Retry later; report the correlation ID.                     |
 | Provider failed with kind `configuration`, `transient`, or `rate_limit` | `503` | `PROVIDER_FAILURE` | Retry with backoff.                                                                  |
 | Provider failed with any other kind (`validation`, `permanent`, `cancelled`) | `502` | `PROVIDER_FAILURE` | Do not blindly retry — the message was rejected downstream.               |
+| Same `Idempotency-Key` still in flight for this tenant                   | `409` | `IDEMPOTENCY_IN_PROGRESS` | Wait and retry the same key; do not start a parallel send.              |
+| `Idempotency-Key` present but empty, oversized, or bad charset           | `400` | `INVALID_RECIPIENT` | Fix the header: 1–128 of `[A-Za-z0-9._:~-]`. (Code reused for request-input validation.) |
 | Unhandled exception                                              | `500` | `PROVIDER_FAILURE`   | Retry with backoff; report the correlation ID.                                            |
 
 Two things to be aware of when reading the table:

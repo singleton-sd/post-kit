@@ -36,6 +36,11 @@ export enum PostKitErrorCode {
   STORAGE_FAILURE = 'STORAGE_FAILURE',
   /** The authenticated tenant has no email sender configuration for this environment. */
   TENANT_CONFIG_NOT_FOUND = 'TENANT_CONFIG_NOT_FOUND',
+  /**
+   * The same Idempotency-Key is already being processed for this tenant.
+   * Wait and retry; do not treat as a permanent failure.
+   */
+  IDEMPOTENCY_IN_PROGRESS = 'IDEMPOTENCY_IN_PROGRESS',
 }
 
 /**
