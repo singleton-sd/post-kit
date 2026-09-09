@@ -133,6 +133,7 @@ describe('sendHandler idempotency', () => {
     );
     assert.equal(first.status, 200);
     assert.deepEqual(first.jsonBody, { id: 'corr-first-01', status: 'sent' });
+    assert.equal(first.headers?.['X-Correlation-Id'], 'corr-first-01');
     assert.equal(sent.length, 1);
 
     const second = await handler(
@@ -148,6 +149,7 @@ describe('sendHandler idempotency', () => {
     );
     assert.equal(second.status, 200);
     assert.deepEqual(second.jsonBody, { id: 'corr-first-01', status: 'sent' });
+    assert.equal(second.headers?.['X-Correlation-Id'], 'corr-second-02');
     assert.equal(sent.length, 1);
   });
 
@@ -158,6 +160,10 @@ describe('sendHandler idempotency', () => {
     const sendGate = new Promise<void>((resolve) => {
       releaseSend = resolve;
     });
+    let sendEntered!: () => void;
+    const sendStarted = new Promise<void>((resolve) => {
+      sendEntered = resolve;
+    });
 
     const handler = createSendHandler({
       tenantResolver: fakeResolver(),
@@ -166,6 +172,7 @@ describe('sendHandler idempotency', () => {
         name: 'development',
         isConfigured: () => true,
         send: async () => {
+          sendEntered();
           await sendGate;
           return { providerMessageId: 'msg-1', accepted: true };
         },
@@ -182,8 +189,8 @@ describe('sendHandler idempotency', () => {
       fakeContext(),
     );
 
-    // Allow the first handler to claim and block inside provider.send.
-    await new Promise((r) => setTimeout(r, 20));
+    // The first handler has claimed the key once provider.send is entered.
+    await sendStarted;
 
     const concurrent = await handler(
       fakeRequest({
@@ -202,6 +209,39 @@ describe('sendHandler idempotency', () => {
     releaseSend();
     const first = await firstPromise;
     assert.equal(first.status, 200);
+  });
+
+  it('returns 503 when completion fails after a successful provider send', async () => {
+    resetSendRateLimiter();
+    const sent: EmailSendRequest[] = [];
+    const handler = createSendHandler({
+      tenantResolver: fakeResolver(),
+      templateStore: fakeStore(),
+      emailProvider: fakeProvider(sent),
+      idempotencyStore: {
+        begin: async () => ({ outcome: 'claimed', claimToken: 'tok-1' }),
+        complete: async () => {
+          throw new Error('blob write failed');
+        },
+        release: async () => undefined,
+      },
+      ...stubSender(),
+    });
+
+    const response = await handler(
+      fakeRequest({
+        headers: { 'idempotency-key': 'complete-fail', 'x-correlation-id': 'corr-complete-fail' },
+        json: validBody(),
+      }),
+      fakeContext(),
+    );
+
+    assert.equal(response.status, 503);
+    assert.equal(sent.length, 1);
+    assert.match(
+      (response.jsonBody as { error: string }).error,
+      /idempotency record could not be saved/i,
+    );
   });
 
   it('treats the same key from a different tenant as a distinct request', async () => {
@@ -256,7 +296,7 @@ describe('sendHandler idempotency', () => {
       idempotencyStore: {
         begin: async () => {
           beginCalled = true;
-          return { outcome: 'claimed' };
+          return { outcome: 'claimed', claimToken: 'tok' };
         },
         complete: async () => undefined,
         release: async () => undefined,

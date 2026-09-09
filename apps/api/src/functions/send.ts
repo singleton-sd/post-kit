@@ -310,6 +310,7 @@ export function createSendHandler(deps: SendHandlerDependencies) {
 
       let idempotencyStore: IdempotencyStore | undefined;
       let idempotencyClaimed = false;
+      let idempotencyClaimToken: string | undefined;
       if (idempotencyKey) {
         try {
           idempotencyStore =
@@ -354,14 +355,10 @@ export function createSendHandler(deps: SendHandlerDependencies) {
             durationMs,
             ...logContext(),
           });
-          return {
-            status: 200,
-            headers: {
-              ...headers,
-              'X-Correlation-Id': beginResult.response.id,
-            },
-            jsonBody: beginResult.response,
-          };
+          // Keep the current request correlation ID in the response header so
+          // callers can correlate this invocation's logs; the original send id
+          // remains in the body.
+          return { status: 200, headers, jsonBody: beginResult.response };
         }
 
         if (beginResult.outcome === 'in_progress') {
@@ -375,6 +372,7 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         }
 
         idempotencyClaimed = true;
+        idempotencyClaimToken = beginResult.claimToken;
       }
 
       try {
@@ -390,16 +388,31 @@ export function createSendHandler(deps: SendHandlerDependencies) {
 
         const response: SendResponse = { id: correlationId, status: 'sent' };
 
-        if (idempotencyClaimed && idempotencyStore && idempotencyKey) {
+        if (idempotencyClaimed && idempotencyStore && idempotencyKey && idempotencyClaimToken) {
           try {
-            await idempotencyStore.complete(tenant, idempotencyKey, response);
+            await completeIdempotencyWithRetry(
+              idempotencyStore,
+              tenant,
+              idempotencyKey,
+              response,
+              idempotencyClaimToken,
+            );
           } catch (err) {
-            // Provider already accepted the message — return success and log.
-            // The in-progress claim remains until TTL so replays stay safe.
+            // Provider already accepted the message — do not return 200 while the
+            // ledger is still in_progress (that would 409 retries until TTL, then
+            // risk a second send). Ask the client to retry the same key after we
+            // failed to persist completion.
             context.error('idempotency complete failed', {
               name: err instanceof Error ? err.name : 'Error',
               correlationId,
             });
+            return errorResponse(
+              503,
+              err instanceof IdempotencyStoreError ? err.code : PostKitErrorCode.STORAGE_FAILURE,
+              'The message was accepted by the provider but the idempotency record could not be saved. Retry with the same Idempotency-Key.',
+              'failed',
+              { failureCategory: 'idempotency_complete_failed' },
+            );
           }
         }
 
@@ -413,9 +426,9 @@ export function createSendHandler(deps: SendHandlerDependencies) {
 
         return { status: 200, headers, jsonBody: response };
       } catch (sendError) {
-        if (idempotencyClaimed && idempotencyStore && idempotencyKey) {
+        if (idempotencyClaimed && idempotencyStore && idempotencyKey && idempotencyClaimToken) {
           try {
-            await idempotencyStore.release(tenant, idempotencyKey);
+            await idempotencyStore.release(tenant, idempotencyKey, idempotencyClaimToken);
           } catch {
             // Prefer the original send failure; release is best-effort.
           }
@@ -478,6 +491,40 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       );
     }
   };
+}
+
+const IDEMPOTENCY_COMPLETE_ATTEMPTS = 3;
+
+/**
+ * Persist a completed idempotency record before acknowledging success to the
+ * caller. Retries briefly so transient storage blips do not leave an
+ * `in_progress` claim after a successful provider send.
+ */
+async function completeIdempotencyWithRetry(
+  store: IdempotencyStore,
+  tenant: TenantContext,
+  key: string,
+  response: SendResponse,
+  claimToken: string,
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= IDEMPOTENCY_COMPLETE_ATTEMPTS; attempt += 1) {
+    try {
+      await store.complete(tenant, key, response, claimToken);
+      return;
+    } catch (err) {
+      lastError = err;
+      if (attempt < IDEMPOTENCY_COMPLETE_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 25));
+      }
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new IdempotencyStoreError(
+        'Failed to persist completed idempotency record.',
+        PostKitErrorCode.STORAGE_FAILURE,
+      );
 }
 
 function failureCategoryFromErrorCode(

@@ -72,14 +72,22 @@ immediately.
 ```text
 1. Validate Idempotency-Key (reject → 400)
 2. Conditional create blob status=in_progress (If-None-Match: *)
-   - created → claim held; continue to provider.send
-   - conflict → read existing
+   - created → claim held (retain blob ETag as claimToken); continue to provider.send
+   - conflict → read existing (+ ETag)
        - completed + fresh → return stored SendResponse (200)
        - in_progress + fresh → 409 IDEMPOTENCY_IN_PROGRESS
-       - expired → overwrite and claim
-3. On provider success → overwrite blob status=completed + response
-4. On provider failure → delete in-progress blob (release) so the same key may retry
+       - expired / absent → reclaim with If-Match (observed ETag) or If-None-Match: *
+         on race loss, re-evaluate the current record
+3. On provider success → complete with If-Match: claimToken (retries briefly)
+   - success → 200 with SendResponse
+   - still failing → 503 (do not acknowledge success while the ledger is in_progress;
+     client should retry the same Idempotency-Key)
+4. On provider failure → delete in-progress blob with If-Match: claimToken (release)
+   so the same key may retry; stale tokens are ignored
 ```
+
+Replay responses keep the **current** request's `X-Correlation-Id` header; the
+original send id remains in the JSON body (`SendResponse.id`).
 
 ## Configuration
 

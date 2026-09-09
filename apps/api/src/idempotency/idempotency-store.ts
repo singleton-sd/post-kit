@@ -22,8 +22,15 @@ export interface IdempotencyRecord {
   expiresAt: string;
 }
 
+/**
+ * Opaque concurrency token for the claim (Blob ETag or in-memory generation).
+ * Must be passed to `complete` / `release` so a stale claimant cannot overwrite
+ * a newer record.
+ */
+export type IdempotencyClaimToken = string;
+
 export type IdempotencyBeginResult =
-  | { outcome: 'claimed' }
+  | { outcome: 'claimed'; claimToken: IdempotencyClaimToken }
   | { outcome: 'replay'; response: SendResponse }
   | { outcome: 'in_progress' };
 
@@ -36,18 +43,29 @@ export type IdempotencyBeginResult =
 export interface IdempotencyStore {
   /**
    * Claim the key for an in-flight send, or return an existing outcome.
-   * Expired records are ignored (treated as absent).
+   * Expired records are ignored (treated as absent) and may be reclaimed with
+   * conditional writes keyed by the observed ETag / generation.
    */
   begin(tenant: TenantContext, key: string): Promise<IdempotencyBeginResult>;
 
-  /** Mark the key completed and store the success response for replays. */
-  complete(tenant: TenantContext, key: string, response: SendResponse): Promise<void>;
+  /**
+   * Mark the key completed and store the success response for replays.
+   * Must use `claimToken` from `begin` so a stale claimant cannot overwrite a
+   * newer claim or completed record.
+   */
+  complete(
+    tenant: TenantContext,
+    key: string,
+    response: SendResponse,
+    claimToken: IdempotencyClaimToken,
+  ): Promise<void>;
 
   /**
    * Drop an in-progress claim so the caller may retry after a failed send.
-   * No-op when the record is already completed or absent.
+   * No-op when the record is already completed, absent, or owned by another
+   * claim (`claimToken` mismatch).
    */
-  release(tenant: TenantContext, key: string): Promise<void>;
+  release(tenant: TenantContext, key: string, claimToken: IdempotencyClaimToken): Promise<void>;
 }
 
 export function resolveIdempotencyTtlMs(env: NodeJS.ProcessEnv = process.env): number {

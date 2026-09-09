@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
+import type { BlobServiceClient, BlockBlobClient } from '@azure/storage-blob';
 import { BlobServiceClient as AzureBlobServiceClient } from '@azure/storage-blob';
 import { DefaultAzureCredential } from '@azure/identity';
 import type { SendResponse, TenantContext } from '@singleton-sd/post-kit-types';
@@ -10,6 +10,7 @@ import {
   isExpired,
   resolveIdempotencyTtlMs,
   type IdempotencyBeginResult,
+  type IdempotencyClaimToken,
   type IdempotencyRecord,
   type IdempotencyStore,
 } from './idempotency-store';
@@ -35,6 +36,11 @@ export interface BlobIdempotencyStoreOptions {
   ttlMs?: number;
 }
 
+type StoredSnapshot = {
+  record: IdempotencyRecord;
+  etag: string;
+};
+
 /**
  * Azure Blob Storage idempotency ledger.
  *
@@ -46,7 +52,12 @@ export interface BlobIdempotencyStoreOptions {
  * new package, supports conditional create (`If-None-Match: *`) for claim
  * races, and stores only the non-sensitive fields required for replay.
  *
- * TTL is enforced on read (expired blobs are ignored and may be overwritten).
+ * Claim concurrency uses the blob ETag returned from the claim upload. Completing
+ * or releasing without that ETag (`If-Match`) fails so a stale claimant cannot
+ * overwrite a newer claim or completed record. Expired reclaim uses the observed
+ * read ETag (or `If-None-Match: *` when absent).
+ *
+ * TTL is enforced on read (expired blobs are ignored and may be reclaimed).
  * Soft delete / lifecycle rules can reclaim bytes; see docs/architecture/send-idempotency.md.
  */
 export class BlobIdempotencyStore implements IdempotencyStore {
@@ -96,11 +107,11 @@ export class BlobIdempotencyStore implements IdempotencyStore {
     const body = Buffer.from(JSON.stringify(record), 'utf-8');
 
     try {
-      await blob.upload(body, body.length, {
+      const uploaded = await blob.upload(body, body.length, {
         blobHTTPHeaders: { blobContentType: 'application/json' },
         conditions: { ifNoneMatch: '*' },
       });
-      return { outcome: 'claimed' };
+      return { outcome: 'claimed', claimToken: requireEtag(uploaded.etag) };
     } catch (err: unknown) {
       if (!isConflictError(err)) {
         throw new IdempotencyStoreError(
@@ -110,29 +121,15 @@ export class BlobIdempotencyStore implements IdempotencyStore {
       }
     }
 
-    const existing = await this.readRecord(blob);
-    if (!existing || isExpired(existing)) {
-      // Expired or unreadable — overwrite unconditionally and claim.
-      try {
-        await blob.upload(body, body.length, {
-          blobHTTPHeaders: { blobContentType: 'application/json' },
-        });
-        return { outcome: 'claimed' };
-      } catch {
-        throw new IdempotencyStoreError(
-          'Failed to reclaim expired idempotency key in storage.',
-          PostKitErrorCode.STORAGE_FAILURE,
-        );
-      }
-    }
-
-    if (existing.status === 'completed' && existing.response) {
-      return { outcome: 'replay', response: existing.response };
-    }
-    return { outcome: 'in_progress' };
+    return this.resolveAfterConflict(blob, tenant, key, body);
   }
 
-  async complete(tenant: TenantContext, key: string, response: SendResponse): Promise<void> {
+  async complete(
+    tenant: TenantContext,
+    key: string,
+    response: SendResponse,
+    claimToken: IdempotencyClaimToken,
+  ): Promise<void> {
     const containerClient = this.client.getContainerClient(this.container);
     const blob = containerClient.getBlockBlobClient(blobPath(tenant, key));
     const record = buildIdempotencyRecord(tenant, key, 'completed', this.ttlMs, response);
@@ -140,8 +137,24 @@ export class BlobIdempotencyStore implements IdempotencyStore {
     try {
       await blob.upload(body, body.length, {
         blobHTTPHeaders: { blobContentType: 'application/json' },
+        conditions: { ifMatch: claimToken },
       });
-    } catch {
+    } catch (err: unknown) {
+      if (isPreconditionError(err) || isConflictError(err)) {
+        const current = await this.readSnapshot(blob);
+        if (
+          current?.record.status === 'completed' &&
+          current.record.response &&
+          current.record.response.id === response.id
+        ) {
+          // Another writer finished with the same response — treat as success.
+          return;
+        }
+        throw new IdempotencyStoreError(
+          'Lost idempotency claim while completing; record was modified by another request.',
+          PostKitErrorCode.STORAGE_FAILURE,
+        );
+      }
       throw new IdempotencyStoreError(
         'Failed to persist completed idempotency record.',
         PostKitErrorCode.STORAGE_FAILURE,
@@ -149,14 +162,24 @@ export class BlobIdempotencyStore implements IdempotencyStore {
     }
   }
 
-  async release(tenant: TenantContext, key: string): Promise<void> {
+  async release(
+    tenant: TenantContext,
+    key: string,
+    claimToken: IdempotencyClaimToken,
+  ): Promise<void> {
     const containerClient = this.client.getContainerClient(this.container);
     const blob = containerClient.getBlockBlobClient(blobPath(tenant, key));
     try {
-      const existing = await this.readRecord(blob);
-      if (!existing || existing.status === 'completed') return;
-      await blob.deleteIfExists();
-    } catch {
+      const existing = await this.readSnapshot(blob);
+      if (!existing || existing.record.status === 'completed') return;
+      await blob.deleteIfExists({
+        conditions: { ifMatch: claimToken },
+      });
+    } catch (err: unknown) {
+      if (isPreconditionError(err) || isConflictError(err) || isNotFoundError(err)) {
+        // Another claimant owns the blob now — leave it alone.
+        return;
+      }
       throw new IdempotencyStoreError(
         'Failed to release idempotency claim in storage.',
         PostKitErrorCode.STORAGE_FAILURE,
@@ -164,15 +187,61 @@ export class BlobIdempotencyStore implements IdempotencyStore {
     }
   }
 
-  private async readRecord(
-    blob: ReturnType<ContainerClient['getBlockBlobClient']>,
-  ): Promise<IdempotencyRecord | undefined> {
+  private async resolveAfterConflict(
+    blob: BlockBlobClient,
+    tenant: TenantContext,
+    key: string,
+    claimBody: Buffer,
+  ): Promise<IdempotencyBeginResult> {
+    const existing = await this.readSnapshot(blob);
+    if (!existing || isExpired(existing.record)) {
+      try {
+        const uploaded = await blob.upload(claimBody, claimBody.length, {
+          blobHTTPHeaders: { blobContentType: 'application/json' },
+          conditions: existing ? { ifMatch: existing.etag } : { ifNoneMatch: '*' },
+        });
+        return { outcome: 'claimed', claimToken: requireEtag(uploaded.etag) };
+      } catch (err: unknown) {
+        if (isPreconditionError(err) || isConflictError(err)) {
+          // Lost the reclaim race — re-evaluate the current record once.
+          const raced = await this.readSnapshot(blob);
+          if (raced && !isExpired(raced.record)) {
+            if (raced.record.status === 'completed' && raced.record.response) {
+              return { outcome: 'replay', response: raced.record.response };
+            }
+            return { outcome: 'in_progress' };
+          }
+        }
+        throw new IdempotencyStoreError(
+          'Failed to reclaim expired idempotency key in storage.',
+          PostKitErrorCode.STORAGE_FAILURE,
+        );
+      }
+    }
+
+    if (existing.record.status === 'completed' && existing.record.response) {
+      return { outcome: 'replay', response: existing.record.response };
+    }
+    return { outcome: 'in_progress' };
+  }
+
+  private async readSnapshot(blob: BlockBlobClient): Promise<StoredSnapshot | undefined> {
     try {
       const download = await blob.download();
       const text = await streamToString(download.readableStreamBody);
-      return parseRecord(text);
+      const record = parseRecord(text);
+      if (!record) return undefined;
+      const etag = download.etag;
+      if (!etag) {
+        throw new IdempotencyStoreError(
+          'Idempotency blob download omitted ETag.',
+          PostKitErrorCode.STORAGE_FAILURE,
+        );
+      }
+      return { record, etag };
     } catch (err: unknown) {
       if (isNotFoundError(err)) return undefined;
+      if (err instanceof IdempotencyStoreError) throw err;
       throw new IdempotencyStoreError(
         'Failed to read idempotency record from storage.',
         PostKitErrorCode.STORAGE_FAILURE,
@@ -184,6 +253,16 @@ export class BlobIdempotencyStore implements IdempotencyStore {
 function blobPath(tenant: TenantContext, key: string): string {
   const digest = createHash('sha256').update(key, 'utf8').digest('hex');
   return `tenants/${tenant.tenantId}/${tenant.environment}/idempotency/${digest}.json`;
+}
+
+function requireEtag(etag: string | undefined): string {
+  if (!etag) {
+    throw new IdempotencyStoreError(
+      'Idempotency blob upload omitted ETag.',
+      PostKitErrorCode.STORAGE_FAILURE,
+    );
+  }
+  return etag;
 }
 
 function parseRecord(json: string): IdempotencyRecord | undefined {
@@ -229,6 +308,17 @@ function isConflictError(err: unknown): boolean {
     e['statusCode'] === 409 ||
     e['code'] === 'BlobAlreadyExists' ||
     e['errorCode'] === 'BlobAlreadyExists'
+  );
+}
+
+function isPreconditionError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const e = err as Record<string, unknown>;
+  return (
+    e['statusCode'] === 412 ||
+    e['code'] === 'ConditionNotMet' ||
+    e['errorCode'] === 'ConditionNotMet' ||
+    e['code'] === 'LeaseIdMismatchWithLeaseOperation'
   );
 }
 
