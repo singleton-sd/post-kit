@@ -10,6 +10,7 @@ import {
 } from '@singleton-sd/post-kit-types';
 import { clearTenantEmailConfigCache } from '../tenant';
 import { createLogger } from '../telemetry';
+import '../test/recipient-hash-env';
 import { createSendHandler } from './send';
 
 const TENANT: TenantContext = { tenantId: 'inkads', environment: 'production' };

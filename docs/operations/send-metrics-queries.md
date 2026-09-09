@@ -19,7 +19,7 @@ column in Application Insights `traces`.
 | `providerMessageId` | Provider-assigned message id on successful sends |
 | `providerRequestId` | Provider trace/request id on provider failures when available |
 | `failureCategory` | Stable failure bucket (see below) |
-| `recipientHash` | 16-char SHA-256 prefix of normalized recipient (never the raw address) |
+| `recipientHash` | Versioned HMAC digest of the normalized recipient (never the raw address). Shape: `{keyVersionId}.{digest16}` where `keyVersionId` is the first 8 hex characters of the Key Vault secret version for `recipient-hash-hmac-key`, and `digest16` is a 16-char hex prefix of HMAC-SHA256. Historical logs (before this cutover) may still use a bare 16-char unsalted SHA-256 prefix — see [Migration](#recipienthash-migration). |
 | `errorCode` | `PostKitErrorCode` on failures |
 
 `failureCategory` values for API-level failures:
@@ -170,13 +170,17 @@ SendEvents
 ```
 
 Detect duplicate sends to the same recipient within a window (uses
-`recipientHash`, not the raw address):
+`recipientHash`, not the raw address). Prefer matching the current versioned
+HMAC shape; include the legacy bare-hex pattern only when querying across the
+cutover window:
 
 ```kusto
 SendEvents
 | where tostring(payload.msg) == "send.request.completed"
 | extend recipientHash = tostring(payload.recipientHash)
 | where isnotempty(recipientHash)
+| where recipientHash matches regex @"^[a-f0-9]{8}\.[a-f0-9]{16}$"
+    or recipientHash matches regex @"^[a-f0-9]{16}$" // legacy pre-HMAC
 | summarize sendCount = count(), correlationIds = make_set(tostring(payload.correlationId), 10)
     by recipientHash,
        templateKey = tostring(payload.templateKey),
@@ -186,6 +190,26 @@ SendEvents
 | where sendCount > 1
 | order by sendCount desc
 ```
+
+After key rotation, the same recipient produces a different `recipientHash`
+(different `keyVersionId` and digest). Correlate within one key version, or
+accept that pre/post-rotation rows will not join on `recipientHash` alone.
+
+## recipientHash migration
+
+| Era | Shape | How it was produced |
+| --- | --- | --- |
+| Historical (pre-cutover) | 16 lowercase hex chars | Unsalted SHA-256 prefix of the normalized address |
+| Current | `{8-hex}.{16-hex}` | HMAC-SHA256 with Key Vault secret `recipient-hash-hmac-key`; first segment is the secret version id |
+
+Operators should:
+
+1. Treat bare 16-char values as historical only — do not expect new emissions in that shape.
+2. When joining or counting across the cutover, filter with both regexes as in the duplicate query above.
+3. After rotating `recipient-hash-hmac-key` in Key Vault, expect a new `keyVersionId` prefix; duplicate detection across the rotation boundary will not match.
+
+Never reconstruct recipient addresses from either digest shape. Never log raw
+addresses or the HMAC key material.
 
 Join handler logs to provider adapter logs on `correlationId`:
 

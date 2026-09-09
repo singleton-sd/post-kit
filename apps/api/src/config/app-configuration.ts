@@ -34,11 +34,26 @@ export const APP_CONFIGURATION_ENVIRONMENT_KEYS: Readonly<Record<string, string>
   'app:idempotency:storageContainer': 'IDEMPOTENCY_STORAGE_CONTAINER',
   'app:idempotency:ttlMs': 'IDEMPOTENCY_TTL_MS',
   'secret:forwardemail-api-key': 'FORWARD_EMAIL_TOKEN',
+  'secret:recipient-hash-hmac-key': 'RECIPIENT_HASH_HMAC_KEY',
+};
+
+/**
+ * When a Key Vault reference is resolved, also publish the secret version to
+ * this env var (explicit env still wins). Used so `recipientHash` can embed a
+ * key-version id without logging key material.
+ */
+export const KEY_VAULT_VERSION_ENVIRONMENT_KEYS: Readonly<Record<string, string>> = {
+  'secret:recipient-hash-hmac-key': 'RECIPIENT_HASH_HMAC_KEY_VERSION',
+};
+
+export type KeyVaultSecretResult = {
+  value?: string;
+  properties?: { version?: string };
 };
 
 type AppConfigurationDependencies = {
   listSettings?: () => AsyncIterable<ConfigurationSetting>;
-  getSecret?: (secretUri: string) => Promise<{ value?: string }>;
+  getSecret?: (secretUri: string) => Promise<KeyVaultSecretResult>;
 };
 
 let loadOnce: Promise<void> | undefined;
@@ -59,23 +74,36 @@ export async function loadAppConfiguration(
     (() => new AppConfigurationClient(endpoint, credential).listConfigurationSettings());
   const getSecret =
     dependencies.getSecret ??
-    (async (secretUri: string) => {
+    (async (secretUri: string): Promise<KeyVaultSecretResult> => {
       const url = new URL(secretUri);
-      const secretName = url.pathname.split('/').filter(Boolean)[1];
+      const segments = url.pathname.split('/').filter(Boolean);
+      // pathname: /secrets/{name} or /secrets/{name}/{version}
+      const secretName = segments[1];
       if (!secretName) throw new Error(`Invalid Key Vault secret URI: ${secretUri}`);
+      const version = segments[2];
       const client = new SecretClient(url.origin, credential);
-      return client.getSecret(secretName);
+      return client.getSecret(secretName, version ? { version } : undefined);
     });
 
   for await (const setting of listSettings()) {
     const environmentKey = APP_CONFIGURATION_ENVIRONMENT_KEYS[setting.key];
     if (!environmentKey || process.env[environmentKey] !== undefined) continue;
 
-    const value = isKeyVaultReference(setting)
-      ? await resolveKeyVaultReference(setting, getSecret)
-      : setting.value;
+    if (isKeyVaultReference(setting)) {
+      const secret = await resolveKeyVaultSecret(setting, getSecret);
+      process.env[environmentKey] = secret.value;
+      const versionEnvironmentKey = KEY_VAULT_VERSION_ENVIRONMENT_KEYS[setting.key];
+      if (
+        versionEnvironmentKey &&
+        process.env[versionEnvironmentKey] === undefined &&
+        secret.properties?.version
+      ) {
+        process.env[versionEnvironmentKey] = secret.properties.version;
+      }
+      continue;
+    }
 
-    if (value !== undefined) process.env[environmentKey] = value;
+    if (setting.value !== undefined) process.env[environmentKey] = setting.value;
   }
 }
 
@@ -98,10 +126,10 @@ function isKeyVaultReference(setting: ConfigurationSetting): boolean {
   return setting.contentType?.toLowerCase().startsWith(keyVaultReferenceContentType) ?? false;
 }
 
-async function resolveKeyVaultReference(
+async function resolveKeyVaultSecret(
   setting: ConfigurationSetting,
-  getSecret: (secretUri: string) => Promise<{ value?: string }>,
-): Promise<string | undefined> {
+  getSecret: (secretUri: string) => Promise<KeyVaultSecretResult>,
+): Promise<{ value: string; properties?: { version?: string } }> {
   let uri: string | undefined;
   try {
     uri = JSON.parse(setting.value ?? '').uri;
@@ -117,5 +145,5 @@ async function resolveKeyVaultReference(
   if (secret.value === undefined) {
     throw new Error(`Key Vault reference has no value for ${setting.key}`);
   }
-  return secret.value;
+  return { value: secret.value, properties: secret.properties };
 }

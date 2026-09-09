@@ -13,6 +13,8 @@ describe('loadAppConfiguration', () => {
     'ORIGINS',
     'CONTACT_EMAIL_PROFILES_BY_HOST',
     'FORWARD_EMAIL_TOKEN',
+    'RECIPIENT_HASH_HMAC_KEY',
+    'RECIPIENT_HASH_HMAC_KEY_VERSION',
     'EMAIL_FROM_ADDRESS',
     'TEMPLATE_STORAGE_ACCOUNT',
     'TEMPLATE_STORAGE_CONTAINER',
@@ -49,8 +51,16 @@ describe('loadAppConfiguration', () => {
   it('maps plain settings and Key Vault references to environment variables', async () => {
     process.env.AZURE_APPCONFIGURATION_ENDPOINT = 'https://example.azconfig.io';
     const getSecret = async (secretUri: string) => {
-      assert.match(secretUri, /forwardemail-api-key/);
-      return { value: 'token-from-kv' };
+      if (secretUri.includes('forwardemail-api-key')) {
+        return { value: 'token-from-kv' };
+      }
+      if (secretUri.includes('recipient-hash-hmac-key')) {
+        return {
+          value: 'hmac-key-from-kv',
+          properties: { version: 'abcd1234eeeeffff0000111122223333' },
+        };
+      }
+      throw new Error(`unexpected secret URI: ${secretUri}`);
     };
 
     await loadAppConfiguration({
@@ -65,6 +75,13 @@ describe('loadAppConfiguration', () => {
             'secret:forwardemail-api-key',
             JSON.stringify({
               uri: 'https://ssd-global-kv-prod-ae.vault.azure.net/secrets/forwardemail-api-key',
+            }),
+            'application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8',
+          ),
+          setting(
+            'secret:recipient-hash-hmac-key',
+            JSON.stringify({
+              uri: 'https://ssd-global-kv-prod-ae.vault.azure.net/secrets/recipient-hash-hmac-key',
             }),
             'application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8',
           ),
@@ -83,6 +100,8 @@ describe('loadAppConfiguration', () => {
       '{"inkads.poc.singletonsd.com":{"fromAddress":"noreply@mail.inkads.poc.singletonsd.com"}}',
     );
     assert.equal(process.env.FORWARD_EMAIL_TOKEN, 'token-from-kv');
+    assert.equal(process.env.RECIPIENT_HASH_HMAC_KEY, 'hmac-key-from-kv');
+    assert.equal(process.env.RECIPIENT_HASH_HMAC_KEY_VERSION, 'abcd1234eeeeffff0000111122223333');
     assert.equal(process.env.UNMAPPED_KEY, undefined);
   });
 
