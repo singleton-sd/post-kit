@@ -177,13 +177,14 @@ describe('PostKitErrorCode', () => {
     assert.equal(PostKitErrorCode.PROVIDER_FAILURE, 'PROVIDER_FAILURE');
     assert.equal(PostKitErrorCode.STORAGE_FAILURE, 'STORAGE_FAILURE');
     assert.equal(PostKitErrorCode.TENANT_CONFIG_NOT_FOUND, 'TENANT_CONFIG_NOT_FOUND');
+    assert.equal(PostKitErrorCode.IDEMPOTENCY_IN_PROGRESS, 'IDEMPOTENCY_IN_PROGRESS');
   });
 
-  it('has exactly 11 codes', () => {
+  it('has exactly 12 codes', () => {
     const codes = Object.keys(PostKitErrorCode).filter(
       (k) => typeof PostKitErrorCode[k as keyof typeof PostKitErrorCode] === 'string',
     );
-    assert.equal(codes.length, 11);
+    assert.equal(codes.length, 12);
   });
 });
 

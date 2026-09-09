@@ -110,6 +110,7 @@ repositories and published by CI.
 | API               | Azure Function App `ssd-postkit-api-prod-ae` | Plan `ssd-postkit-plan-prod-ae` (Y1 Consumption)            |
 | Storage           | `ssdpostkitstprodae`                     | Function App storage                                           |
 | Template storage  | `TEMPLATE_STORAGE_ACCOUNT` / `TEMPLATE_STORAGE_CONTAINER` (default `templates`) | Read with `DefaultAzureCredential`         |
+| Send idempotency  | `IDEMPOTENCY_STORAGE_ACCOUNT` (falls back to template account) / container `idempotency` | Blob ledger; see [`send-idempotency.md`](./send-idempotency.md) |
 | App configuration | `ssd-postkit-appcs-prod-ae`              | Free SKU; non-secret settings + Key Vault references           |
 | Secrets           | Key Vault `ssd-global-kv-prod-ae`        | Resource group `rg-ssd-global`; IDs in [`SETUP.md`](../../SETUP.md) |
 | Packages          | npmjs public `@singleton-sd/post-kit-*`  | Not published yet — see **Not yet implemented**                |

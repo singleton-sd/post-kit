@@ -54,6 +54,7 @@ switch (error.code) {
   case PostKitErrorCode.INVALID_RECIPIENT:   // 422 — recipient address invalid
   case PostKitErrorCode.PROVIDER_FAILURE:    // 502 — email provider error
   case PostKitErrorCode.STORAGE_FAILURE:     // 502 — blob storage error
+  case PostKitErrorCode.IDEMPOTENCY_IN_PROGRESS: // 409 — same key still in flight
 }
 ```
 
