@@ -17,7 +17,8 @@ import type { ResolvedTenantEmailConfig } from '../tenant/tenant-email-config';
 import { TemplateStoreError, type TemplateStore } from '../templates';
 import { resetSendRateLimiter } from '../contact-rate-limit';
 import { resetSendSizeLimitsCache } from '../send-limits';
-import { createLogger } from '../telemetry';
+import { createLogger, RECIPIENT_HASH_PATTERN } from '../telemetry';
+import '../test/recipient-hash-env';
 import { createSendHandler } from './send';
 
 const TENANT: TenantContext = { tenantId: 'inkads', environment: 'development' };
@@ -330,7 +331,8 @@ describe('sendHandler', () => {
     assert.equal(typeof completed.durationMs, 'number');
     assert.equal(completed.providerMessageId, 'msg-1');
     assert.equal(typeof completed.recipientHash, 'string');
-    assert.equal(completed.recipientHash.length, 16);
+    assert.match(completed.recipientHash, RECIPIENT_HASH_PATTERN);
+    assert.ok(completed.recipientHash.startsWith('abcd1234.'));
     assert.ok(!('failureCategory' in completed));
     assert.ok(!JSON.stringify(completed).includes('user@example.com'));
     assert.ok(!JSON.stringify(completed).includes('Ada'));
@@ -365,6 +367,7 @@ describe('sendHandler', () => {
     assert.equal(failed.failureCategory, 'missing_variables');
     assert.equal(typeof failed.durationMs, 'number');
     assert.equal(typeof failed.recipientHash, 'string');
+    assert.match(failed.recipientHash, RECIPIENT_HASH_PATTERN);
     assert.ok(!JSON.stringify(failed).includes('user@example.com'));
   });
 
@@ -391,7 +394,7 @@ describe('sendHandler', () => {
     assert.equal(failed.templateKey, 'marketing.contact-us');
     assert.equal(failed.errorCode, PostKitErrorCode.MISSING_VARIABLES);
     assert.equal(typeof failed.recipientHash, 'string');
-    assert.equal(failed.recipientHash.length, 16);
+    assert.match(failed.recipientHash, RECIPIENT_HASH_PATTERN);
     assert.ok(!JSON.stringify(failed).includes('user@example.com'));
   });
 

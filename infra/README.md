@@ -9,7 +9,7 @@ Bicep for the PostKit Function App and App Configuration store in
 | Storage | `ssdpostkitstprodae` | Standard_LRS |
 | Function App | `ssd-postkit-api-prod-ae` | Node 22 |
 | App Configuration | `ssd-postkit-appcs-prod-ae` | **Free** |
-| Key Vault | existing `ssd-global-kv-prod-ae` | secret `forwardemail-api-key` |
+| Key Vault | existing `ssd-global-kv-prod-ae` | secrets `forwardemail-api-key`, `recipient-hash-hmac-key` |
 
 Non-secret settings (origins, host profiles, branding validation, from/inbox)
 live in App Configuration. `infra/appconfig-seed.json` is first-run only —

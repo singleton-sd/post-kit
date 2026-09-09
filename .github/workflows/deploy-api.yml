@@ -100,24 +100,32 @@ jobs:
             --name "postkit-api-${GITHUB_RUN_ID}" \
             --parameters githubOidcPrincipalId="$PRINCIPAL_ID"
 
-      - name: Assert KV secret exists
+      - name: Assert KV secrets exist
         run: |
           set -euo pipefail
           deadline=$((SECONDS + 600))
           attempt=0
+          required_secrets=(forwardemail-api-key recipient-hash-hmac-key)
           while [ "$SECONDS" -lt "$deadline" ]; do
             attempt=$((attempt + 1))
-            if az keyvault secret show \
-              --vault-name "$AZURE_KEY_VAULT_NAME" \
-              --name forwardemail-api-key \
-              --query name -o tsv >/dev/null; then
+            missing=0
+            for secret_name in "${required_secrets[@]}"; do
+              if ! az keyvault secret show \
+                --vault-name "$AZURE_KEY_VAULT_NAME" \
+                --name "$secret_name" \
+                --query name -o tsv >/dev/null; then
+                missing=1
+                break
+              fi
+            done
+            if [ "$missing" -eq 0 ]; then
               exit 0
             fi
             remaining=$((deadline - SECONDS))
             echo "Key Vault read not ready yet (attempt ${attempt}; ${remaining}s remaining); waiting for RBAC."
             sleep 20
           done
-          echo "forwardemail-api-key is missing or the OIDC principal cannot read it."
+          echo "Required Key Vault secrets are missing or the OIDC principal cannot read them (names only: forwardemail-api-key, recipient-hash-hmac-key)."
           exit 1
 
       - name: Seed App Configuration (missing keys only)

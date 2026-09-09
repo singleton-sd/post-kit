@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
 # Seed App Configuration keys if missing. Does not overwrite portal edits.
-# KV reference for forwardemail-api-key is idempotently (re)asserted — it is
-# a URI pointer, not a secret value.
+# KV references for secrets are idempotently (re)asserted — they are URI
+# pointers, not secret values.
 set -euo pipefail
 
 STORE="${APP_CONFIG_NAME:-ssd-postkit-appcs-prod-ae}"
 SEED="${1:-infra/appconfig-seed.json}"
 VAULT_URI="${KEY_VAULT_URI:-https://ssd-global-kv-prod-ae.vault.azure.net}"
-SECRET_NAME="${FORWARD_EMAIL_SECRET_NAME:-forwardemail-api-key}"
+FORWARD_EMAIL_SECRET_NAME="${FORWARD_EMAIL_SECRET_NAME:-forwardemail-api-key}"
+RECIPIENT_HASH_SECRET_NAME="${RECIPIENT_HASH_SECRET_NAME:-recipient-hash-hmac-key}"
 
 [[ -f "$SEED" ]] || { echo "error: seed file not found: $SEED" >&2; exit 1; }
 
-python3 - "$STORE" "$SEED" "$VAULT_URI" "$SECRET_NAME" <<'PY'
+python3 - "$STORE" "$SEED" "$VAULT_URI" "$FORWARD_EMAIL_SECRET_NAME" "$RECIPIENT_HASH_SECRET_NAME" <<'PY'
 import json
 import subprocess
 import sys
 
-store, seed_path, vault_uri, secret_name = sys.argv[1:]
+store, seed_path, vault_uri, *secret_names = sys.argv[1:]
 seed = json.load(open(seed_path, encoding="utf-8"))
 
 
@@ -53,27 +54,28 @@ for key, value in seed.items():
         raise SystemExit(result.returncode)
     print(f"set {key}")
 
-kv_key = f"secret:{secret_name}"
-kv_value = json.dumps({"uri": f"{vault_uri.rstrip('/')}/secrets/{secret_name}"})
-result = run(
-    [
-        "az",
-        "appconfig",
-        "kv",
-        "set",
-        "--name",
-        store,
-        "--key",
-        kv_key,
-        "--value",
-        kv_value,
-        "--content-type",
-        "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8",
-        "--yes",
-    ]
-)
-if result.returncode != 0:
-    sys.stderr.write(result.stderr)
-    raise SystemExit(result.returncode)
-print(f"set {kv_key} (Key Vault reference)")
+for secret_name in secret_names:
+    kv_key = f"secret:{secret_name}"
+    kv_value = json.dumps({"uri": f"{vault_uri.rstrip('/')}/secrets/{secret_name}"})
+    result = run(
+        [
+            "az",
+            "appconfig",
+            "kv",
+            "set",
+            "--name",
+            store,
+            "--key",
+            kv_key,
+            "--value",
+            kv_value,
+            "--content-type",
+            "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8",
+            "--yes",
+        ]
+    )
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr)
+        raise SystemExit(result.returncode)
+    print(f"set {kv_key} (Key Vault reference)")
 PY

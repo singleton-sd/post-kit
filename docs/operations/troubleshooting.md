@@ -108,7 +108,7 @@ Fields that may appear (only non-`undefined` values are emitted):
 | `providerMessageId` | completed | Provider-assigned message id on successful sends |
 | `providerRequestId` | failed | Provider trace/request id on provider failures when available |
 | `failureCategory` | failed | Stable failure bucket — API-level categories (`template_not_found`, `missing_variables`, …) or one of the six provider kinds (`configuration`, `transient`, `rate_limit`, `permanent`, `validation`, `cancelled`) |
-| `recipientHash` | completed / failed | 16-character SHA-256 prefix of the normalized recipient address; see [`send-metrics-queries.md`](./send-metrics-queries.md) |
+| `recipientHash` | completed / failed | Versioned HMAC digest `{keyVersionId}.{digest16}` of the normalized recipient (Key Vault `recipient-hash-hmac-key`); historical rows may be a bare 16-char SHA-256 prefix — see [`send-metrics-queries.md`](./send-metrics-queries.md) |
 
 Three additional diagnostic entries are written through the Functions invocation
 context rather than the structured logger, so they are searchable by message
