@@ -24,6 +24,14 @@ describe('buildPreviewRows', () => {
       { key: 'zz', value: 'tail', extra: true },
     ]);
   });
+
+  it('collapses duplicate declared variable names to the first occurrence', () => {
+    const rows = buildPreviewRows(['name', 'email', 'name'], { name: 'Jane' });
+    assert.deepEqual(rows, [
+      { key: 'name', value: 'Jane', extra: false },
+      { key: 'email', value: '', extra: false },
+    ]);
+  });
 });
 
 describe('preview data mutations', () => {

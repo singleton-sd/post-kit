@@ -17,21 +17,31 @@ export interface PreviewDataRow {
  * Build the ordered key/value rows for the preview-data editor.
  *
  * Declared variables appear first (metadata order), including keys missing from
- * `previewData` (empty value). Undeclared extras follow, sorted by key.
+ * `previewData` (empty value). Duplicate declared names are collapsed to the
+ * first occurrence so React keys and label/`htmlFor` targets stay unique.
+ * Undeclared extras follow, sorted by key.
  */
 export function buildPreviewRows(
   declaredVariables: readonly string[],
   previewData: TemplatePreviewData,
 ): PreviewDataRow[] {
-  const declared = new Set(declaredVariables);
-  const rows: PreviewDataRow[] = declaredVariables.map((key) => ({
-    key,
-    value: Object.prototype.hasOwnProperty.call(previewData, key) ? (previewData[key] ?? '') : '',
-    extra: false,
-  }));
+  const seenDeclared = new Set<string>();
+  const rows: PreviewDataRow[] = [];
+
+  for (const key of declaredVariables) {
+    if (seenDeclared.has(key)) {
+      continue;
+    }
+    seenDeclared.add(key);
+    rows.push({
+      key,
+      value: Object.prototype.hasOwnProperty.call(previewData, key) ? (previewData[key] ?? '') : '',
+      extra: false,
+    });
+  }
 
   const extras = Object.keys(previewData)
-    .filter((key) => !declared.has(key))
+    .filter((key) => !seenDeclared.has(key))
     .sort((a, b) => a.localeCompare(b));
 
   for (const key of extras) {
