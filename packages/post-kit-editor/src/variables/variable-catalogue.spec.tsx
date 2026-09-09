@@ -8,6 +8,7 @@ import { InsertionTargetProvider } from '../insertion-target';
 import type { TemplateSourceFiles, TemplateVariable } from '../types';
 import { withMetadata, withMetadataVariables } from '../working-files';
 import { copyTextToClipboard } from './clipboard';
+import { copyButtonLabel, copyFeedbackKind } from './copy-feedback';
 import { resolveCatalogueVariables } from './resolve-catalogue';
 import { VariableCatalogue } from './VariableCatalogue';
 
@@ -124,5 +125,36 @@ describe('copyTextToClipboard', () => {
   it('resolves ok:false without throwing when clipboard is unavailable', async () => {
     const result = await copyTextToClipboard('{{name}}');
     assert.equal(result.ok, false);
+  });
+});
+
+describe('copy feedback', () => {
+  it('maps clipboard failure to manual guidance, not Copied', () => {
+    assert.equal(copyFeedbackKind({ ok: false }), 'manual');
+    assert.equal(copyButtonLabel({ name: 'name', kind: 'manual' }, 'name'), 'Select to copy');
+  });
+
+  it('reserves Copied for successful clipboard writes', () => {
+    assert.equal(copyFeedbackKind({ ok: true }), 'copied');
+    assert.equal(copyButtonLabel({ name: 'name', kind: 'copied' }, 'name'), 'Copied');
+  });
+
+  it('keeps the idle Copy label for other rows', () => {
+    assert.equal(copyButtonLabel({ name: 'email', kind: 'copied' }, 'name'), 'Copy');
+    assert.equal(copyButtonLabel(null, 'name'), 'Copy');
+  });
+
+  it('forces the failure path end-to-end when clipboard write is unavailable', async () => {
+    const result = await copyTextToClipboard('{{name}}');
+    assert.equal(result.ok, false);
+    assert.equal(copyFeedbackKind(result), 'manual');
+    assert.equal(
+      copyButtonLabel({ name: 'name', kind: copyFeedbackKind(result) }, 'name'),
+      'Select to copy',
+    );
+    assert.notEqual(
+      copyButtonLabel({ name: 'name', kind: copyFeedbackKind(result) }, 'name'),
+      'Copied',
+    );
   });
 });

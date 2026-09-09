@@ -9,7 +9,7 @@ export interface InsertionTarget {
 
 interface InsertionTargetContextValue {
   target: InsertionTarget | null;
-  setTarget: (target: InsertionTarget | null) => void;
+  setTarget: React.Dispatch<React.SetStateAction<InsertionTarget | null>>;
 }
 
 const InsertionTargetContext = createContext<InsertionTargetContextValue | null>(null);
@@ -44,17 +44,25 @@ export function useRegisterInsertionTarget(
   const { setTarget } = useInsertionTarget();
   const insertRef = useRef(insert);
   insertRef.current = insert;
+  const registrationRef = useRef<{ label: string; insert: (text: string) => void } | null>(null);
 
   const stableInsert = useCallback((text: string) => {
     insertRef.current(text);
   }, []);
 
   const onFocus = useCallback(() => {
-    setTarget({ label, insert: stableInsert });
+    const next = { label, insert: stableInsert };
+    registrationRef.current = next;
+    setTarget(next);
   }, [label, setTarget, stableInsert]);
 
   const onBlur = useCallback(() => {
-    setTarget(null);
+    const registration = registrationRef.current;
+    registrationRef.current = null;
+    // Only clear if we still own the active target — another field may have
+    // focused in the meantime. Insert buttons also call preventDefault on
+    // mousedown so this blur does not race ahead of their click handler.
+    setTarget((current) => (current === registration ? null : current));
   }, [setTarget]);
 
   return { onFocus, onBlur };

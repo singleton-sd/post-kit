@@ -35,4 +35,11 @@ export interface TemplateVariable {
   label?: string;
   /** Optional explanation of what the value contains. */
   description?: string;
+  /**
+   * Optional sample value.
+   *
+   * @deprecated Prefer `previewData` / the preview editor for sample values.
+   * Kept so existing consumers that pass or read `example` keep compiling.
+   */
+  example?: string;
 }

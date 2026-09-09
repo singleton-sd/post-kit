@@ -5,6 +5,7 @@ import { useInsertionTarget } from '../insertion-target';
 import { variablePlaceholder } from '../metadata/insert-at-cursor';
 import type { TemplateVariable } from '../types';
 import { copyTextToClipboard } from './clipboard';
+import { copyButtonLabel, copyFeedbackKind } from './copy-feedback';
 import { resolveCatalogueVariables } from './resolve-catalogue';
 
 export interface VariableCatalogueProps {
@@ -27,7 +28,10 @@ export function VariableCatalogue({
   const p = EDITOR_CLASS_PREFIX;
   const { target } = useInsertionTarget();
   const entries = resolveCatalogueVariables(availableVariables, metadataVariables);
-  const [copiedName, setCopiedName] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<{
+    name: string;
+    kind: 'copied' | 'manual';
+  } | null>(null);
   const [newVariable, setNewVariable] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
   const fallbackSelectRef = useRef<HTMLInputElement | null>(null);
@@ -36,7 +40,8 @@ export function VariableCatalogue({
   const handleCopy = useCallback(async (name: string) => {
     const text = variablePlaceholder(name);
     const result = await copyTextToClipboard(text);
-    if (!result.ok) {
+    const kind = copyFeedbackKind(result);
+    if (kind === 'manual') {
       const el = fallbackSelectRef.current;
       if (el) {
         el.value = text;
@@ -44,7 +49,7 @@ export function VariableCatalogue({
         el.select();
       }
     }
-    setCopiedName(name);
+    setCopyFeedback({ name, kind });
   }, []);
 
   const handleInsert = useCallback(
@@ -56,6 +61,11 @@ export function VariableCatalogue({
     },
     [target],
   );
+
+  /** Prevent subject blur before the insert click runs (mousedown → blur → click). */
+  const preserveInsertionTarget = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+  }, []);
 
   const handleAdd = useCallback(
     (event: React.FormEvent) => {
@@ -127,11 +137,12 @@ export function VariableCatalogue({
                     }}
                     data-testid={`${p}variables-copy-${entry.name}`}
                   >
-                    {copiedName === entry.name ? 'Copied' : 'Copy'}
+                    {copyButtonLabel(copyFeedback, entry.name)}
                   </button>
                   <button
                     type="button"
                     className={`${p}variables-insert`}
+                    onMouseDown={preserveInsertionTarget}
                     onClick={() => handleInsert(entry.name)}
                     disabled={insertDisabled}
                     title={insertDisabled ? insertDisabledReason : `Insert ${placeholder}`}
