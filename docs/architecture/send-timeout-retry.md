@@ -21,9 +21,10 @@ when the configured budget would otherwise exceed the available window.
 
 ## Timeouts
 
-Every `provider.send` call is wrapped with an `AbortSignal` that fires after
-`SEND_PROVIDER_TIMEOUT_MS`. A timeout always yields the typed
-`SendTimeoutError` (never a hung invocation) and is logged as:
+Every `provider.send` call is raced against an independent timer
+(`SEND_PROVIDER_TIMEOUT_MS`) that also aborts the `AbortSignal`. A timeout
+always yields the typed `SendTimeoutError` (never a hung invocation), even if
+an injected provider ignores abort, and is logged as:
 
 | Field | Value |
 | --- | --- |
@@ -53,7 +54,8 @@ delivery result** and structured logs — not as provider-specific public DTOs:
 | Condition | Behaviour |
 | --- | --- |
 | No `Idempotency-Key` | **Single** provider attempt (at-least-once). Caller retries may double-send. |
-| `Idempotency-Key` claim held | Transient failures retry up to `SEND_MAX_ATTEMPTS` with exponential backoff (`SEND_RETRY_BASE_DELAY_MS`, capped at 2 s). |
+| `Idempotency-Key` claim held | **Clear** transient failures (`EmailProviderError` `transient` / `rate_limit`) retry up to `SEND_MAX_ATTEMPTS` with exponential backoff (`SEND_RETRY_BASE_DELAY_MS`, capped at 2 s). |
+| Timeout / ambiguous abort | Classified **transient** for HTTP (`503`) but **not** retried internally — the provider may already have accepted, and Forward Email has no provider-level idempotency key. |
 | Permanent failure | No retry. Claim is released so the same key may be reused after the caller fixes the request. |
 
 Retries **reuse the in-progress idempotency claim** — the ledger is not
@@ -68,14 +70,16 @@ returns the stored `SendResponse` without calling the provider again.
 
 | Who | When | Safe? |
 | --- | --- | --- |
-| **Internal** (this policy) | Transient + Idempotency-Key claim | Yes — same claim, bounded attempts |
-| **Caller** with same `Idempotency-Key` | After `503` / timeout / network | Yes — replay or re-claim after release; completed keys never re-send |
+| **Internal** (this policy) | Clear transient / rate limit + Idempotency-Key claim | Yes for concurrent callers (same claim). Still at-least-once at the provider if a 5xx arrives after accept — Forward Email does not dedupe. |
+| **Internal** on timeout | Never | Avoids a second provider POST after an ambiguous abort |
+| **Caller** with same `Idempotency-Key` | After `503` / timeout / network | Replay or re-claim after release; completed keys never re-send. After a timeout, a caller retry may still double-deliver at the provider (same ambiguity). |
 | **Caller** without `Idempotency-Key` | Any retry after uncertainty | **Not safe** — may deliver twice |
 | **Caller** after `502` permanent | Same payload | No — fix the request; retrying will fail the same way |
 
 Guidance for consumers: always send an `Idempotency-Key` for user-visible or
 payment-adjacent mail, and on timeout/`503` retry the **same** key. Do not mint
-a new key for the same logical send.
+a new key for the same logical send. Treat timeout retries as at-least-once
+until a provider-native idempotency mechanism exists.
 
 ## Configuration
 

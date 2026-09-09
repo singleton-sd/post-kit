@@ -2,9 +2,11 @@
  * Send-path timeout, failure classification, and idempotency-gated retry.
  *
  * Provider calls are always bounded by a configurable timeout. Internal retries
- * run only for transient failures and only when the request holds an
- * Idempotency-Key claim (so a retry cannot become a second delivered email).
- * Without that claim, the caller gets a single attempt (at-least-once).
+ * run only for *clear* transient provider failures (e.g. 5xx / rate limit) and
+ * only when the request holds an Idempotency-Key claim. Timeouts are transient
+ * for callers but are **not** retried internally — the provider may already
+ * have accepted the message, and Forward Email has no provider-level
+ * idempotency key. Without a claim, the caller gets a single attempt.
  *
  * @see docs/architecture/send-timeout-retry.md
  */
@@ -38,7 +40,8 @@ export type FailureClass = 'transient' | 'permanent';
 
 /**
  * Stable typed error when the send-path timeout aborts the provider call.
- * Classified as transient; retryable only under an idempotency claim.
+ * Classified as transient for HTTP/logging; not internally retryable (ambiguous
+ * whether the provider already accepted the message).
  */
 export class SendTimeoutError extends Error {
   readonly failureClass: FailureClass = 'transient';
@@ -200,7 +203,8 @@ export function classifySendFailure(error: unknown): ClassifiedFailure {
     return {
       failureClass: 'transient',
       failureCategory: error.failureCategory,
-      retryable: true,
+      // Ambiguous: the provider may have accepted before the response was lost.
+      retryable: false,
     };
   }
 
@@ -214,7 +218,7 @@ export function classifySendFailure(error: unknown): ClassifiedFailure {
       return {
         failureClass: 'transient',
         failureCategory: 'timeout',
-        retryable: true,
+        retryable: false,
       };
     }
 
@@ -263,7 +267,8 @@ function backoffMs(attempt: number, baseDelayMs: number): number {
 
 /**
  * Call provider.send with an AbortSignal that fires after `timeoutMs`.
- * Always throws {@link SendTimeoutError} (never a hung promise) on timeout.
+ * Always throws {@link SendTimeoutError} (never a hung promise) on timeout,
+ * even if the provider ignores abort and never settles.
  */
 export async function sendWithTimeout(
   provider: EmailProvider,
@@ -272,10 +277,21 @@ export async function sendWithTimeout(
 ): Promise<EmailSendResult> {
   const timeoutError = new SendTimeoutError(timeoutMs);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(timeoutError), timeoutMs);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      controller.abort(timeoutError);
+      reject(timeoutError);
+    }, timeoutMs);
+  });
+
+  const sendPromise = provider.send(request, controller.signal);
+  // If we time out first, ignore a later provider rejection (avoid unhandled).
+  void sendPromise.catch(() => undefined);
 
   try {
-    return await provider.send(request, controller.signal);
+    return await Promise.race([sendPromise, timeoutPromise]);
   } catch (error) {
     if (error instanceof SendTimeoutError) {
       throw error;
@@ -292,14 +308,15 @@ export async function sendWithTimeout(
       ) {
         throw timeoutError;
       }
-      // AbortError from fetch when our timer fired.
       if (error instanceof Error && error.name === 'AbortError') {
         throw timeoutError;
       }
     }
     throw error;
   } finally {
-    clearTimeout(timer);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
   }
 }
 

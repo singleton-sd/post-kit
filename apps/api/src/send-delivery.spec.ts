@@ -34,12 +34,12 @@ const REQUEST: EmailSendRequest = {
 };
 
 describe('classifySendFailure', () => {
-  it('classifies SendTimeoutError as transient/timeout', () => {
+  it('classifies SendTimeoutError as transient/timeout but not internally retryable', () => {
     const classified = classifySendFailure(new SendTimeoutError(1_000));
     assert.deepEqual(classified, {
       failureClass: 'transient',
       failureCategory: 'timeout',
-      retryable: true,
+      retryable: false,
     });
   });
 
@@ -76,7 +76,7 @@ describe('classifySendFailure', () => {
     }
   });
 
-  it('treats cancelled-with-timeout-cause as transient timeout', () => {
+  it('treats cancelled-with-timeout-cause as transient timeout (not internally retryable)', () => {
     const classified = classifySendFailure(
       new EmailProviderError({
         message: 'cancelled',
@@ -87,7 +87,7 @@ describe('classifySendFailure', () => {
     );
     assert.equal(classified.failureClass, 'transient');
     assert.equal(classified.failureCategory, 'timeout');
-    assert.equal(classified.retryable, true);
+    assert.equal(classified.retryable, false);
   });
 });
 
@@ -160,6 +160,20 @@ describe('sendWithTimeout', () => {
     await assert.rejects(
       () => sendWithTimeout(provider, REQUEST, 30),
       (error: unknown) => error instanceof SendTimeoutError && error.timeoutMs === 30,
+    );
+  });
+
+  it('throws SendTimeoutError even when the provider ignores abort', async () => {
+    const provider = providerThat(
+      async () =>
+        new Promise(() => {
+          /* never settles, never observes abort */
+        }),
+    );
+
+    await assert.rejects(
+      () => sendWithTimeout(provider, REQUEST, 25),
+      (error: unknown) => error instanceof SendTimeoutError && error.timeoutMs === 25,
     );
   });
 });
@@ -256,28 +270,25 @@ describe('deliverSend', () => {
     }
   });
 
-  it('retries timeouts when allowRetry is true', async () => {
+  it('does not retry timeouts even when allowRetry is true', async () => {
     let calls = 0;
     const provider = providerThat(async (_req, signal) => {
       calls += 1;
-      if (calls === 1) {
-        return new Promise((_resolve, reject) => {
-          signal?.addEventListener('abort', () => {
-            reject(
-              new EmailProviderError({
-                message: 'cancelled',
-                kind: 'cancelled',
-                provider: 'development',
-                cause: signal.reason,
-              }),
-            );
-          });
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(
+            new EmailProviderError({
+              message: 'cancelled',
+              kind: 'cancelled',
+              provider: 'development',
+              cause: signal.reason,
+            }),
+          );
         });
-      }
-      return { providerMessageId: 'after-timeout', accepted: true };
+      });
     });
     const policy = {
-      ...resolveSendDeliveryPolicy({ SEND_MAX_ATTEMPTS: '2' }),
+      ...resolveSendDeliveryPolicy({ SEND_MAX_ATTEMPTS: '3' }),
       providerTimeoutMs: 40,
     };
 
@@ -287,7 +298,12 @@ describe('deliverSend', () => {
       sleepFn: async () => undefined,
     });
 
-    assert.equal(delivery.ok, true);
-    assert.equal(calls, 2);
+    assert.equal(delivery.ok, false);
+    assert.equal(calls, 1);
+    if (!delivery.ok) {
+      assert.equal(delivery.failureClass, 'transient');
+      assert.equal(delivery.failureCategory, 'timeout');
+      assert.equal(delivery.attempts, 1);
+    }
   });
 });
