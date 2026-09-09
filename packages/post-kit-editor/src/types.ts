@@ -26,14 +26,20 @@ export interface TemplateSourceFiles {
 }
 
 /**
- * A single variable offered to the editing user, with optional guidance shown
- * alongside it in the variable catalogue.
+ * A single variable offered to the editing user in the catalogue UI.
  */
 export interface TemplateVariable {
-  /** Variable name as it appears in `{{name}}` placeholders. */
+  /** Placeholder name as used in `{{name}}`, e.g. `branding.companyName`. */
   name: string;
-  /** Optional human-readable explanation of what the variable holds. */
+  /** Human-readable label shown in the catalogue. */
+  label?: string;
+  /** Optional explanation of what the value contains. */
   description?: string;
-  /** Optional sample value used for preview affordances. */
+  /**
+   * Optional sample value.
+   *
+   * @deprecated Prefer `previewData` / the preview editor for sample values.
+   * Kept so existing consumers that pass or read `example` keep compiling.
+   */
   example?: string;
 }
