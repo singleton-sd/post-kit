@@ -78,20 +78,16 @@ function isReaderDocument(value: unknown): value is TReaderDocument {
 // ---------------------------------------------------------------------------
 
 /**
- * Compile a {@link TemplateSource} into a {@link CompiledTemplate}.
+ * Shared validate + EmailBuilder render + Handlebars preview substitution.
  *
- * Validation steps (in order):
- *  1. Metadata shape check — all required string fields present and non-empty.
- *  2. Preview-variable coverage — every variable listed in metadata must have
- *     a corresponding key in previewData.
- *  3. HTML render via `@usewaypoint/email-builder`.
- *  4. Handlebars subject and preview-variable render (validation only).
- *  5. SHA-256 content hash of the rendered HTML (compiledAt excluded).
+ * Used by {@link compile} (publish artifact) and {@link renderPreview} (editor
+ * pane). Does not touch the filesystem or `node:crypto`.
  */
-export async function compile(
-  source: TemplateSource,
-  options?: { sourceCommit?: string },
-): Promise<CompiledTemplate> {
+function compileTemplateCore(source: TemplateSource): {
+  metadata: TemplateSourceMetadata;
+  templateHtml: string;
+  previewHtml: string;
+} {
   // 1. Validate metadata shape
   const metadata = assertMetadata(source.metadata);
 
@@ -105,7 +101,7 @@ export async function compile(
     }
   }
 
-  // 3. Render HTML
+  // 3. Render HTML (placeholders preserved)
   let templateHtml: string;
   try {
     templateHtml = renderTemplateHtml(source.templateJson);
@@ -116,11 +112,11 @@ export async function compile(
     );
   }
 
-  // 4. Validate Handlebars in subject and compiled HTML (preview only — stored
-  //    HTML keeps {{variable}} placeholders for runtime send).
+  // 4. Handlebars subject + body against preview data
+  let previewHtml: string;
   try {
     Handlebars.compile(metadata.subject)(source.previewData);
-    Handlebars.compile(templateHtml)(source.previewData);
+    previewHtml = Handlebars.compile(templateHtml)(source.previewData);
   } catch (err) {
     throw new CompilerError(
       'RENDER_FAILURE',
@@ -128,7 +124,30 @@ export async function compile(
     );
   }
 
-  // 5. Compute content hash — compiledAt is intentionally excluded
+  return { metadata, templateHtml, previewHtml };
+}
+
+/**
+ * Compile a {@link TemplateSource} into a {@link CompiledTemplate}.
+ *
+ * Validation steps (in order):
+ *  1. Metadata shape check — all required string fields present and non-empty.
+ *  2. Preview-variable coverage — every variable listed in metadata must have
+ *     a corresponding key in previewData.
+ *  3. HTML render via `@usewaypoint/email-builder`.
+ *  4. Handlebars subject and preview-variable render (validation only).
+ *  5. SHA-256 content hash of the rendered HTML (compiledAt excluded).
+ *
+ * Stored `templateHtml` keeps `{{variable}}` placeholders for send time.
+ * For a fully substituted preview string, use {@link renderPreview}.
+ */
+export async function compile(
+  source: TemplateSource,
+  options?: { sourceCommit?: string },
+): Promise<CompiledTemplate> {
+  const { metadata, templateHtml } = compileTemplateCore(source);
+
+  // SHA-256 content hash — compiledAt is intentionally excluded
   const contentHash = createHash('sha256').update(templateHtml).digest('hex');
 
   const compiledAt = new Date().toISOString();
@@ -145,6 +164,18 @@ export async function compile(
       contentHash,
     },
   };
+}
+
+/**
+ * Render a template with preview data substituted (editor / local preview).
+ *
+ * Uses the same EmailBuilder + Handlebars path as {@link compile}, but returns
+ * the Handlebars-substituted HTML instead of the placeholder artifact.
+ * Avoids `node:crypto` and the filesystem so it can run in a browser bundle.
+ */
+export async function renderPreview(source: TemplateSource): Promise<string> {
+  const { previewHtml } = compileTemplateCore(source);
+  return previewHtml;
 }
 
 /**

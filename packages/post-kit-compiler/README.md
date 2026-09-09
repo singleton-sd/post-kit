@@ -19,7 +19,7 @@ pnpm add @singleton-sd/post-kit-compiler
 ## API
 
 ```ts
-import { compile, compileFromDirectory, validateSource, CompilerError } from '@singleton-sd/post-kit-compiler';
+import { compile, compileFromDirectory, renderPreview, validateSource, CompilerError } from '@singleton-sd/post-kit-compiler';
 ```
 
 ### `compile(source, options?)`
@@ -48,6 +48,17 @@ Reads `template.json`, `metadata.json`, and `preview.json` from `dir` and delega
 
 ```ts
 const result = await compileFromDirectory('./content/email-templates/marketing.contact-us');
+```
+
+### `renderPreview(source)`
+
+Same validation and EmailBuilder render path as `compile()`, but returns the
+Handlebars-substituted HTML string (preview values applied). Intended for the
+admin editor preview pane. Does not hash content and does not use `node:crypto`
+or the filesystem, so it is safe to call from a browser bundle.
+
+```ts
+const html = await renderPreview(source);
 ```
 
 ### `validateSource(source)`

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { compile, compileFromDirectory, validateSource } from './compiler';
+import { compile, compileFromDirectory, renderPreview, validateSource } from './compiler';
 import { CompilerError } from './compiler-error';
 import type { TemplateSource } from './template-source';
 
@@ -225,6 +225,26 @@ describe('compile()', () => {
     // compile() with a subject template and matching previewData should not throw
     const result = await compile(source);
     assert.ok(result.manifest.contentHash.length > 0);
+  });
+});
+
+describe('renderPreview()', () => {
+  it('returns HTML with preview values substituted', async () => {
+    const html = await renderPreview(contactUsSource);
+    assert.ok(html.includes('Hello Jane Doe'), 'should substitute {{name}}');
+    assert.ok(html.includes('jane@example.com'), 'should substitute {{email}}');
+    assert.doesNotMatch(html, /\{\{name\}\}/);
+  });
+
+  it('throws CompilerError(MISSING_PREVIEW_VARIABLE) when coverage fails', async () => {
+    await assert.rejects(
+      () => renderPreview(missingPreviewVarSource),
+      (err: unknown) => {
+        assert.ok(err instanceof CompilerError);
+        assert.equal(err.code, 'MISSING_PREVIEW_VARIABLE');
+        return true;
+      },
+    );
   });
 });
 
