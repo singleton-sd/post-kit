@@ -17,6 +17,13 @@ import {
 } from '@singleton-sd/post-kit-types';
 import { ensureAppConfiguration } from '../config/app-configuration';
 import { getSendRateLimiter, sendRateLimitKey } from '../contact-rate-limit';
+import {
+  BlobIdempotencyStore,
+  IDEMPOTENCY_KEY_HEADER,
+  IdempotencyStoreError,
+  validateIdempotencyKey,
+  type IdempotencyStore,
+} from '../idempotency';
 import { getSendSizeLimits, validateRequestBodySize, validateVariablesSize } from '../send-limits';
 import { createLogger, hashRecipient, resolveCorrelationId, type Logger } from '../telemetry';
 import {
@@ -55,6 +62,14 @@ export interface SendHandlerDependencies {
   resolveTenantEmailConfig?: (
     tenant: TenantContext,
   ) => Promise<ResolvedTenantEmailConfig> | ResolvedTenantEmailConfig;
+  /**
+   * Out-of-process idempotency ledger. When omitted, production resolves a
+   * Blob store from env; unit tests inject `MemoryIdempotencyStore` or leave
+   * unset when no Idempotency-Key header is sent.
+   */
+  idempotencyStore?: IdempotencyStore;
+  /** Lazy factory for production (loads App Configuration first). */
+  createIdempotencyStore?: () => Promise<IdempotencyStore>;
   createLogger?: typeof createLogger;
 }
 
@@ -79,6 +94,7 @@ export function createDefaultSendDependencies(
     createEmailProvider: (options) => createEmailProvider(process.env, options),
     resolveBranding: async () => ({}),
     resolveTenantEmailConfig: (tenant) => resolveTenantEmailConfig(tenant),
+    createIdempotencyStore: () => BlobIdempotencyStore.fromEnv(),
   };
 }
 
@@ -175,6 +191,23 @@ export function createSendHandler(deps: SendHandlerDependencies) {
           'failed',
           { failureCategory: 'rate_limited', retryAfterSec: limit.retryAfterSec },
         );
+      }
+
+      const rawIdempotencyKey = request.headers.get(IDEMPOTENCY_KEY_HEADER);
+      let idempotencyKey: string | undefined;
+      if (rawIdempotencyKey !== null && rawIdempotencyKey !== undefined) {
+        // Header present (including empty) — validate before any storage access.
+        const validated = validateIdempotencyKey(rawIdempotencyKey);
+        if (!validated.ok) {
+          return errorResponse(
+            400,
+            PostKitErrorCode.INVALID_RECIPIENT,
+            validated.error,
+            'validation_error',
+            { failureCategory: 'invalid_idempotency_key' },
+          );
+        }
+        idempotencyKey = validated.key;
       }
 
       const sizeLimits = getSendSizeLimits();
@@ -274,27 +307,139 @@ export function createSendHandler(deps: SendHandlerDependencies) {
             ? { apiToken: tenantEmailConfig.providerApiToken }
             : undefined,
         );
-      const result = await provider.send({
-        to: sendRequest.to,
-        from: tenantEmailConfig.fromAddress,
-        fromName: tenantEmailConfig.fromDisplayName,
-        replyTo: tenantEmailConfig.replyTo,
-        subject,
-        html,
-        correlationId,
-      });
 
-      const durationMs = Date.now() - startMs;
-      logger.info('send.request.completed', {
-        outcome: 'sent',
-        durationMs,
-        providerMessageId: result.providerMessageId,
-        ...logContext(),
-      });
+      let idempotencyStore: IdempotencyStore | undefined;
+      let idempotencyClaimed = false;
+      let idempotencyClaimToken: string | undefined;
+      if (idempotencyKey) {
+        try {
+          idempotencyStore =
+            deps.idempotencyStore ??
+            (deps.createIdempotencyStore ? await deps.createIdempotencyStore() : undefined);
+        } catch (err) {
+          if (err instanceof IdempotencyStoreError) {
+            return errorResponse(503, err.code, err.message, 'failed');
+          }
+          context.error('idempotency store init failed', {
+            name: err instanceof Error ? err.name : 'Error',
+            correlationId,
+          });
+          return errorResponse(
+            503,
+            PostKitErrorCode.STORAGE_FAILURE,
+            'Idempotency storage is temporarily unavailable.',
+          );
+        }
+        if (!idempotencyStore) {
+          return errorResponse(
+            503,
+            PostKitErrorCode.STORAGE_FAILURE,
+            'Idempotency storage is not configured.',
+          );
+        }
 
-      const response: SendResponse = { id: correlationId, status: 'sent' };
-      return { status: 200, headers, jsonBody: response };
+        let beginResult;
+        try {
+          beginResult = await idempotencyStore.begin(tenant, idempotencyKey);
+        } catch (err) {
+          if (err instanceof IdempotencyStoreError) {
+            return errorResponse(503, err.code, err.message, 'failed');
+          }
+          throw err;
+        }
+
+        if (beginResult.outcome === 'replay') {
+          const durationMs = Date.now() - startMs;
+          logger.info('send.request.completed', {
+            outcome: 'sent',
+            durationMs,
+            ...logContext(),
+          });
+          // Keep the current request correlation ID in the response header so
+          // callers can correlate this invocation's logs; the original send id
+          // remains in the body.
+          return { status: 200, headers, jsonBody: beginResult.response };
+        }
+
+        if (beginResult.outcome === 'in_progress') {
+          return errorResponse(
+            409,
+            PostKitErrorCode.IDEMPOTENCY_IN_PROGRESS,
+            'A request with this Idempotency-Key is already in progress for this tenant.',
+            'failed',
+            { failureCategory: 'idempotency_in_progress' },
+          );
+        }
+
+        idempotencyClaimed = true;
+        idempotencyClaimToken = beginResult.claimToken;
+      }
+
+      try {
+        const result = await provider.send({
+          to: sendRequest.to,
+          from: tenantEmailConfig.fromAddress,
+          fromName: tenantEmailConfig.fromDisplayName,
+          replyTo: tenantEmailConfig.replyTo,
+          subject,
+          html,
+          correlationId,
+        });
+
+        const response: SendResponse = { id: correlationId, status: 'sent' };
+
+        if (idempotencyClaimed && idempotencyStore && idempotencyKey && idempotencyClaimToken) {
+          try {
+            await completeIdempotencyWithRetry(
+              idempotencyStore,
+              tenant,
+              idempotencyKey,
+              response,
+              idempotencyClaimToken,
+            );
+          } catch (err) {
+            // Provider already accepted the message — do not return 200 while the
+            // ledger is still in_progress (that would 409 retries until TTL, then
+            // risk a second send). Ask the client to retry the same key after we
+            // failed to persist completion.
+            context.error('idempotency complete failed', {
+              name: err instanceof Error ? err.name : 'Error',
+              correlationId,
+            });
+            return errorResponse(
+              503,
+              err instanceof IdempotencyStoreError ? err.code : PostKitErrorCode.STORAGE_FAILURE,
+              'The message was accepted by the provider but the idempotency record could not be saved. Retry with the same Idempotency-Key.',
+              'failed',
+              { failureCategory: 'idempotency_complete_failed' },
+            );
+          }
+        }
+
+        const durationMs = Date.now() - startMs;
+        logger.info('send.request.completed', {
+          outcome: 'sent',
+          durationMs,
+          providerMessageId: result.providerMessageId,
+          ...logContext(),
+        });
+
+        return { status: 200, headers, jsonBody: response };
+      } catch (sendError) {
+        if (idempotencyClaimed && idempotencyStore && idempotencyKey && idempotencyClaimToken) {
+          try {
+            await idempotencyStore.release(tenant, idempotencyKey, idempotencyClaimToken);
+          } catch {
+            // Prefer the original send failure; release is best-effort.
+          }
+        }
+        throw sendError;
+      }
     } catch (error) {
+      if (error instanceof IdempotencyStoreError) {
+        return errorResponse(503, error.code, error.message, 'failed');
+      }
+
       if (error instanceof TenantEmailConfigError) {
         return errorResponse(503, error.code, error.message, 'failed', {
           failureCategory: 'tenant_config_not_found',
@@ -348,6 +493,40 @@ export function createSendHandler(deps: SendHandlerDependencies) {
   };
 }
 
+const IDEMPOTENCY_COMPLETE_ATTEMPTS = 3;
+
+/**
+ * Persist a completed idempotency record before acknowledging success to the
+ * caller. Retries briefly so transient storage blips do not leave an
+ * `in_progress` claim after a successful provider send.
+ */
+async function completeIdempotencyWithRetry(
+  store: IdempotencyStore,
+  tenant: TenantContext,
+  key: string,
+  response: SendResponse,
+  claimToken: string,
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= IDEMPOTENCY_COMPLETE_ATTEMPTS; attempt += 1) {
+    try {
+      await store.complete(tenant, key, response, claimToken);
+      return;
+    } catch (err) {
+      lastError = err;
+      if (attempt < IDEMPOTENCY_COMPLETE_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 25));
+      }
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new IdempotencyStoreError(
+        'Failed to persist completed idempotency record.',
+        PostKitErrorCode.STORAGE_FAILURE,
+      );
+}
+
 function failureCategoryFromErrorCode(
   code: PostKitErrorCode,
   outcome: 'failed' | 'validation_error' | 'auth_error',
@@ -374,6 +553,8 @@ function failureCategoryFromErrorCode(
       return 'tenant_config_not_found';
     case PostKitErrorCode.PROVIDER_FAILURE:
       return 'provider_failure';
+    case PostKitErrorCode.IDEMPOTENCY_IN_PROGRESS:
+      return 'idempotency_in_progress';
     default:
       return 'unknown';
   }
