@@ -47,8 +47,8 @@ ones.
 | 503 | `TENANT_CONFIG_NOT_FOUND` | Fails after template compilation, before the provider is constructed; `failureCategory=tenant_config_not_found` | The authenticated tenant/environment has no entry in `TENANT_EMAIL_CONFIG_BY_ID`, the entry is incomplete (no resolvable `fromAddress` after merge), or a configured `providerAccount` cannot be resolved from `TENANT_PROVIDER_ACCOUNT_SECRETS` | `TENANT_EMAIL_CONFIG_BY_ID` for the `tenantId` and `environment` from the credential; platform `EMAIL_FROM_ADDRESS` when the tenant entry omits `fromAddress`; Key Vault-backed env vars referenced by `TENANT_PROVIDER_ACCOUNT_SECRETS` | Only after configuration is fixed |
 | 503 | `PROVIDER_FAILURE` | Message `Email sender is not configured.`; fails after template compilation, before the provider is constructed | `EMAIL_FROM_ADDRESS` is unset in Function App settings and in App Configuration (`app:email:fromAddress`) | The Function App application settings and App Configuration key | Only after configuration is fixed |
 | 503 | `PROVIDER_FAILURE` | Provider rejected the send; `send provider failed` is logged with `kind=configuration` | Provider credential missing — e.g. `FORWARD_EMAIL_TOKEN` not resolved from Key Vault via App Configuration, or a malformed contact profile configuration | Key Vault reference resolution for `secret:forwardemail-api-key`; the Function App's managed identity access to Key Vault | Only after configuration is fixed |
-| 503 | `PROVIDER_FAILURE` | Intermittent; `kind=transient`, often with `statusCode` 5xx/408/409, or a request timeout (15 s) or transport failure | Provider outage, network failure, or timeout. The provider already retried internally (up to 2 retries with backoff) before surfacing this | Provider status; whether `durationMs` is near the timeout ceiling | Yes — retry with backoff |
-| 503 | `PROVIDER_FAILURE` | Bursty failures under load; `kind=rate_limit`, `statusCode=429` | Provider rate limit reached after internal retries | Send volume for the affected window across all tenants | Yes — back off, then retry |
+| 503 | `PROVIDER_FAILURE` | Intermittent; `failureClass=transient`, `kind=transient`, often with `statusCode` 5xx/408/409, or a request timeout (`failureCategory=timeout`, default 15 s) or transport failure | Provider outage, network failure, or timeout. With an `Idempotency-Key`, the send path may already have retried internally (bounded attempts + backoff) before surfacing this | Provider status; whether `durationMs` / `attempt` are near the timeout ceiling; see [`send-timeout-retry.md`](../architecture/send-timeout-retry.md) | Yes — retry with the **same** `Idempotency-Key` when one was used |
+| 503 | `PROVIDER_FAILURE` | Bursty failures under load; `failureClass=transient`, `kind=rate_limit`, `statusCode=429` | Provider rate limit reached after send-path retries (when keyed) | Send volume for the affected window across all tenants | Yes — back off, then retry the same key |
 | 502 | `PROVIDER_FAILURE` | Consistent failure for a specific request; `kind=permanent` with a provider 4xx `statusCode` (other than 429/408/409) | Provider rejected the message permanently — e.g. unverified sender domain, unauthorized credential, malformed payload | Sender identity and domain setup, see [`email-forward-email.md`](../email-forward-email.md) | No — the same request fails again |
 | 502 | `PROVIDER_FAILURE` | Failure before any provider HTTP call; `kind=validation` | A header field (`to`, `from`, `subject`, `replyTo`) is empty after sanitisation or contains CR/LF control characters — typically a template subject rendered from a variable | The rendered subject and the configured sender address for stray newlines | No — fix the template or input |
 | 502 | `PROVIDER_FAILURE` | Rare; `kind=cancelled` | The send was aborted (caller/host cancellation) | Host shutdown, scaling events, or client disconnects in the same window | Yes — the message was probably never sent, but confirm no duplicate first |
@@ -107,13 +107,16 @@ Fields that may appear (only non-`undefined` values are emitted):
 | `environment` | completed / failed | `development`, `staging`, or `production` from the credential; absent on 401/403 and on `STORAGE_FAILURE` |
 | `providerMessageId` | completed | Provider-assigned message id on successful sends |
 | `providerRequestId` | failed | Provider trace/request id on provider failures when available |
-| `failureCategory` | failed | Stable failure bucket — API-level categories (`template_not_found`, `missing_variables`, …) or one of the six provider kinds (`configuration`, `transient`, `rate_limit`, `permanent`, `validation`, `cancelled`) |
+| `failureCategory` | failed | Stable failure bucket — API-level categories (`template_not_found`, `missing_variables`, `timeout`, …) or one of the six provider kinds (`configuration`, `transient`, `rate_limit`, `permanent`, `validation`, `cancelled`) |
+| `failureClass` | failed (provider / timeout) | `transient` or `permanent` — send-path classification for retry decisions; see [`send-timeout-retry.md`](../architecture/send-timeout-retry.md) |
+| `attempt` | completed / failed (provider path) | How many provider attempts this invocation used |
 | `recipientHash` | completed / failed | 16-character SHA-256 prefix of the normalized recipient address; see [`send-metrics-queries.md`](./send-metrics-queries.md) |
 
 Three additional diagnostic entries are written through the Functions invocation
 context rather than the structured logger, so they are searchable by message
 text: `app configuration load failed` (error `name` only),
-`send provider failed` (`kind`, `statusCode`, `correlationId`), and
+`send provider failed` (`kind`, `statusCode`, `correlationId`),
+`send provider timed out` (`timeoutMs`, `correlationId`), and
 `send failed` (error `name`, `correlationId`).
 
 The provider adapter logs its own entries — `email.send.accepted`,

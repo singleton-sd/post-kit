@@ -20,8 +20,9 @@ See also [`request-lifecycle.md`](./request-lifecycle.md).
 - Unsafe or oversized keys are rejected with HTTP `400` **before** any storage
   access (`1–128` characters of `[A-Za-z0-9._:~-]`).
 
-This issue does **not** implement automatic retries; it only makes client
-retries safe. Automatic retry policy is a separate concern.
+This document covers the claim ledger. Automatic retry of transient provider
+failures (timeouts, 5xx, throttling) is gated on holding that claim — see
+[`send-timeout-retry.md`](./send-timeout-retry.md).
 
 ## Persistence choice: Azure Blob (not Table)
 

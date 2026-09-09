@@ -24,6 +24,13 @@ import {
   validateIdempotencyKey,
   type IdempotencyStore,
 } from '../idempotency';
+import {
+  DeliveryFailureError,
+  deliverSend,
+  resolveSendDeliveryPolicy,
+  SendTimeoutError,
+  type SendDeliveryPolicy,
+} from '../send-delivery';
 import { getSendSizeLimits, validateRequestBodySize, validateVariablesSize } from '../send-limits';
 import { createLogger, hashRecipient, resolveCorrelationId, type Logger } from '../telemetry';
 import {
@@ -45,7 +52,11 @@ export interface SendHandlerDependencies {
   tenantResolver: TenantResolver;
   templateStore: TemplateStore;
   /** Prefer injecting a factory so App Configuration can populate env first. */
-  createEmailProvider?: (options?: { apiToken?: string }) => EmailProvider;
+  createEmailProvider?: (options?: {
+    apiToken?: string;
+    timeoutMs?: number;
+    maxRetries?: number;
+  }) => EmailProvider;
   /** Direct provider injection for unit tests. */
   emailProvider?: EmailProvider;
   /**
@@ -70,6 +81,8 @@ export interface SendHandlerDependencies {
   idempotencyStore?: IdempotencyStore;
   /** Lazy factory for production (loads App Configuration first). */
   createIdempotencyStore?: () => Promise<IdempotencyStore>;
+  /** Override timeout/retry policy (tests). Defaults from env via resolveSendDeliveryPolicy. */
+  deliveryPolicy?: SendDeliveryPolicy;
   createLogger?: typeof createLogger;
 }
 
@@ -91,7 +104,12 @@ export function createDefaultSendDependencies(
       return new ApiKeyTenantResolver(parseTenantKeyMap(process.env.TENANT_KEY_MAP));
     },
     templateStore,
-    createEmailProvider: (options) => createEmailProvider(process.env, options),
+    createEmailProvider: (options) =>
+      createEmailProvider(process.env, {
+        ...options,
+        // Send path owns timeout + idempotency-gated retry; disable provider-internal retries.
+        maxRetries: options?.maxRetries ?? 0,
+      }),
     resolveBranding: async () => ({}),
     resolveTenantEmailConfig: (tenant) => resolveTenantEmailConfig(tenant),
     createIdempotencyStore: () => BlobIdempotencyStore.fromEnv(),
@@ -140,6 +158,8 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       outcome: 'failed' | 'validation_error' | 'auth_error' = 'failed',
       extra?: {
         failureCategory?: string;
+        failureClass?: 'transient' | 'permanent';
+        attempt?: number;
         providerMessageId?: string;
         providerRequestId?: string;
         retryAfterSec?: number;
@@ -151,6 +171,8 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         outcome,
         errorCode: code,
         failureCategory,
+        failureClass: extra?.failureClass,
+        attempt: extra?.attempt,
         durationMs,
         providerMessageId: extra?.providerMessageId,
         providerRequestId: extra?.providerRequestId,
@@ -302,15 +324,25 @@ export function createSendHandler(deps: SendHandlerDependencies) {
 
       const provider =
         deps.emailProvider ??
-        (deps.createEmailProvider ?? ((options) => createEmailProvider(process.env, options)))(
+        (
+          deps.createEmailProvider ??
+          ((options) =>
+            createEmailProvider(process.env, {
+              ...options,
+              maxRetries: options?.maxRetries ?? 0,
+            }))
+        )(
           tenantEmailConfig.providerApiToken
             ? { apiToken: tenantEmailConfig.providerApiToken }
             : undefined,
         );
 
+      const deliveryPolicy = deps.deliveryPolicy ?? resolveSendDeliveryPolicy();
+
       let idempotencyStore: IdempotencyStore | undefined;
       let idempotencyClaimed = false;
       let idempotencyClaimToken: string | undefined;
+      let idempotencyReleased = false;
       if (idempotencyKey) {
         try {
           idempotencyStore =
@@ -376,16 +408,49 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       }
 
       try {
-        const result = await provider.send({
-          to: sendRequest.to,
-          from: tenantEmailConfig.fromAddress,
-          fromName: tenantEmailConfig.fromDisplayName,
-          replyTo: tenantEmailConfig.replyTo,
-          subject,
-          html,
-          correlationId,
-        });
+        const delivery = await deliverSend(
+          provider,
+          {
+            to: sendRequest.to,
+            from: tenantEmailConfig.fromAddress,
+            fromName: tenantEmailConfig.fromDisplayName,
+            replyTo: tenantEmailConfig.replyTo,
+            subject,
+            html,
+            correlationId,
+          },
+          {
+            policy: deliveryPolicy,
+            // Retry only while we hold the claim — reuse the same record; never
+            // release between attempts (that would allow a parallel claim).
+            allowRetry: idempotencyClaimed,
+            onAttempt: (info) => {
+              if (info.failureClass) {
+                logger.info('send.provider.attempt', {
+                  outcome: 'failed',
+                  failureClass: info.failureClass,
+                  failureCategory: info.failureCategory,
+                  attempt: info.attempt,
+                  ...logContext(),
+                });
+              }
+            },
+          },
+        );
 
+        if (!delivery.ok) {
+          if (idempotencyClaimed && idempotencyStore && idempotencyKey && idempotencyClaimToken) {
+            try {
+              await idempotencyStore.release(tenant, idempotencyKey, idempotencyClaimToken);
+              idempotencyReleased = true;
+            } catch {
+              // Prefer the original send failure; release is best-effort.
+            }
+          }
+          throw delivery.error;
+        }
+
+        const result = delivery.result;
         const response: SendResponse = { id: correlationId, status: 'sent' };
 
         if (idempotencyClaimed && idempotencyStore && idempotencyKey && idempotencyClaimToken) {
@@ -421,12 +486,19 @@ export function createSendHandler(deps: SendHandlerDependencies) {
           outcome: 'sent',
           durationMs,
           providerMessageId: result.providerMessageId,
+          attempt: delivery.attempts,
           ...logContext(),
         });
 
         return { status: 200, headers, jsonBody: response };
       } catch (sendError) {
-        if (idempotencyClaimed && idempotencyStore && idempotencyKey && idempotencyClaimToken) {
+        if (
+          !idempotencyReleased &&
+          idempotencyClaimed &&
+          idempotencyStore &&
+          idempotencyKey &&
+          idempotencyClaimToken
+        ) {
           try {
             await idempotencyStore.release(tenant, idempotencyKey, idempotencyClaimToken);
           } catch {
@@ -456,6 +528,85 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         return errorResponse(status, error.code, error.message, 'auth_error');
       }
 
+      if (error instanceof DeliveryFailureError) {
+        const cause = error.cause;
+        if (cause instanceof SendTimeoutError || error.failureCategory === 'timeout') {
+          const timeoutMs = cause instanceof SendTimeoutError ? cause.timeoutMs : undefined;
+          context.error('send provider timed out', {
+            timeoutMs,
+            correlationId,
+          });
+          return errorResponse(
+            503,
+            PostKitErrorCode.PROVIDER_FAILURE,
+            'Email provider timed out while sending the message.',
+            'failed',
+            {
+              failureCategory: 'timeout',
+              failureClass: 'transient',
+              attempt: error.attempts,
+            },
+          );
+        }
+
+        if (cause instanceof EmailProviderError) {
+          context.error('send provider failed', {
+            kind: cause.kind,
+            statusCode: cause.statusCode,
+            correlationId,
+          });
+          return errorResponse(
+            cause.kind === 'configuration' ||
+              cause.kind === 'transient' ||
+              cause.kind === 'rate_limit'
+              ? 503
+              : 502,
+            PostKitErrorCode.PROVIDER_FAILURE,
+            'Email provider failed to send the message.',
+            'failed',
+            {
+              failureCategory: error.failureCategory,
+              failureClass: error.failureClass,
+              attempt: error.attempts,
+              providerRequestId: cause.providerRequestId,
+            },
+          );
+        }
+
+        context.error('send failed', {
+          name: cause instanceof Error ? cause.name : 'Error',
+          correlationId,
+        });
+        return errorResponse(
+          error.failureClass === 'transient' ? 503 : 500,
+          PostKitErrorCode.PROVIDER_FAILURE,
+          'We could not send your message. Please try again shortly.',
+          'failed',
+          {
+            failureCategory: error.failureCategory,
+            failureClass: error.failureClass,
+            attempt: error.attempts,
+          },
+        );
+      }
+
+      if (error instanceof SendTimeoutError) {
+        context.error('send provider timed out', {
+          timeoutMs: error.timeoutMs,
+          correlationId,
+        });
+        return errorResponse(
+          503,
+          PostKitErrorCode.PROVIDER_FAILURE,
+          'Email provider timed out while sending the message.',
+          'failed',
+          {
+            failureCategory: 'timeout',
+            failureClass: 'transient',
+          },
+        );
+      }
+
       if (error instanceof EmailProviderError) {
         context.error('send provider failed', {
           kind: error.kind,
@@ -473,6 +624,8 @@ export function createSendHandler(deps: SendHandlerDependencies) {
           'failed',
           {
             failureCategory: error.failureCategory,
+            failureClass:
+              error.kind === 'transient' || error.kind === 'rate_limit' ? 'transient' : 'permanent',
             providerRequestId: error.providerRequestId,
           },
         );

@@ -8,7 +8,8 @@ supporting behaviour lives in `apps/api/src/tenant/`,
 
 For the wider system picture see [`overview.md`](./overview.md); for the
 tenant boundary see [`multi-tenant-security.md`](./multi-tenant-security.md);
-for send idempotency see [`send-idempotency.md`](./send-idempotency.md).
+for send idempotency see [`send-idempotency.md`](./send-idempotency.md);
+for timeouts and safe retry see [`send-timeout-retry.md`](./send-timeout-retry.md).
 
 ## Route
 
@@ -78,13 +79,16 @@ credential.
         completed replay -> 200 original SendResponse (no provider call)
         in flight -> 409 IDEMPOTENCY_IN_PROGRESS
         |
-10. provider.send({ to, from, fromName, subject, html, correlationId })
-        createEmailProvider(process.env) -> development sink or Forward Email
-        on success with claim -> complete ledger; on failure -> release claim
-        failure -> 502/503 PROVIDER_FAILURE
+10. provider.send (bounded timeout; see send-timeout-retry.md)
+        createEmailProvider(..., { maxRetries: 0 }) — send path owns retries
+        AbortSignal after SEND_PROVIDER_TIMEOUT_MS (default 15s) -> SendTimeoutError
+        with claim: retry transient failures up to SEND_MAX_ATTEMPTS (same claim)
+        without claim: single attempt
+        on success with claim -> complete ledger; on final failure -> release claim
+        failure -> 502/503 PROVIDER_FAILURE (failureClass transient|permanent in logs)
         |
 11. log send.request.completed (outcome, durationMs, tenantId, templateKey,
-    providerMessageId) and return 200 { id: correlationId, status: 'sent' }
+    providerMessageId, attempt) and return 200 { id: correlationId, status: 'sent' }
 ```
 
 Step ordering matters for two reasons: App Configuration is loaded *before*
@@ -102,8 +106,9 @@ template variables.
 - Logs are newline-delimited JSON. The logger emits only the fields declared
   on `LogEntry` (`correlationId`, `tenantId`, `environment`, `templateKey`,
   `outcome`, `durationMs`, `providerMessageId`, `failureCategory`,
-  `recipientHash`, `errorCode`). Recipient addresses, variable values, and
-  tokens are never logged. See [`send-metrics-queries.md`](../operations/send-metrics-queries.md)
+  `failureClass`, `attempt`, `recipientHash`, `errorCode`). Recipient addresses,
+  variable values, and tokens are never logged. See
+  [`send-metrics-queries.md`](../operations/send-metrics-queries.md)
   for the field contract and operational queries.
 
 ## Error codes and HTTP statuses
@@ -124,7 +129,7 @@ Consumers should branch on `code`, not on the message text or the status.
 | `metadata.json` is malformed, mismatched key, or wrong `schemaVersion`; unsafe key reached the store | `400` | `INVALID_TEMPLATE` | Re-publish the template with `post-kit-publish`.                          |
 | Any other template-store failure (e.g. storage unreachable)      | `500` | `PROVIDER_FAILURE`   | Retry with backoff; include the correlation ID in a support request.                       |
 | `EMAIL_FROM_ADDRESS` is not configured                           | `503` | `PROVIDER_FAILURE`   | Service-side misconfiguration. Retry later; report the correlation ID.                     |
-| Provider failed with kind `configuration`, `transient`, or `rate_limit` | `503` | `PROVIDER_FAILURE` | Retry with backoff.                                                                  |
+| Provider failed with kind `configuration`, `transient`, or `rate_limit`; or send-path timeout | `503` | `PROVIDER_FAILURE` | Retry with backoff. Prefer the same `Idempotency-Key` when one was used. |
 | Provider failed with any other kind (`validation`, `permanent`, `cancelled`) | `502` | `PROVIDER_FAILURE` | Do not blindly retry — the message was rejected downstream.               |
 | Same `Idempotency-Key` still in flight for this tenant                   | `409` | `IDEMPOTENCY_IN_PROGRESS` | Wait and retry the same key; do not start a parallel send.              |
 | `Idempotency-Key` present but empty, oversized, or bad charset           | `400` | `INVALID_RECIPIENT` | Fix the header: 1–128 of `[A-Za-z0-9._:~-]`. (Code reused for request-input validation.) |

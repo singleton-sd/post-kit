@@ -111,6 +111,7 @@ repositories and published by CI.
 | Storage           | `ssdpostkitstprodae`                     | Function App storage                                           |
 | Template storage  | `TEMPLATE_STORAGE_ACCOUNT` / `TEMPLATE_STORAGE_CONTAINER` (default `templates`) | Read with `DefaultAzureCredential`         |
 | Send idempotency  | `IDEMPOTENCY_STORAGE_ACCOUNT` (falls back to template account) / container `idempotency` | Blob ledger; see [`send-idempotency.md`](./send-idempotency.md) |
+| Send timeout/retry | `SEND_PROVIDER_TIMEOUT_MS` / `SEND_MAX_ATTEMPTS` (idempotency-gated) | See [`send-timeout-retry.md`](./send-timeout-retry.md) |
 | App configuration | `ssd-postkit-appcs-prod-ae`              | Free SKU; non-secret settings + Key Vault references           |
 | Secrets           | Key Vault `ssd-global-kv-prod-ae`        | Resource group `rg-ssd-global`; IDs in [`SETUP.md`](../../SETUP.md) |
 | Packages          | npmjs public `@singleton-sd/post-kit-*`  | Not published yet — see **Not yet implemented**                |

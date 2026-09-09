@@ -162,7 +162,10 @@ State these plainly; do not assume any of them exist.
   configured from address.
 - **No tenant branding store.** The handler merges `TenantBranding` into
   template variables, but the default `resolveBranding` returns `{}`.
-- **No idempotency key.** Retrying a send after a timeout may send twice.
+- **Optional idempotency.** Without `Idempotency-Key`, retrying a send after a
+  timeout may send twice. With a key, client and internal retries are safe —
+  see [`send-idempotency.md`](./send-idempotency.md) and
+  [`send-timeout-retry.md`](./send-timeout-retry.md).
 - **No validation of `TENANT_KEY_MAP` contents.** The JSON is cast to
   `TenantKeyMap` and its `tenantId` / `environment` values reach the blob path
   unchecked, so an operator typo can silently point a credential at an

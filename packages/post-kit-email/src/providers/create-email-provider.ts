@@ -79,13 +79,24 @@ export function loadEmailRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Em
 
 export function createEmailProvider(
   env: NodeJS.ProcessEnv = process.env,
-  options: { apiToken?: string } = {},
+  options: {
+    apiToken?: string;
+    /** Override per-attempt HTTP timeout (Forward Email). */
+    timeoutMs?: number;
+    /**
+     * Override provider-internal retries. Send path passes `0` so timeout /
+     * idempotency-gated retry live in the API layer instead.
+     */
+    maxRetries?: number;
+  } = {},
 ): EmailProvider {
   const config = loadEmailRuntimeConfig(env);
   if (config.provider === 'forward-email') {
     return new ForwardEmailProvider({
       apiToken: options.apiToken ?? env.FORWARD_EMAIL_TOKEN ?? env.FORWARDEMAIL_API_KEY,
       baseUrl: env.FORWARD_EMAIL_BASE_URL ?? env.FORWARDEMAIL_BASE_URL,
+      timeoutMs: options.timeoutMs,
+      maxRetries: options.maxRetries,
     });
   }
   return new DevelopmentEmailProvider();
