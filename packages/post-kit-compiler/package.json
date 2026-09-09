@@ -19,6 +19,13 @@
       "default": "./dist/preview-entry.js"
     }
   },
+  "typesVersions": {
+    "*": {
+      "preview": [
+        "./dist/preview-entry.d.ts"
+      ]
+    }
+  },
   "files": [
     "dist",
     "LICENSE"
