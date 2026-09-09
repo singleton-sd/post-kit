@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { EDITOR_CLASS_PREFIX } from '../email-template-editor';
 import type { TemplateSourceFiles } from '../types';
+import { PreviewErrorBanner, PreviewFrame, wrapPreviewHtmlWithCsp } from './preview-frame';
 import { PreviewPane } from './PreviewPane';
 import { renderTemplatePreview } from './render-template-preview';
 
@@ -80,38 +81,51 @@ describe('renderTemplatePreview', () => {
   });
 });
 
-describe('PreviewPane', () => {
-  it('renders the preview surface with a sandboxed iframe contract in markup', () => {
-    // useEffect does not run under react-dom/server; assert the chrome mounts
-    // and that successful renders use a script-disabled sandbox (unit-tested
-    // via renderTemplatePreview above for the failure path).
+describe('wrapPreviewHtmlWithCsp', () => {
+  it('injects a restrictive CSP meta tag into fragment HTML', () => {
+    const wrapped = wrapPreviewHtmlWithCsp('<p>Hello</p>');
+    assert.match(wrapped, /http-equiv="Content-Security-Policy"/i);
+    assert.match(wrapped, /connect-src 'none'/);
+    assert.match(wrapped, /img-src data:/);
+    assert.match(wrapped, /<p>Hello<\/p>/);
+  });
+
+  it('injects into an existing head when present', () => {
+    const wrapped = wrapPreviewHtmlWithCsp(
+      '<!DOCTYPE html><html><head><title>t</title></head><body>x</body></html>',
+    );
+    assert.match(wrapped, /<head><meta http-equiv="Content-Security-Policy"/i);
+  });
+});
+
+describe('PreviewPane presentational surfaces', () => {
+  it('renders PreviewErrorBanner with alert role and message', () => {
+    const html = renderToStaticMarkup(
+      <PreviewErrorBanner message="Failed to render template HTML: bad document" />,
+    );
+    assert.match(html, /Failed to render template HTML: bad document/);
+    assert.match(html, /role="alert"/);
+    assert.match(html, new RegExp(`${EDITOR_CLASS_PREFIX}preview-error`));
+  });
+
+  it('renders PreviewFrame with sandbox, csp, and CSP-wrapped srcDoc', async () => {
+    const rendered = await renderTemplatePreview(validFiles);
+    assert.equal(rendered.ok, true);
+    if (!rendered.ok) return;
+
+    const html = renderToStaticMarkup(<PreviewFrame html={rendered.html} />);
+    assert.match(html, /sandbox=""/);
+    assert.match(html, /\bcsp="/);
+    assert.match(html, /connect-src &#x27;none&#x27;|connect-src 'none'/);
+    assert.match(html, /srcdoc="/i);
+    assert.match(html, /Content-Security-Policy/);
+    assert.match(html, /Hello Jane Doe/);
+    assert.match(html, new RegExp(`${EDITOR_CLASS_PREFIX}preview-frame`));
+  });
+
+  it('mounts PreviewPane chrome (effects do not run under SSR)', () => {
     const html = renderToStaticMarkup(<PreviewPane files={validFiles} debounceMs={0} />);
     assert.match(html, new RegExp(`${EDITOR_CLASS_PREFIX}preview-pane`));
     assert.match(html, /Rendering preview/);
-  });
-
-  it('documents sandbox + srcDoc attributes on the iframe element type', () => {
-    // Static assertion of the failure-path UI by rendering an error message
-    // the same way PreviewPane does after renderTemplatePreview fails.
-    const errorHtml = renderToStaticMarkup(
-      <section className={`${EDITOR_CLASS_PREFIX}preview-pane`}>
-        <p className={`${EDITOR_CLASS_PREFIX}preview-pane-error`} role="alert">
-          Failed to render template HTML: bad document
-        </p>
-      </section>,
-    );
-    assert.match(errorHtml, /Failed to render template HTML: bad document/);
-    assert.match(errorHtml, /role="alert"/);
-
-    const frameHtml = renderToStaticMarkup(
-      <iframe
-        className={`${EDITOR_CLASS_PREFIX}preview-frame`}
-        title="Email preview"
-        sandbox=""
-        srcDoc="<p>Hello Jane Doe</p>"
-      />,
-    );
-    assert.match(frameHtml, /sandbox=""/);
-    assert.match(frameHtml, /srcDoc="|srcdoc="/i);
   });
 });

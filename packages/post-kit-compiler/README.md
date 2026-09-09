@@ -55,9 +55,15 @@ const result = await compileFromDirectory('./content/email-templates/marketing.c
 Same validation and EmailBuilder render path as `compile()`, but returns the
 Handlebars-substituted HTML string (preview values applied). Intended for the
 admin editor preview pane. Does not hash content and does not use `node:crypto`
-or the filesystem, so it is safe to call from a browser bundle.
+or the filesystem.
+
+**Browser bundles must import from `@singleton-sd/post-kit-compiler/preview`**
+(not the package root). The root entry still re-exports `renderPreview` for
+Node tooling, but also pulls in `compile` / filesystem helpers.
 
 ```ts
+import { renderPreview } from '@singleton-sd/post-kit-compiler/preview';
+
 const html = await renderPreview(source);
 ```
 

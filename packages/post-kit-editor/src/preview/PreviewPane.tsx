@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import { EDITOR_CLASS_PREFIX } from '../email-template-editor';
 import type { TemplateSourceFiles } from '../types';
+import { PreviewErrorBanner, PreviewFrame } from './preview-frame';
 import {
   PREVIEW_DEBOUNCE_MS,
   renderTemplatePreview,
@@ -23,9 +24,10 @@ export interface PreviewPaneProps {
 /**
  * Debounced, sandboxed HTML preview of the working template.
  *
- * Uses `@singleton-sd/post-kit-compiler` `renderPreview` so the pane matches
- * the publish/send rendering path. Render failures show the compiler message
- * without unmounting the rest of the editor.
+ * Uses `@singleton-sd/post-kit-compiler/preview` `renderPreview` so the pane
+ * matches the publish/send rendering path without pulling Node built-ins into
+ * the editor bundle. Render failures show the compiler message without
+ * unmounting the rest of the editor.
  */
 export function PreviewPane({
   files,
@@ -77,20 +79,8 @@ export function PreviewPane({
           Updating preview…
         </p>
       ) : null}
-      {result && !result.ok ? (
-        <p className={`${p}preview-pane-error`} data-testid={`${p}preview-error`} role="alert">
-          {result.error}
-        </p>
-      ) : null}
-      {result?.ok ? (
-        <iframe
-          className={`${p}preview-frame`}
-          title="Email preview"
-          sandbox=""
-          srcDoc={result.html}
-          data-testid={`${p}preview-frame`}
-        />
-      ) : null}
+      {result && !result.ok ? <PreviewErrorBanner message={result.error} /> : null}
+      {result?.ok ? <PreviewFrame html={result.html} /> : null}
     </section>
   );
 }

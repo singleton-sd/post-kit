@@ -13,6 +13,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./preview": {
+      "types": "./dist/preview-entry.d.ts",
+      "default": "./dist/preview-entry.js"
     }
   },
   "files": [

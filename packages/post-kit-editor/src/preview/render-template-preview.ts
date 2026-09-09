@@ -1,12 +1,12 @@
-import type { TemplateSource } from '@singleton-sd/post-kit-compiler';
-import { CompilerError, renderPreview } from '@singleton-sd/post-kit-compiler';
+import type { TemplateSource } from '@singleton-sd/post-kit-compiler/preview';
+import { CompilerError, renderPreview } from '@singleton-sd/post-kit-compiler/preview';
 
 import type { TemplateSourceFiles } from '../types';
 
 export type PreviewRenderResult = { ok: true; html: string } | { ok: false; error: string };
 
 /**
- * Compile + substitute preview HTML via `@singleton-sd/post-kit-compiler`.
+ * Compile + substitute preview HTML via `@singleton-sd/post-kit-compiler/preview`.
  * Never throws — failures become `{ ok: false, error }`.
  */
 export async function renderTemplatePreview(
