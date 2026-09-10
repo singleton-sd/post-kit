@@ -262,10 +262,20 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
 }
 
 export function createProductionMcpHandler(): ReturnType<typeof createMcpHandler> {
+  let storePromise: Promise<BlobTemplateStore> | undefined;
+  const store = (): Promise<BlobTemplateStore> => {
+    if (!storePromise) {
+      storePromise = BlobTemplateStore.fromEnv().catch((error: unknown) => {
+        storePromise = undefined;
+        throw error;
+      });
+    }
+    return storePromise;
+  };
   return createMcpHandler(
     createDefaultMcpDependencies({
-      load: async (tenant, key) => (await BlobTemplateStore.fromEnv()).load(tenant, key),
-      list: async (tenant) => (await BlobTemplateStore.fromEnv()).list(tenant),
+      load: async (tenant, key) => (await store()).load(tenant, key),
+      list: async (tenant) => (await store()).list(tenant),
     }),
   );
 }
