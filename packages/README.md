@@ -2,6 +2,11 @@
 
 Public npm packages under `@singleton-sd/post-kit-*`.
 
+**Consumer install, versioning, and upgrade guidance:**
+[`docs/guides/packages.md`](../docs/guides/packages.md).
+**Maintainer release path (OIDC publish):**
+[`docs/operations/releasing.md`](../docs/operations/releasing.md).
+
 | Package | npm name | Description |
 | --- | --- | --- |
 | [`post-kit-client`](./post-kit-client/README.md) | `@singleton-sd/post-kit-client` | Trusted server-side TypeScript client for the PostKit API |
