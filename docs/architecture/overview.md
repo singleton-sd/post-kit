@@ -65,25 +65,21 @@ error body carries `correlationId` plus a stable `PostKitErrorCode`.
 | `packages/post-kit-compiler`| `@singleton-sd/post-kit-compiler`   | Compile a template source directory (`template.json`, `metadata.json`, `preview.json`) into a `CompiledTemplate`: metadata validation, preview-variable coverage, EmailBuilder.js HTML render, Handlebars validation render, SHA-256 content hash. | Talk to Azure or the network; substitute real variable values into the stored HTML (placeholders are preserved for send time). |
 | `packages/post-kit-publisher`| `@singleton-sd/post-kit-publisher` | Compile a templates directory and upload artifacts to Blob Storage under the canonical tenant path. Exposes the `post-kit-publish` CLI. Fail-fast: if any template fails to compile, nothing is uploaded. | Accept unvalidated tenant/environment/template/storage-account values — all four go through `path-safety` assertions.  |
 | `packages/post-kit-email`  | `@singleton-sd/post-kit-email`      | Provider abstraction and delivery: `EmailProvider`, `createEmailProvider`, `DevelopmentEmailProvider`, `ForwardEmailProvider`, header sanitisation, contact-email helpers, and Forward Email domain provisioning (`post-kit-email-provision`). | Know about tenants, templates, or HTTP request shapes.                                                                |
+| `packages/post-kit-editor` | `@singleton-sd/post-kit-editor`     | React admin editor for Git-backed template source (`template.json`, `metadata.json`, `preview.json`) using EmailBuilder.js. Published for embedding in consumer admin UIs. | Act as a central multi-tenant CMS; talk to Azure or the PostKit API at send time.                                    |
 
 Packages must not reach into app internals. Public package APIs are explicit
 and minimal — for example `post-kit-publisher` only exports `.`, so its
 test-only client seam is unreachable from the published surface.
 
+Public `@singleton-sd/post-kit-*` packages (including client and editor) are
+on npmjs. `release.yml` publishes changed packages via **Trusted Publishing
+(OIDC)** (no `NPM_TOKEN`); maintainer checklist:
+[`SETUP.md`](../../SETUP.md) §6.
+
 ## Not yet implemented
 
 State these plainly rather than assuming them:
 
-- **`@singleton-sd/post-kit-editor`** — the EmailBuilder.js admin editor
-  package does not exist in this repository. It is referenced only as a
-  future consumer in `post-kit-types` doc comments. Tracked by
-  [#5](https://github.com/singleton-sd/post-kit/issues/5).
-- **npm publication** — `packages/*` are `"private": false` and
-  `release.yml` publishes changed `@singleton-sd/post-kit-*` packages to
-  npmjs via **Trusted Publishing (OIDC)** (no `NPM_TOKEN`). First-time
-  registry bootstrap and per-package Trusted Publisher config are human
-  gates in [`SETUP.md`](../../SETUP.md) §6 / [#105](https://github.com/singleton-sd/post-kit/issues/105).
-  Epic: [#4](https://github.com/singleton-sd/post-kit/issues/4).
 - **Additional delivery providers, per-tenant send rate limiting, recipient
   allowlisting, and signed webhooks** — not implemented; see
   [`multi-tenant-security.md`](./multi-tenant-security.md) and
