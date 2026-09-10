@@ -24,7 +24,9 @@
     "!dist/**/*.spec.js.map",
     "!dist/**/*.spec.d.ts",
     "!dist/**/*.spec.d.ts.map",
-    "!dist/fixtures/**"
+    "!dist/fixtures/**",
+    "!examples",
+    "!examples/**"
   ],
   "scripts": {
     "build": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.json",

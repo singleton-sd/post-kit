@@ -25,14 +25,25 @@ import {
   EmailTemplateEditor,
   type TemplateSourceFiles,
   type SerializedTemplateSource,
+  type ValidationIssue,
 } from '@singleton-sd/post-kit-editor';
 
-export function TemplateAdminPage({ template }: { template: TemplateSourceFiles }) {
+export function TemplateAdminPage({
+  template,
+  loading,
+  loadError,
+}: {
+  template: TemplateSourceFiles;
+  loading?: boolean;
+  loadError?: string;
+}) {
   return (
     <EmailTemplateEditor
       template={template}
       availableVariables={[{ name: 'name', description: 'Recipient display name' }]}
-      onSave={async (serialized, files) => {
+      loading={loading}
+      loadError={loadError}
+      onSave={async (serialized: SerializedTemplateSource, files: TemplateSourceFiles) => {
         // Commit serialized.templateJson / metadataJson / previewJson to the
         // consumer repository (e.g. via the app's own server endpoint).
         const res = await fetch('/api/templates', {
@@ -47,10 +58,9 @@ export function TemplateAdminPage({ template }: { template: TemplateSourceFiles 
       }}
       onSendTest={async (serialized, _files, recipient) => {
         // Browser → your trusted server only. The server uses
-        // @singleton-sd/post-kit-client with POSTKIT_API_KEY from Azure Key
-        // Vault `ssd-global-kv-prod-ae` (production). Local `.env` is for
-        // development only — never embed a long-lived PostKit API key in
-        // browser code.
+        // @singleton-sd/post-kit-client with secrets from Azure Key Vault
+        // (production) or local `.env` (development). Never embed a
+        // long-lived PostKit API key in browser code.
         const res = await fetch('/api/templates/send-test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -63,6 +73,9 @@ export function TemplateAdminPage({ template }: { template: TemplateSourceFiles 
       onDirtyChange={(dirty) => {
         // Optional: guard in-app navigation while dirty.
       }}
+      onValidationChange={(issues: ValidationIssue[]) => {
+        // Optional: mirror validation in the host chrome.
+      }}
       onPreviewRendered={(html) => {
         console.log('preview bytes', html.length);
       }}
@@ -71,6 +84,39 @@ export function TemplateAdminPage({ template }: { template: TemplateSourceFiles 
   );
 }
 ```
+
+A copy-pasteable single-file integration (plus synthetic sample JSON) lives in
+[`examples/minimal/`](./examples/minimal/).
+
+## Props
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `template` | `TemplateSourceFiles` | yes | Seeded working triple (`templateJson`, `metadata`, `previewData`). |
+| `onSave` | `(serialized, files) => SaveResult \| void \| Promise<…>` | yes | Persist working files. Receives serialized Git strings **and** structured files. |
+| `onSendTest` | `(serialized, files, recipient) => SendTestResult \| void \| Promise<…>` | no | When set, shows Send-test chrome. Must route through the consumer’s trusted server. |
+| `availableVariables` | `TemplateVariable[]` | no | Catalogue entries offered to the editing user. |
+| `onDirtyChange` | `(dirty: boolean) => void` | no | Fires when working state diverges from the seeded `template` (resets after successful save). |
+| `onValidationChange` | `(issues: ValidationIssue[]) => void` | no | Current validation issues whenever they change. |
+| `onPreviewRendered` | `(html: string) => void` | no | Successful preview HTML (e.g. open-in-new-tab without recompiling). |
+| `loading` | `boolean` | no | Non-interactive loading shell while the host fetches files. |
+| `loadError` | `string` | no | Non-interactive error shell with the host’s message. |
+| `className` | `string` | no | Extra class on the root element. |
+
+Also exported: `loadTemplateSource`, `serializeTemplateSource`,
+`validateTemplate`, `hasValidationErrors`, `EDITOR_CLASS_PREFIX`, and related
+types.
+
+## What this package does not do
+
+- **No persistence** — it never writes to disk, Git, or object storage. `onSave`
+  is the only way contents leave the editor.
+- **No sending** — it never calls PostKit or any mail transport. `onSendTest`
+  (when provided) is a consumer callback only.
+- **No credentials** — there are no API-key / token props. Secrets stay on the
+  consumer’s trusted server (Key Vault / env), never in browser bundles.
+- **No publish pipeline** — compilation and content hashing belong to
+  `@singleton-sd/post-kit-compiler` in CI or server tooling.
 
 ## Persistence is consumer-supplied
 
@@ -82,8 +128,9 @@ failure messages (no unhandled rejections).
 
 Send-test chrome appears **only** when `onSendTest` is provided. The editor
 validates a non-empty, plausible recipient address, then invokes the callback
-with the same serialized payload. Test delivery must go through the consumer's
-trusted server (typically `@singleton-sd/post-kit-client` server-side).
+with the same serialized payload plus the recipient. Test delivery must go
+through the consumer's trusted server (typically `@singleton-sd/post-kit-client`
+server-side).
 
 Optional `onDirtyChange` fires when working state diverges from the seeded
 `template` prop and resets after a successful save.
@@ -143,12 +190,16 @@ against the resulting HTML string:
 ```tsx
 import { renderToStaticMarkup } from 'react-dom/server';
 
-const html = renderToStaticMarkup(<EmailTemplateEditor template={template} onSave={() => {}} />);
+const html = renderToStaticMarkup(
+  <EmailTemplateEditor template={template} onSave={() => {}} />,
+);
 ```
 
 Specs live next to the code as `src/**/*.spec.tsx`. Behaviour that needs
 interaction is factored into pure functions (preview rows, save/send helpers)
-that can be tested without a DOM.
+that can be tested without a DOM. The end-to-end suite (`src/e2e.spec.tsx`)
+drives load → edit → validate → save / send-test through those helpers plus SSR
+markup.
 
 ## Development
 
@@ -157,3 +208,7 @@ pnpm test   # type-check + run tests
 pnpm build  # emit CommonJS to dist/
 pnpm lint   # covered by root eslint
 ```
+
+`examples/` is documentation-only: it is not listed in the package `files`
+array and is outside `src/`, so it is neither published to npm nor emitted into
+`dist/`.

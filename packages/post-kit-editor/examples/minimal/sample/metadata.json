@@ -1,0 +1,7 @@
+{
+  "key": "test.nested",
+  "name": "Nested Blocks",
+  "subject": "Hello {{name}}",
+  "variables": ["name"],
+  "schemaVersion": "1"
+}
