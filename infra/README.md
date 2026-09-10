@@ -11,11 +11,11 @@ Bicep for the PostKit Function App and App Configuration store in
 | App Configuration | `ssd-postkit-appcs-prod-ae` | **Free** |
 | Key Vault | existing `ssd-global-kv-prod-ae` | secrets `forwardemail-api-key`, `recipient-hash-hmac-key` |
 
-Non-secret settings (origins, host profiles, branding validation, from/inbox)
-live in App Configuration. `infra/appconfig-seed.json` is first-run only —
-`scripts/seed-appconfig.sh` does **not** overwrite keys that already exist, so
-ops can edit in the portal. The Forward Email token is a Key Vault reference
-(`secret:forwardemail-api-key`), not a value in the store.
+Non-secret settings (public API base URL, origins, host profiles, branding
+validation, from/inbox) live in App Configuration. `infra/appconfig-seed.json`
+is first-run only — `scripts/seed-appconfig.sh` does **not** overwrite keys that
+already exist, so ops can edit in the portal. The Forward Email token is a Key
+Vault reference (`secret:forwardemail-api-key`), not a value in the store.
 
 The Function App only needs `AZURE_APPCONFIGURATION_ENDPOINT` plus host
 plumbing. It loads keys at request time via managed identity.

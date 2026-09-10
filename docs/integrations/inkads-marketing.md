@@ -6,12 +6,17 @@ ClickUp: [POC-259](https://app.clickup.com/t/86d42mwdr)
 
 ## Public API base URL
 
-InkAds Astro builds set `PUBLIC_POSTKIT_API_BASE_URL` to the shared PostKit
-Function App:
+**Source of truth:** Azure App Configuration store `ssd-postkit-appcs-prod-ae`,
+key `app:api:publicBaseUrl` (seeded in [`infra/appconfig-seed.json`](../../infra/appconfig-seed.json)):
 
 ```text
 https://ssd-postkit-api-prod-ae.azurewebsites.net
 ```
+
+Static consumers (InkAds marketing) should resolve this at **build time** via
+GitHub OIDC + `az appconfig kv show` (see the marketing site’s
+`docs/deployment.md`). Do **not** treat a duplicated GitHub Actions variable as
+the primary source of truth.
 
 The contact form posts JSON to `{PUBLIC_POSTKIT_API_BASE_URL}/contact` with an
 `Origin` header matching the page host. PostKit applies CORS, per-IP rate
