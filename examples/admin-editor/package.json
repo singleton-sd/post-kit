@@ -1,0 +1,25 @@
+{
+  "name": "@singleton-sd/example-admin-editor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Minimal React embedding + in-memory persistence for @singleton-sd/post-kit-editor",
+  "license": "MIT",
+  "scripts": {
+    "test": "pnpm --filter @singleton-sd/post-kit-editor run build && tsc -p tsconfig.json && node --import tsx --test src/memory-persistence.spec.ts"
+  },
+  "dependencies": {
+    "@singleton-sd/post-kit-editor": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.9",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  }
+}

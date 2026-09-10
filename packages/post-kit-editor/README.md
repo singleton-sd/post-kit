@@ -201,14 +201,37 @@ that can be tested without a DOM. The end-to-end suite (`src/e2e.spec.tsx`)
 drives load → edit → validate → save / send-test through those helpers plus SSR
 markup.
 
+## Storybook (local visual exploration)
+
+Package-local Storybook (Vite + React) for clicking through the canvas,
+metadata, variable catalogue, preview pane, and save/send-test chrome with
+**synthetic fixtures only**. It is not a substitute for
+[`examples/minimal/`](./examples/minimal/) (canonical consumer sample) or for
+the SSR unit tests above.
+
+```bash
+# from the monorepo root
+pnpm --filter @singleton-sd/post-kit-editor storybook
+```
+
+Opens on http://localhost:6006. Stories live under `stories/` with config in
+`.storybook/`. Both are outside the published `files` / `dist` surface (along
+with `examples/`). There is no Chromatic / screenshot CI in v1.
+
+Most stories use the public API (`EmailTemplateEditor`, `EmailBuilderCanvas`).
+Isolated panel stories import private modules from `src/` and document that
+they are **dev-only** — do not treat those paths as a supported public API.
+
 ## Development
 
 ```bash
-pnpm test   # type-check + run tests
-pnpm build  # emit CommonJS to dist/
-pnpm lint   # covered by root eslint
+pnpm test       # type-check + run tests
+pnpm build      # emit CommonJS to dist/
+pnpm lint       # covered by root eslint
+pnpm storybook  # local Storybook (from this package, or via --filter above)
 ```
 
-`examples/` is documentation-only: it is not listed in the package `files`
-array and is outside `src/`, so it is neither published to npm nor emitted into
+`examples/` and Storybook (`stories/`, `.storybook/`) are documentation /
+dev-only: they are not listed in the package `files` allowlist for publish and
+are outside `src/`, so they are neither published to npm nor emitted into
 `dist/`.
