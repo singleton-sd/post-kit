@@ -353,7 +353,7 @@ function createAndPushTags(tags) {
   }
 }
 
-function main() {
+async function main() {
   if (CI) {
     syncToOriginMain();
   }
@@ -421,7 +421,7 @@ function main() {
 
   // Publish before pushing so OIDC/auth failure does not leave tags on main.
   // Already-published versions are skipped so a partial run can recover.
-  const npmResult = publishNpmReleases(releases);
+  const npmResult = await publishNpmReleases(releases);
   console.log(
     `npm publish completed (published: ${npmResult.published.length}, skipped: ${npmResult.skipped.length}).`,
   );
@@ -435,4 +435,7 @@ function main() {
   console.log('GitHub Releases created (or already present).');
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});

@@ -171,21 +171,46 @@ Publishable workspace packages use the `@singleton-sd/post-kit-*` scope and
 `"private": false`. The workspace root stays `"private": true` (the monorepo
 is not published).
 
-Auth model: **Trusted Publishing (OIDC)** from GitHub Actions
-(`engineering/publish-npm-library`). Do **not** add `NPM_TOKEN` /
-`NODE_AUTH_TOKEN` or Key Vault publish secrets.
+Auth model: **Trusted Publishing (OIDC)** from GitHub Actions — same pattern as
+[`engineering/publish-npm-library`](https://github.com/singleton-sd/ai-plattform-skills)
+and the live reference
+[`poc-inkads-epaper-renderer`](https://github.com/singleton-sd/poc-inkads-epaper-renderer).
+Do **not** add `NPM_TOKEN` / `NODE_AUTH_TOKEN` or Key Vault publish secrets.
+
+### Trusted Publisher form (every `@singleton-sd/post-kit-*` package)
+
+On each package → **Settings → Trusted publisher → GitHub Actions**:
+
+| Field | Value |
+| --- | --- |
+| Organization / user | `singleton-sd` |
+| Repository | `post-kit` (name only) |
+| Workflow filename | `release.yml` (filename only) |
+| Environment | empty |
+| Allowed action | **`npm publish`** |
+
+Packages: `types`, `email`, `compiler`, `client`, `publisher`, `editor`.
+
+### Checklist
 
 - [x] npmjs org access for `@singleton-sd`
-- [ ] Per-package Trusted Publisher on npmjs (Settings → Trusted publishing →
-      GitHub Actions): org `singleton-sd`, repository `post-kit`, workflow
-      filename `release.yml`, allow **`npm publish`**
-- [ ] First version on the registry for each package (`npm view
-      @singleton-sd/post-kit-<name> version`). If Trusted Publishing cannot
-      create the first version, run one interactive bootstrap from a
-      maintainer machine: `pnpm --filter <pkg> build && cd packages/<dir> &&
-      npm publish --access public` (complete 2FA)
-- [ ] After the first successful OIDC CI publish: Publishing access →
+- [x] Per-package Trusted Publisher configured (form above)
+- [x] First versions bootstrapped interactively from clean `main`
+      (`pnpm --filter <pkg> build` then `pnpm --filter <pkg> publish --access public`)
+- [ ] After the first successful **OIDC CI** publish: Publishing access →
       **Require 2FA and disallow tokens**
 
-`release.yml` upgrades npm to 11.x, refuses auth-bearing `.npmrc` files, and
-runs `pnpm release:ci`, which publishes changed packages before pushing tags.
+### Verify a published version
+
+Prefer the version document or a pack (package-root `npm view` can 404 briefly
+after first publish even when the version exists):
+
+```bash
+curl -sS "https://registry.npmjs.org/@singleton-sd%2fpost-kit-types/0.3.0" | head
+npm pack @singleton-sd/post-kit-types@0.3.0
+```
+
+`release.yml` uses pnpm 11 + npm 11.x, refuses auth-bearing `.npmrc` files (no
+`registry-url` on `setup-node`), and runs `pnpm release:ci`, which publishes
+changed packages **before** pushing tags. `publishConfig.provenance: true` is
+for CI OIDC only — local interactive publish may need it omitted temporarily.

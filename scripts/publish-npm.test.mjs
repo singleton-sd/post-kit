@@ -6,6 +6,7 @@ import test from 'node:test';
 import {
   PUBLISH_ORDER,
   isVersionOnNpm,
+  npmVersionRegistryUrl,
   publishNpmReleases,
   sortReleasesForPublish,
 } from './publish-npm.mjs';
@@ -32,28 +33,53 @@ test('PUBLISH_ORDER lists every current public package once', () => {
   assert.ok(PUBLISH_ORDER.includes('@singleton-sd/post-kit-editor'));
 });
 
-test('isVersionOnNpm is true when npm view returns the version', () => {
-  const run = () => '0.3.0';
-  assert.equal(isVersionOnNpm('@singleton-sd/post-kit-types', '0.3.0', { run }), true);
+test('npmVersionRegistryUrl encodes the scoped name', () => {
+  assert.equal(
+    npmVersionRegistryUrl('@singleton-sd/post-kit-types', '0.3.0'),
+    'https://registry.npmjs.org/%40singleton-sd%2Fpost-kit-types/0.3.0',
+  );
 });
 
-test('isVersionOnNpm is false when npm view fails', () => {
-  const run = () => {
-    throw new Error('404');
+test('isVersionOnNpm is true on HTTP 200', async () => {
+  const fetchImpl = async () => ({ status: 200 });
+  assert.equal(await isVersionOnNpm('@singleton-sd/post-kit-types', '0.3.0', { fetchImpl }), true);
+});
+
+test('isVersionOnNpm is false on HTTP 404', async () => {
+  const fetchImpl = async () => ({ status: 404 });
+  assert.equal(await isVersionOnNpm('@singleton-sd/post-kit-types', '0.3.0', { fetchImpl }), false);
+});
+
+test('isVersionOnNpm throws on network failure (does not treat as unpublished)', async () => {
+  const fetchImpl = async () => {
+    throw new Error('ECONNRESET');
   };
-  assert.equal(isVersionOnNpm('@singleton-sd/post-kit-types', '0.3.0', { run }), false);
+  await assert.rejects(
+    () => isVersionOnNpm('@singleton-sd/post-kit-types', '0.3.0', { fetchImpl }),
+    /Failed to reach npm registry/,
+  );
 });
 
-test('publishNpmReleases skips versions already on npmjs', () => {
+test('isVersionOnNpm throws on unexpected status', async () => {
+  const fetchImpl = async () => ({ status: 503 });
+  await assert.rejects(
+    () => isVersionOnNpm('@singleton-sd/post-kit-types', '0.3.0', { fetchImpl }),
+    /Unexpected npm registry status 503/,
+  );
+});
+
+test('publishNpmReleases skips versions already on npmjs', async () => {
   /** @type {string[]} */
   const calls = [];
   const run = (file, args, opts = {}) => {
     calls.push(`${file} ${args.join(' ')} @ ${opts.cwd ?? ''}`);
-    if (file === 'npm' && args[0] === 'view') {
-      if (String(args[1]).includes('post-kit-types@0.3.0')) return '0.3.0';
-      throw new Error('404 Not Found');
-    }
     return '';
+  };
+  const fetchImpl = async (url) => {
+    if (String(url).includes('post-kit-types') && String(url).includes('0.3.0')) {
+      return { status: 200 };
+    }
+    return { status: 404 };
   };
   /** @type {string[]} */
   const logs = [];
@@ -68,12 +94,12 @@ test('publishNpmReleases skips versions already on npmjs', () => {
     JSON.stringify({ name: '@singleton-sd/post-kit-editor', version: '0.3.0' }),
   );
 
-  const result = publishNpmReleases(
+  const result = await publishNpmReleases(
     [
       { name: '@singleton-sd/post-kit-editor', path: editorDir, next: '0.3.0' },
       { name: '@singleton-sd/post-kit-types', path: typesDir, next: '0.3.0' },
     ],
-    { run, log: (m) => logs.push(m) },
+    { run, log: (m) => logs.push(m), fetchImpl },
   );
 
   assert.deepEqual(result.skipped, ['@singleton-sd/post-kit-types@0.3.0']);

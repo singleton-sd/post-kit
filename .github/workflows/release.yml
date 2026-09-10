@@ -1,6 +1,9 @@
-# Path-aware release-it: bump workspace package versions on main,
+# Path-aware release: bump workspace package versions on main,
 # publish to npmjs via Trusted Publishing (OIDC), then tag + GitHub Releases.
 # Skips when the push is already a release commit (avoids loops).
+#
+# Auth model matches engineering/publish-npm-library and
+# singleton-sd/poc-inkads-epaper-renderer (no NPM_TOKEN / registry-url).
 name: Release
 
 on:
@@ -30,7 +33,9 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9.15.0
+          # Match InkAds OIDC Release (pnpm 11). Root packageManager may differ;
+          # install still consumes the committed lockfile.
+          version: 11.22.0
 
       - uses: actions/setup-node@v4
         with:
@@ -68,6 +73,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
           set -euo pipefail
 

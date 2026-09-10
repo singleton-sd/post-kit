@@ -3,6 +3,9 @@
  *
  * Publishes with `pnpm publish` so `workspace:*` deps rewrite to concrete
  * versions. Auth is OIDC in GitHub Actions — never pass NPM_TOKEN here.
+ *
+ * Aligned with `engineering/publish-npm-library` and the live reference
+ * `singleton-sd/poc-inkads-epaper-renderer` (OIDC Release workflow).
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -37,42 +40,69 @@ export function sortReleasesForPublish(releases) {
 }
 
 /**
- * True when `name@version` is already on the public registry.
- * Used so a partial release can recover without republishing immutable versions.
+ * Registry document URL for an exact package version.
+ * Prefer this over `npm view`: package-root metadata can 404 briefly after
+ * first publish while `/<name>/<version>` and tarballs already work.
  *
  * @param {string} name
  * @param {string} version
- * @param {{ run?: (file: string, args: string[], options?: object) => string }} [options]
- * @returns {boolean}
+ * @returns {string}
  */
-export function isVersionOnNpm(name, version, options = {}) {
-  const run =
-    options.run ??
-    ((file, args, opts = {}) =>
-      execFileSync(file, args, {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        ...opts,
-      }).trim());
+export function npmVersionRegistryUrl(name, version) {
+  return `https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version)}`;
+}
 
+/**
+ * True when `name@version` is already on the public registry.
+ * Used so a partial release can recover without republishing immutable versions.
+ *
+ * - HTTP 200 → published (skip)
+ * - HTTP 404 → not published (publish)
+ * - Any other failure (DNS, 5xx, network) → throw (do not treat as unpublished)
+ *
+ * @param {string} name
+ * @param {string} version
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<boolean>}
+ */
+export async function isVersionOnNpm(name, version, options = {}) {
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  if (typeof fetchImpl !== 'function') {
+    throw new Error('fetch is required to probe the npm registry');
+  }
+
+  const url = npmVersionRegistryUrl(name, version);
+  let response;
   try {
-    const out = run(
-      'npm',
-      ['view', `${name}@${version}`, 'version', '--registry', 'https://registry.npmjs.org'],
-      {},
-    );
-    return String(out).trim() === version;
-  } catch {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to reach npm registry while checking ${name}@${version}: ${detail}`, {
+      cause: err,
+    });
+  }
+
+  if (response.status === 200) {
+    return true;
+  }
+  if (response.status === 404) {
     return false;
   }
+
+  throw new Error(
+    `Unexpected npm registry status ${response.status} for ${name}@${version} (${url})`,
+  );
 }
 
 /**
  * @param {{ name: string, path: string, next?: string }} release
- * @param {{ run?: (file: string, args: string[], options?: object) => string, log?: (msg: string) => void }} [options]
- * @returns {'published' | 'skipped'}
+ * @param {{ run?: (file: string, args: string[], options?: object) => string, log?: (msg: string) => void, fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<'published' | 'skipped'>}
  */
-export function buildAndPublishPackage(release, options = {}) {
+export async function buildAndPublishPackage(release, options = {}) {
   const run =
     options.run ??
     ((file, args, opts = {}) =>
@@ -100,7 +130,7 @@ export function buildAndPublishPackage(release, options = {}) {
     throw new Error(`Cannot determine version for ${release.name}`);
   }
 
-  if (isVersionOnNpm(release.name, version, { run })) {
+  if (await isVersionOnNpm(release.name, version, { fetchImpl: options.fetchImpl })) {
     log(`Skipping ${release.name}@${version} — already on npmjs.`);
     return 'skipped';
   }
@@ -111,7 +141,8 @@ export function buildAndPublishPackage(release, options = {}) {
   log(`Publishing ${release.name}@${version} to npmjs (OIDC / Trusted Publishing)…`);
   // --no-git-checks: release commit may not be pushed yet; we publish before push
   // so a failed publish does not leave tags on origin/main.
-  run('pnpm', ['publish', '--access', 'public', '--no-git-checks'], {
+  // --publish-branch main: Release job checks out main; matches InkAds requireBranch.
+  run('pnpm', ['publish', '--access', 'public', '--no-git-checks', '--publish-branch', 'main'], {
     cwd: packagePath,
   });
   return 'published';
@@ -119,17 +150,17 @@ export function buildAndPublishPackage(release, options = {}) {
 
 /**
  * @param {{ name: string, path: string, next?: string }[]} releases
- * @param {{ run?: (file: string, args: string[], options?: object) => string, log?: (msg: string) => void }} [options]
- * @returns {{ published: string[], skipped: string[] }}
+ * @param {{ run?: (file: string, args: string[], options?: object) => string, log?: (msg: string) => void, fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<{ published: string[], skipped: string[] }>}
  */
-export function publishNpmReleases(releases, options = {}) {
+export async function publishNpmReleases(releases, options = {}) {
   const ordered = sortReleasesForPublish(releases);
   /** @type {string[]} */
   const published = [];
   /** @type {string[]} */
   const skipped = [];
   for (const release of ordered) {
-    const result = buildAndPublishPackage(release, options);
+    const result = await buildAndPublishPackage(release, options);
     const label = `${release.name}@${release.next ?? '?'}`;
     if (result === 'skipped') skipped.push(label);
     else published.push(label);
