@@ -87,6 +87,11 @@ export interface LogEntry {
   correlationId: string;
   tenantId?: string;
   environment?: string;
+  /**
+   * Opaque principal id (e.g. `ak_…`) — never the raw API token.
+   * Distinguishes credentials that share the same tenant + environment.
+   */
+  principalId?: string;
   templateKey?: string;
   outcome?: 'sent' | 'failed' | 'validation_error' | 'auth_error' | 'success';
   durationMs?: number;
@@ -113,6 +118,7 @@ export interface LogEntry {
 const LOG_ENTRY_KEYS: ReadonlyArray<keyof Omit<LogEntry, 'correlationId'>> = [
   'tenantId',
   'environment',
+  'principalId',
   'templateKey',
   'outcome',
   'durationMs',

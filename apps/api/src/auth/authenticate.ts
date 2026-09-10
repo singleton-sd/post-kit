@@ -7,6 +7,13 @@ import {
 } from '@singleton-sd/post-kit-types';
 import { createHash } from 'node:crypto';
 import type { TenantKeyMap } from '../tenant';
+import {
+  apiKeyHashesEqual,
+  asTenantKeyRegistry,
+  hashApiKey,
+  type ApiKeyRecord,
+  type ParsedTenantKeyRegistry,
+} from './tenant-key-registry';
 
 /**
  * Error thrown by authentication / authorization helpers.
@@ -92,22 +99,82 @@ export function principalFromTenantKeyMap(
   };
 }
 
+function findHashedRecord(
+  token: string,
+  keys: Record<string, ApiKeyRecord>,
+): { id: string; record: ApiKeyRecord } | undefined {
+  const presentedHash = hashApiKey(token);
+  let matched: { id: string; record: ApiKeyRecord } | undefined;
+  for (const [id, record] of Object.entries(keys)) {
+    if (apiKeyHashesEqual(record.keyHash, presentedHash)) {
+      matched = { id, record };
+    }
+  }
+  return matched;
+}
+
+function assertKeyActive(record: ApiKeyRecord): void {
+  if (record.revokedAt != null) {
+    if (record.revokedAt === '' || Number.isNaN(Date.parse(record.revokedAt))) {
+      throw new AuthError(
+        'The provided credential is no longer valid.',
+        PostKitErrorCode.UNAUTHORIZED,
+      );
+    }
+    throw new AuthError(
+      'The provided credential is no longer valid.',
+      PostKitErrorCode.UNAUTHORIZED,
+    );
+  }
+  if (record.expiresAt != null) {
+    if (record.expiresAt === '') {
+      throw new AuthError(
+        'The provided credential is no longer valid.',
+        PostKitErrorCode.UNAUTHORIZED,
+      );
+    }
+    const expiresMs = Date.parse(record.expiresAt);
+    if (Number.isNaN(expiresMs) || expiresMs <= Date.now()) {
+      throw new AuthError(
+        'The provided credential is no longer valid.',
+        PostKitErrorCode.UNAUTHORIZED,
+      );
+    }
+  }
+}
+
 /**
- * Authenticate an HTTP request via Bearer token + plaintext TENANT_KEY_MAP (PoC).
- * Dual-read plaintext only — hashed store lands in Slice B.
+ * Authenticate an HTTP request via Bearer token against the hashed registry,
+ * with dual-read fallback to legacy plaintext map entries.
  */
 export class ApiKeyAuthenticator implements Authenticator {
-  private readonly keyMap: TenantKeyMap;
-  private readonly scopes: readonly PostKitScope[];
+  private readonly registry: ParsedTenantKeyRegistry;
+  private readonly legacyScopes: readonly PostKitScope[];
 
-  constructor(keyMap: TenantKeyMap, scopes: readonly PostKitScope[] = DEFAULT_POC_SCOPES) {
-    this.keyMap = keyMap;
-    this.scopes = scopes;
+  constructor(
+    registry: ParsedTenantKeyRegistry | TenantKeyMap,
+    legacyScopes: readonly PostKitScope[] = DEFAULT_POC_SCOPES,
+  ) {
+    this.registry = asTenantKeyRegistry(registry);
+    this.legacyScopes = legacyScopes;
   }
 
   async authenticate(request: HttpRequest): Promise<Principal> {
     const token = extractBearerToken(request.headers.get('authorization'));
-    return principalFromTenantKeyMap(token, this.keyMap, this.scopes);
+
+    const hashed = findHashedRecord(token, this.registry.keys);
+    if (hashed) {
+      assertKeyActive(hashed.record);
+      return {
+        id: hashed.id,
+        tenantId: hashed.record.tenantId,
+        environment: hashed.record.environment,
+        authType: 'api-key',
+        scopes: [...hashed.record.scopes],
+      };
+    }
+
+    return principalFromTenantKeyMap(token, this.registry.legacyPlaintext, this.legacyScopes);
   }
 }
 

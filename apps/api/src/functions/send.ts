@@ -17,6 +17,7 @@ import {
 import {
   ApiKeyAuthenticator,
   AuthError,
+  parseTenantKeyRegistry,
   requireScope,
   tenantContextFromPrincipal,
   type Authenticator,
@@ -43,7 +44,6 @@ import {
   resolveTenantEmailConfig,
   TenantEmailConfigError,
   type ResolvedTenantEmailConfig,
-  type TenantKeyMap,
 } from '../tenant';
 import {
   BlobTemplateStore,
@@ -94,22 +94,15 @@ export interface SendHandlerDependencies {
   createLogger?: typeof createLogger;
 }
 
-function parseTenantKeyMap(raw: string | undefined): TenantKeyMap {
-  if (!raw?.trim()) return {};
-  try {
-    return JSON.parse(raw) as TenantKeyMap;
-  } catch {
-    return {};
-  }
-}
-
 export function createDefaultSendDependencies(
   templateStore: TemplateStore,
 ): SendHandlerDependencies {
   return {
     // Re-read env after App Configuration in the handler via factories.
     get authenticator(): Authenticator {
-      return new ApiKeyAuthenticator(parseTenantKeyMap(process.env.TENANT_KEY_MAP));
+      return new ApiKeyAuthenticator(
+        parseTenantKeyRegistry(process.env.TENANT_KEY_MAP, createLogger('config')),
+      );
     },
     templateStore,
     createEmailProvider: (options) =>
@@ -145,17 +138,20 @@ export function createSendHandler(deps: SendHandlerDependencies) {
 
     let tenantId: string | undefined;
     let environment: TenantEnvironment | undefined;
+    let principalId: string | undefined;
     let templateKey: string | undefined;
     let recipientHash: string | undefined;
 
     const logContext = (): {
       tenantId?: string;
       environment?: TenantEnvironment;
+      principalId?: string;
       templateKey?: string;
       recipientHash?: string;
     } => ({
       tenantId,
       environment,
+      principalId,
       templateKey,
       recipientHash,
     });
@@ -214,6 +210,7 @@ export function createSendHandler(deps: SendHandlerDependencies) {
       const tenant = tenantContextFromPrincipal(principal);
       tenantId = tenant.tenantId;
       environment = tenant.environment;
+      principalId = principal.id;
 
       const limit = getSendRateLimiter().tryConsume(sendRateLimitKey(tenant));
       if (!limit.allowed) {

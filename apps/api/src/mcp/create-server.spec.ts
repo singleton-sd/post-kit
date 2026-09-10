@@ -136,6 +136,7 @@ describe('PostKit MCP tools', () => {
       assert.ok(authFailed, 'expected mcp.tool.failed log for authorization denial');
       assert.equal(authFailed.outcome, 'auth_error');
       assert.equal(authFailed.errorCode, PostKitErrorCode.UNAUTHORIZED);
+      assert.equal(authFailed.principalId, PRINCIPAL.id);
 
       const listed = await client.callTool({ name: 'postkit.list_templates', arguments: {} });
       assert.notEqual(listed.isError, true);

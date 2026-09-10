@@ -60,13 +60,15 @@ Details in [`environments.md`](./environments.md).
 
 ## Step 3 — Issue and register a consumer credential
 
-**Produces:** one bearer token per tenant + environment, and one entry in the
-`TENANT_KEY_MAP` configuration value.
+**Produces:** one bearer token per tenant + environment (shown once), and one
+hashed entry in the `TENANT_KEY_MAP` Key Vault secret (schema v2).
 
 The API authenticates with `Authorization: Bearer <token>`.
-[`ApiKeyTenantResolver`](../../apps/api/src/tenant/api-key-tenant-resolver.ts)
-looks the token up in a map and returns `{ tenantId, environment }`. The token
-**is** the tenant identity — nothing in the request body can change it.
+[`ApiKeyAuthenticator`](../../apps/api/src/auth/authenticate.ts) hashes the
+presented token, matches a stored digest (or dual-reads a legacy plaintext
+entry), and returns a `Principal` with `{ tenantId, environment, scopes, id }`.
+The token **is** the tenant identity — nothing in the request body can change
+it.
 
 ### Register with the repo script (preferred)
 
@@ -88,12 +90,13 @@ Or: `pnpm tenant:register-key -- --tenant-id inkads --environment production`
 The script:
 
 1. Generates a high-entropy token (`tk_live_…` / `tk_stg_…` / `tk_dev_…`)
-2. Merges it into Key Vault secret `tenant-key-map` on `ssd-postkit-kv-prod-ae`
-   (preserves existing entries)
+2. Stores **only** the SHA-256 digest + metadata in Key Vault secret
+   `tenant-key-map` on `ssd-postkit-kv-prod-ae` (preserves other hashed keys;
+   moves pure legacy maps under `legacyPlaintext` for dual-read)
 3. Sets Function App `TENANT_KEY_MAP` to a **Key Vault reference** (not plain
    text, not App Configuration)
 4. Prints the new token **once** on stdout — copy it into the consumer’s secret
-   store; never commit it
+   store; never commit it. Plaintext is **not** written to Key Vault.
 
 Defaults match the dedicated PostKit subscription / RG / Function App / vault
 (`ssd-postkit-kv-prod-ae` — not the legacy shared vault). Override with flags
@@ -103,14 +106,35 @@ or `AZURE_*` env vars (`--help` for the list).
 secret. Do not run it concurrently across operators or hosts; run one
 registration at a time.
 
-### Map shape
+### Registry shape (schema v2)
 
 ```json
 {
-  "<token-for-acme-production>": { "tenantId": "acme", "environment": "production" },
-  "<token-for-acme-development>": { "tenantId": "acme", "environment": "development" }
+  "schemaVersion": 2,
+  "keys": {
+    "ak_<truncated-sha256>": {
+      "keyHash": "<sha256-hex>",
+      "tenantId": "acme",
+      "environment": "production",
+      "scopes": [
+        "templates:read",
+        "templates:validate",
+        "templates:preview",
+        "email:send"
+      ],
+      "revokedAt": null,
+      "expiresAt": null
+    }
+  }
 }
 ```
+
+Legacy plaintext maps still authenticate until re-registered. On the next
+registration against a pure legacy secret, the script wraps leftover entries
+under `legacyPlaintext` and puts new keys only under `keys`. Re-registering an
+existing legacy token hashes it and removes that token from `legacyPlaintext`.
+See [`multi-tenant-security.md`](../architecture/multi-tenant-security.md) for
+cutover steps.
 
 Rules that the code enforces or that you must uphold:
 
@@ -126,12 +150,12 @@ Rules that the code enforces or that you must uphold:
   **Where it never lives:** browser bundles, this repository, committed `.env`
   files, App Configuration values, or GitHub Secrets as a raw token.
 
-Rotation: run the script again to add a new token, switch the consumer, then
-remove the old entry from the map (manual edit of the KV secret for now).
+Rotation: run the script again to mint a new token, switch the consumer, then
+set `revokedAt` on the old hashed record (or delete it) in the KV secret.
 
 Failure modes: a missing or non-`Bearer` header is `401 UNAUTHENTICATED`; a
-well-formed token that is not in the map is `403 UNAUTHORIZED`. Token values
-are never logged.
+well-formed token that is unknown, revoked, or expired is `403 UNAUTHORIZED`.
+Token values are never logged; success logs include opaque `principalId`.
 
 ## Step 4 — Configure sender identity
 

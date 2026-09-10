@@ -1,4 +1,4 @@
-# MCP (iteration 2 Slice A)
+# MCP (iteration 2)
 
 Stateless Model Context Protocol endpoint on the existing PostKit Azure
 Function App. MCP is an **adapter** over the same template application
@@ -8,14 +8,14 @@ services used by REST — it does not send email in this iteration.
 | --- | --- |
 | Route | `POST /mcp` |
 | Transport | MCP Streamable HTTP (JSON responses, no sessions) |
-| Auth | `Authorization: Bearer <token>` → shared `Principal` (same `TENANT_KEY_MAP` PoC as `POST /emails/send`) |
+| Auth | `Authorization: Bearer <token>` → shared `Principal` (same hashed `TENANT_KEY_MAP` registry as `POST /emails/send`) |
 | Scopes | Tools enforce `templates:read` / `templates:validate` / `templates:preview` centrally in `runTool` |
 | Tools | `postkit.list_templates`, `postkit.get_template`, `postkit.get_template_schema`, `postkit.validate_template`, `postkit.preview_template` |
 
 `send_email` is intentionally absent. Azure Function keys are **not** the
 PostKit authorization model — the Function route uses `authLevel: anonymous`
 and PostKit authenticates the Bearer token to a `Principal` with scopes
-(`apps/api/src/auth/`; hashed keys / revoke / expiry are Slice B of #83).
+(`apps/api/src/auth/`; hashed store, revoke, and expiry via schema v2).
 
 ## Architecture
 
@@ -26,7 +26,8 @@ MCP client
    v
 apps/api Azure Function (functions/mcp.ts)
    |
-   +--> ApiKeyAuthenticator  (TENANT_KEY_MAP → Principal + DEFAULT_POC_SCOPES)
+   +--> ApiKeyAuthenticator  (TENANT_KEY_MAP schema v2 hash match → Principal;
+   |                         dual-read legacy plaintext / legacyPlaintext)
    +--> createPostkitMcpServer (requireScope per tool via MCP_TOOL_SCOPES)
    +--> TemplateApplicationService
            |
@@ -47,7 +48,7 @@ Structured logs (no secrets, no recipient PII, no variable values):
 - `mcp.request.received` / `mcp.request.completed` / `mcp.request.failed`
 - `mcp.tool.completed` / `mcp.tool.failed`
 - Fields: `correlationId`, `mcpMethod`, `mcpTool`, `tenantId`, `environment`,
-  `templateKey`, `outcome`, `durationMs`, `errorCode`
+  `principalId`, `templateKey`, `outcome`, `durationMs`, `errorCode`
 
 Pass `X-Correlation-Id` on requests when you want a stable client-side id
 (same rules as send).
@@ -57,8 +58,9 @@ Pass `X-Correlation-Id` on requests when you want a stable client-side id
 1. Bootstrap the API as usual (`pnpm --filter @singleton-sd/post-kit-api build`,
    `az login`, App Configuration / storage roles — see
    [`apps/api/README.md`](../../apps/api/README.md)).
-2. Set a PoC key map in `local.settings.json` **Values** (never commit real
-   tokens):
+2. Set a key map in `local.settings.json` **Values** (never commit real
+   tokens). Legacy plaintext still works for local PoC; prefer schema v2 via
+   the register script:
 
 ```json
 {
@@ -127,11 +129,11 @@ Endpoint:
 https://ssd-postkit-api-prod-ae.azurewebsites.net/mcp
 ```
 
-Use a Bearer token that exists in the deployed `TENANT_KEY_MAP`. In production,
-store that JSON in Azure Key Vault `ssd-postkit-kv-prod-ae` and configure the
-Function App setting as a Key Vault reference (do not put the map in App
-Configuration or as plain-text app settings). Do not put secrets in this public
-repository, issues, or PR descriptions.
+Use a Bearer token registered via `./scripts/register-tenant-api-key.sh` (hashed
+schema v2 in Key Vault `ssd-postkit-kv-prod-ae`). Configure the Function App
+setting as a Key Vault reference (do not put the map in App Configuration or as
+plain-text app settings). Do not put secrets in this public repository, issues,
+or PR descriptions.
 
 ```json
 {
@@ -153,10 +155,11 @@ pnpm --filter @singleton-sd/post-kit-api test
 ```
 
 Coverage includes tool input validation (unsafe `templateKey`), representative
-tool calls via the MCP in-memory transport, and HTTP auth rejection on `/mcp`.
+tool calls via the MCP in-memory transport, HTTP auth rejection on `/mcp`, and
+hashed-key / revoke / expiry / legacy dual-read cases in
+`apps/api/src/auth/authenticate.spec.ts`.
 
 ## Follow-ups
 
-- #83 — shared principal / scoped API keys for REST and MCP
 - #84 — Entra OAuth/OIDC
 - #85 — hardening and optional `postkit.send_email`

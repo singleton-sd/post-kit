@@ -1,25 +1,18 @@
 import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import {
-  PostKitErrorCode,
-  type Principal,
-  type TenantContext,
-  type TenantEnvironment,
-} from '@singleton-sd/post-kit-types';
+import { PostKitErrorCode, type Principal, type TenantContext } from '@singleton-sd/post-kit-types';
 import {
   ApiKeyAuthenticator,
   AuthError,
+  parseTenantKeyRegistry,
   tenantContextFromPrincipal,
   type Authenticator,
 } from '../auth';
 import { ensureAppConfiguration } from '../config/app-configuration';
 import { createLogger, resolveCorrelationId, type Logger } from '../telemetry';
-import type { TenantKeyMap } from '../tenant';
 import { BlobTemplateStore, TemplateApplicationService, type TemplateStore } from '../templates';
 import { createPostkitMcpServer } from './create-server';
 import { azureHttpRequestToWebRequest, webResponseToAzureHttpResponse } from './http-bridge';
-
-const TENANT_ENVIRONMENTS = new Set<TenantEnvironment>(['development', 'staging', 'production']);
 
 const MCP_CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -36,65 +29,16 @@ export interface McpHandlerDependencies {
 }
 
 /** Sanitize-parse TENANT_KEY_MAP. Never logs raw contents or credentials. */
-export function parseTenantKeyMap(
-  raw: string | undefined,
-  log: Logger = createLogger('config'),
-): TenantKeyMap {
-  if (!raw?.trim()) return {};
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    log.error('tenant_key_map.invalid', {
-      outcome: 'failed',
-      failureCategory: 'configuration',
-      errorCode: 'TENANT_KEY_MAP_INVALID_JSON',
-    });
-    return {};
-  }
-
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    log.error('tenant_key_map.invalid', {
-      outcome: 'failed',
-      failureCategory: 'configuration',
-      errorCode: 'TENANT_KEY_MAP_INVALID_SHAPE',
-    });
-    return {};
-  }
-
-  const result: TenantKeyMap = {};
-  for (const [token, entry] of Object.entries(parsed)) {
-    if (!isTenantKeyMapEntry(entry)) {
-      log.error('tenant_key_map.invalid', {
-        outcome: 'failed',
-        failureCategory: 'configuration',
-        errorCode: 'TENANT_KEY_MAP_INVALID_ENTRY',
-      });
-      return {};
-    }
-    result[token] = entry;
-  }
-  return result;
-}
-
-function isTenantKeyMapEntry(
-  value: unknown,
-): value is { tenantId: string; environment: TenantEnvironment } {
-  if (typeof value !== 'object' || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    typeof obj['tenantId'] === 'string' &&
-    obj['tenantId'].length > 0 &&
-    typeof obj['environment'] === 'string' &&
-    TENANT_ENVIRONMENTS.has(obj['environment'] as TenantEnvironment)
-  );
+export function parseTenantKeyMap(raw: string | undefined, log: Logger = createLogger('config')) {
+  return parseTenantKeyRegistry(raw, log);
 }
 
 export function createDefaultMcpDependencies(templateStore: TemplateStore): McpHandlerDependencies {
   return {
     get authenticator(): Authenticator {
-      return new ApiKeyAuthenticator(parseTenantKeyMap(process.env.TENANT_KEY_MAP));
+      return new ApiKeyAuthenticator(
+        parseTenantKeyRegistry(process.env.TENANT_KEY_MAP, createLogger('config')),
+      );
     },
     templateStore,
     resolveBranding: async () => ({}),
@@ -233,6 +177,7 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
       logger.info('mcp.request.completed', {
         tenantId: tenant.tenantId,
         environment: tenant.environment,
+        principalId: principal.id,
         outcome: 'success',
         durationMs: Date.now() - startMs,
       });
@@ -249,6 +194,7 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
       logger.error('mcp.request.failed', {
         tenantId: tenant.tenantId,
         environment: tenant.environment,
+        principalId: principal.id,
         outcome: 'failed',
         durationMs: Date.now() - startMs,
       });
