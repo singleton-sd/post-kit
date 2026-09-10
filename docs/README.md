@@ -36,6 +36,7 @@ docs/
 ├── guides/
 │   ├── template-authoring.md  (consumer template source files + variables)
 │   ├── template-publishing.md (post-kit-publish, blob layout, environments)
+│   ├── editor-integration.md (embed @singleton-sd/post-kit-editor in admin UIs)
 │   ├── api-quickstart.md     (send API + client quick start)
 │   ├── packages.md           (install, pin, upgrade @singleton-sd/post-kit-*)
 │   └── public-forms.md       (public web forms: trusted server endpoint pattern)
@@ -65,6 +66,7 @@ docs/
 | [`guides/packages.md`](./guides/packages.md) | Install, pin, upgrade published `@singleton-sd/post-kit-*` packages; semver and compatibility |
 | [`guides/template-authoring.md`](./guides/template-authoring.md) | Consumer template layout, `metadata.json` fields, template keys, variables, local validation |
 | [`guides/template-publishing.md`](./guides/template-publishing.md) | `post-kit-publish` flags, blob layout, fail-fast, per-environment promotion, OIDC + RBAC |
+| [`guides/editor-integration.md`](./guides/editor-integration.md) | Embed `@singleton-sd/post-kit-editor`: install, `onSave` persistence, preview vs send, access control |
 | [`examples/publish-email-templates.yml`](./examples/publish-email-templates.yml) | Sample consumer-repository publish workflow (not installed in this repo) |
 | [`onboarding/tenant-onboarding.md`](./onboarding/tenant-onboarding.md) | New tenant from nothing configured to first email: identifier, credential, sender, templates, publish, test send, triage |
 | [`onboarding/environments.md`](./onboarding/environments.md) | development/staging/production separation, local development without real delivery |
