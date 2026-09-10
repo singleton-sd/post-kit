@@ -91,8 +91,19 @@ export function EmailTemplateEditor({
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
   const lastDirtyRef = useRef<boolean | null>(null);
+  /** Bumped when `template` content changes; ignores stale in-flight save/send. */
+  const templateGenerationRef = useRef(0);
+  const seedFilesRef = useRef(seedFiles);
+  seedFilesRef.current = seedFiles;
 
   useEffect(() => {
+    // Ignore parent identity churn when content matches the current baseline.
+    if (!isWorkingDirty(seedFilesRef.current, template)) {
+      return;
+    }
+    templateGenerationRef.current += 1;
+    setSaveFeedback({ status: 'idle' });
+    setSendFeedback({ status: 'idle' });
     setWorkingFiles(template);
     setSeedFiles(template);
   }, [template]);
@@ -128,10 +139,23 @@ export function EmailTemplateEditor({
     if (busy) {
       return;
     }
+    let payload: ReturnType<typeof buildSavePayload>;
+    try {
+      payload = buildSavePayload(workingFiles);
+    } catch (error) {
+      setSaveFeedback({
+        status: 'failure',
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+    const generation = templateGenerationRef.current;
     setSaveFeedback({ status: 'pending' });
-    const payload = buildSavePayload(workingFiles);
     void (async () => {
       const result = await invokeConsumerAction(() => onSave(payload.serialized, payload.files));
+      if (generation !== templateGenerationRef.current) {
+        return;
+      }
       if (result.ok) {
         setSeedFiles(payload.files);
         setSaveFeedback({ status: 'success', message: result.message });
@@ -149,12 +173,25 @@ export function EmailTemplateEditor({
       if (busy || !onSendTest) {
         return;
       }
+      let payload: ReturnType<typeof buildSavePayload>;
+      try {
+        payload = buildSavePayload(workingFiles);
+      } catch (error) {
+        setSendFeedback({
+          status: 'failure',
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      const generation = templateGenerationRef.current;
       setSendFeedback({ status: 'pending' });
-      const payload = buildSavePayload(workingFiles);
       void (async () => {
         const result = await invokeConsumerAction(() =>
           onSendTest(payload.serialized, payload.files, recipient),
         );
+        if (generation !== templateGenerationRef.current) {
+          return;
+        }
         if (result.ok) {
           setSendFeedback({ status: 'success', message: result.message });
         } else {

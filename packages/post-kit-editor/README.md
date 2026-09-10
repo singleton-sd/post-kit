@@ -35,15 +35,22 @@ export function TemplateAdminPage({ template }: { template: TemplateSourceFiles 
       onSave={async (serialized, files) => {
         // Commit serialized.templateJson / metadataJson / previewJson to the
         // consumer repository (e.g. via the app's own server endpoint).
-        await fetch('/api/templates', {
+        const res = await fetch('/api/templates', {
           method: 'PUT',
           body: JSON.stringify({ serialized, key: files.metadata.key }),
         });
+        // fetch() resolves for HTTP 4xx/5xx — return failure so the editor
+        // keeps dirty state and does not treat the rejection as success.
+        if (!res.ok) {
+          return { ok: false, message: 'Save failed.' };
+        }
       }}
       onSendTest={async (serialized, _files, recipient) => {
         // Browser → your trusted server only. The server uses
-        // @singleton-sd/post-kit-client with POSTKIT_API_KEY from Key Vault /
-        // env — never embed a long-lived PostKit API key in browser code.
+        // @singleton-sd/post-kit-client with POSTKIT_API_KEY from Azure Key
+        // Vault `ssd-global-kv-prod-ae` (production). Local `.env` is for
+        // development only — never embed a long-lived PostKit API key in
+        // browser code.
         const res = await fetch('/api/templates/send-test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

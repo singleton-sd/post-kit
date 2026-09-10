@@ -66,4 +66,21 @@ describe('isWorkingDirty', () => {
     next.metadata = { ...next.metadata, name: 'Changed' };
     assert.equal(isWorkingDirty(baseFiles, next), true);
   });
+
+  it('treats equivalent objects with reordered keys as clean', () => {
+    const reordered: TemplateSourceFiles = {
+      templateJson: {
+        root: { data: { childrenIds: [] }, type: 'EmailLayout' },
+      },
+      metadata: {
+        schemaVersion: TEMPLATE_SCHEMA_VERSION,
+        variables: [],
+        subject: 'Hi',
+        name: 'Contact Us',
+        key: 'marketing.contact-us',
+      },
+      previewData: {},
+    };
+    assert.equal(isWorkingDirty(baseFiles, reordered), false);
+  });
 });
