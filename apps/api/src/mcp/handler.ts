@@ -1,6 +1,10 @@
 import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { PostKitErrorCode, type TenantContext } from '@singleton-sd/post-kit-types';
+import {
+  PostKitErrorCode,
+  type TenantContext,
+  type TenantEnvironment,
+} from '@singleton-sd/post-kit-types';
 import { ensureAppConfiguration } from '../config/app-configuration';
 import { createLogger, resolveCorrelationId, type Logger } from '../telemetry';
 import { ApiKeyTenantResolver, type TenantKeyMap, type TenantResolver } from '../tenant';
@@ -8,6 +12,13 @@ import { BlobTemplateStore, TemplateApplicationService, type TemplateStore } fro
 import { TenantResolverError } from './auth';
 import { createPostkitMcpServer } from './create-server';
 import { azureHttpRequestToWebRequest, webResponseToAzureHttpResponse } from './http-bridge';
+
+const TENANT_ENVIRONMENTS = new Set<TenantEnvironment>(['development', 'staging', 'production']);
+
+const MCP_CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Expose-Headers': 'X-Correlation-Id, mcp-session-id, mcp-protocol-version',
+} as const;
 
 export interface McpHandlerDependencies {
   tenantResolver: TenantResolver;
@@ -18,13 +29,60 @@ export interface McpHandlerDependencies {
   createLogger?: typeof createLogger;
 }
 
-function parseTenantKeyMap(raw: string | undefined): TenantKeyMap {
+/** Sanitize-parse TENANT_KEY_MAP. Never logs raw contents or credentials. */
+export function parseTenantKeyMap(
+  raw: string | undefined,
+  log: Logger = createLogger('config'),
+): TenantKeyMap {
   if (!raw?.trim()) return {};
+
+  let parsed: unknown;
   try {
-    return JSON.parse(raw) as TenantKeyMap;
+    parsed = JSON.parse(raw);
   } catch {
+    log.error('tenant_key_map.invalid', {
+      outcome: 'failed',
+      failureCategory: 'configuration',
+      errorCode: 'TENANT_KEY_MAP_INVALID_JSON',
+    });
     return {};
   }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    log.error('tenant_key_map.invalid', {
+      outcome: 'failed',
+      failureCategory: 'configuration',
+      errorCode: 'TENANT_KEY_MAP_INVALID_SHAPE',
+    });
+    return {};
+  }
+
+  const result: TenantKeyMap = {};
+  for (const [token, entry] of Object.entries(parsed)) {
+    if (!isTenantKeyMapEntry(entry)) {
+      log.error('tenant_key_map.invalid', {
+        outcome: 'failed',
+        failureCategory: 'configuration',
+        errorCode: 'TENANT_KEY_MAP_INVALID_ENTRY',
+      });
+      return {};
+    }
+    result[token] = entry;
+  }
+  return result;
+}
+
+function isTenantKeyMapEntry(
+  value: unknown,
+): value is { tenantId: string; environment: TenantEnvironment } {
+  if (typeof value !== 'object' || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj['tenantId'] === 'string' &&
+    obj['tenantId'].length > 0 &&
+    typeof obj['environment'] === 'string' &&
+    TENANT_ENVIRONMENTS.has(obj['environment'] as TenantEnvironment)
+  );
 }
 
 export function createDefaultMcpDependencies(templateStore: TemplateStore): McpHandlerDependencies {
@@ -69,7 +127,7 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
     };
 
     logger.info('mcp.request.received', {
-      mcpMethod: request.method,
+      httpMethod: request.method,
     });
 
     if (request.method === 'GET' || request.method === 'DELETE') {
@@ -98,11 +156,10 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
         status: 204,
         headers: {
           ...headers,
-          'Access-Control-Allow-Origin': '*',
+          ...MCP_CORS_HEADERS,
           'Access-Control-Allow-Methods': 'POST, OPTIONS',
           'Access-Control-Allow-Headers':
             'Content-Type, Authorization, X-Correlation-Id, mcp-session-id, mcp-protocol-version, Last-Event-ID',
-          'Access-Control-Expose-Headers': 'X-Correlation-Id, mcp-session-id, mcp-protocol-version',
         },
       };
     }
@@ -162,6 +219,7 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
 
       const responseHeaders = {
         ...headers,
+        ...MCP_CORS_HEADERS,
         ...(azureResponse.headers ?? {}),
       };
 

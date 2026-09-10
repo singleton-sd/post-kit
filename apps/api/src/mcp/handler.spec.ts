@@ -9,7 +9,8 @@ import {
 import { PostKitErrorCode } from '@singleton-sd/post-kit-types';
 import { ApiKeyTenantResolver } from '../tenant';
 import { TemplateStoreError, type TemplateStore } from '../templates';
-import { createMcpHandler } from './handler';
+import { createMcpHandler, parseTenantKeyMap } from './handler';
+import { createLogger } from '../telemetry';
 
 const TENANT: TenantContext = { tenantId: 'acme', environment: 'development' };
 const TOKEN = 'tk_dev_test';
@@ -162,6 +163,31 @@ describe('createMcpHandler', () => {
           ? response.body.toString('utf8')
           : '';
     assert.ok(body.includes('post-kit') || body.includes('serverInfo') || body.includes('result'));
+    assert.equal(response.headers?.['Access-Control-Allow-Origin'], '*');
+    assert.equal(
+      response.headers?.['Access-Control-Expose-Headers'],
+      'X-Correlation-Id, mcp-session-id, mcp-protocol-version',
+    );
+  });
+
+  it('logs httpMethod (not mcpMethod) on request receipt', async () => {
+    const lines: string[] = [];
+    const handler = createMcpHandler({
+      tenantResolver: new ApiKeyTenantResolver({
+        [TOKEN]: { tenantId: TENANT.tenantId, environment: TENANT.environment },
+      }),
+      templateStore: fakeStore(),
+      createLogger: (correlationId) => createLogger(correlationId, (line) => lines.push(line)),
+    });
+
+    await handler(fakeRequest({ method: 'GET' }), context);
+
+    const received = lines
+      .map((line) => JSON.parse(line) as { msg: string; httpMethod?: string; mcpMethod?: string })
+      .find((entry) => entry.msg === 'mcp.request.received');
+    assert.ok(received);
+    assert.equal(received.httpMethod, 'GET');
+    assert.equal(received.mcpMethod, undefined);
   });
 
   it('does not call template store for auth failures', async () => {
@@ -181,5 +207,44 @@ describe('createMcpHandler', () => {
     });
     await handler(fakeRequest({ authorization: `Bearer ${TOKEN}`, body: {} }), context);
     assert.equal(listed, false);
+  });
+});
+
+describe('parseTenantKeyMap', () => {
+  it('returns empty map and logs sanitized error for invalid JSON', () => {
+    const lines: string[] = [];
+    const log = createLogger('cfg', (line) => lines.push(line));
+    const map = parseTenantKeyMap('{not-json', log);
+    assert.deepEqual(map, {});
+    assert.equal(lines.length, 1);
+    const entry = JSON.parse(lines[0]!) as { msg: string; errorCode: string };
+    assert.equal(entry.msg, 'tenant_key_map.invalid');
+    assert.equal(entry.errorCode, 'TENANT_KEY_MAP_INVALID_JSON');
+    assert.ok(!lines[0]!.includes('not-json'));
+  });
+
+  it('returns empty map for null JSON and invalid entry shapes', () => {
+    const lines: string[] = [];
+    const log = createLogger('cfg', (line) => lines.push(line));
+    assert.deepEqual(parseTenantKeyMap('null', log), {});
+    assert.deepEqual(
+      parseTenantKeyMap(
+        JSON.stringify({ tk: { tenantId: 'acme', environment: 'not-an-env' } }),
+        log,
+      ),
+      {},
+    );
+    assert.ok(lines.every((line) => !line.includes('tk_') && !line.includes('acme')));
+  });
+
+  it('accepts a well-formed map', () => {
+    const map = parseTenantKeyMap(
+      JSON.stringify({
+        tk_ok: { tenantId: 'acme', environment: 'development' },
+      }),
+    );
+    assert.deepEqual(map, {
+      tk_ok: { tenantId: 'acme', environment: 'development' },
+    });
   });
 });

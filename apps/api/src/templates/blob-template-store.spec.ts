@@ -403,6 +403,27 @@ describe('BlobTemplateStore', () => {
         },
       );
     });
+
+    it('throws TemplateStoreError with INVALID_TEMPLATE when description is present but not a string', async () => {
+      const badDescription = { ...METADATA, description: 123 };
+      const blobs: FakeBlobStore = new Map([
+        [templateBlobKey('acme', 'production', TEMPLATE_KEY, 'template.html'), HTML],
+        [
+          templateBlobKey('acme', 'production', TEMPLATE_KEY, 'metadata.json'),
+          JSON.stringify(badDescription),
+        ],
+      ]);
+
+      const store = makeStore(blobs);
+      await assert.rejects(
+        () => store.load(TENANT, TEMPLATE_KEY),
+        (err: unknown) => {
+          assert.ok(err instanceof TemplateStoreError);
+          assert.equal((err as TemplateStoreError).code, PostKitErrorCode.INVALID_TEMPLATE);
+          return true;
+        },
+      );
+    });
   });
 });
 

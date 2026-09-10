@@ -53,7 +53,8 @@ function mapStoreError(err: unknown): { code: PostKitErrorCode | string; error: 
     return { code: err.code, error: err.message };
   }
   if (err instanceof Error) {
-    return { code: 'INTERNAL_ERROR', error: err.message };
+    // Do not return SDK/network detail (URLs, account names) to MCP clients.
+    return { code: 'INTERNAL_ERROR', error: 'Internal error' };
   }
   return { code: 'INTERNAL_ERROR', error: 'Unexpected error' };
 }
@@ -143,10 +144,14 @@ export function createPostkitMcpServer(options: CreatePostkitMcpServerOptions): 
     'List compiled email templates available for the authenticated tenant and environment.',
     undefined,
     async () => {
-      const items = await runTool('postkit.list_templates', undefined, () =>
-        templates.listTemplates(tenant),
-      );
-      return toolTextResult({ templates: items });
+      try {
+        const items = await runTool('postkit.list_templates', undefined, () =>
+          templates.listTemplates(tenant),
+        );
+        return toolTextResult({ templates: items });
+      } catch (err) {
+        return toolTextResult(mapStoreError(err), true);
+      }
     },
   );
 

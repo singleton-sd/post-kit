@@ -303,6 +303,7 @@ function isTemplateSourceMetadata(value: unknown): value is TemplateSourceMetada
     typeof obj['subject'] === 'string' &&
     Array.isArray(obj['variables']) &&
     (obj['variables'] as unknown[]).every((v) => typeof v === 'string') &&
+    (obj['description'] === undefined || typeof obj['description'] === 'string') &&
     typeof obj['schemaVersion'] === 'string'
   );
 }

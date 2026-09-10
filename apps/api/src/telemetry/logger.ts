@@ -100,6 +100,8 @@ export interface LogEntry {
   attempt?: number;
   recipientHash?: string;
   errorCode?: PostKitErrorCode | string;
+  /** HTTP verb for the inbound request (e.g. `POST`). Distinct from `mcpMethod`. */
+  httpMethod?: string;
   /** MCP JSON-RPC method (e.g. `tools/call`, `tools/list`). */
   mcpMethod?: string;
   /** MCP tool name when method is `tools/call`. */
@@ -121,6 +123,7 @@ const LOG_ENTRY_KEYS: ReadonlyArray<keyof Omit<LogEntry, 'correlationId'>> = [
   'attempt',
   'recipientHash',
   'errorCode',
+  'httpMethod',
   'mcpMethod',
   'mcpTool',
 ];

@@ -137,6 +137,53 @@ describe('PostKit MCP tools', () => {
     }
   });
 
+  it('list_templates maps store rejection like other tools without leaking Error.message', async () => {
+    const store: TemplateStore = {
+      list: async () => {
+        throw new Error('Blob https://acct.blob.core.windows.net/c failed');
+      },
+      load: async () => COMPILED,
+    };
+    const { client, server } = await connectClient(store);
+    try {
+      const result = await client.callTool({ name: 'postkit.list_templates', arguments: {} });
+      assert.equal(result.isError, true);
+      const body = JSON.parse((result.content as { text: string }[])[0]!.text) as {
+        code: string;
+        error: string;
+      };
+      assert.equal(body.code, 'INTERNAL_ERROR');
+      assert.equal(body.error, 'Internal error');
+      assert.ok(!body.error.includes('blob.core.windows.net'));
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('list_templates maps TemplateStoreError code and message', async () => {
+    const store: TemplateStore = {
+      list: async () => {
+        throw new TemplateStoreError('list failed', PostKitErrorCode.STORAGE_FAILURE);
+      },
+      load: async () => COMPILED,
+    };
+    const { client, server } = await connectClient(store);
+    try {
+      const result = await client.callTool({ name: 'postkit.list_templates', arguments: {} });
+      assert.equal(result.isError, true);
+      const body = JSON.parse((result.content as { text: string }[])[0]!.text) as {
+        code: string;
+        error: string;
+      };
+      assert.equal(body.code, PostKitErrorCode.STORAGE_FAILURE);
+      assert.equal(body.error, 'list failed');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it('get_template_schema / validate / preview match application service behavior', async () => {
     const { client, server } = await connectClient();
     try {

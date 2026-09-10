@@ -124,9 +124,11 @@ Endpoint:
 https://ssd-postkit-api-prod-ae.azurewebsites.net/mcp
 ```
 
-Use a Bearer token that exists in the Function App / App Configuration
-`TENANT_KEY_MAP` for the target tenant and environment. Do not put secrets in
-this public repository, issues, or PR descriptions.
+Use a Bearer token that exists in the deployed `TENANT_KEY_MAP`. In production,
+store that JSON in Azure Key Vault `ssd-postkit-kv-prod-ae` and configure the
+Function App setting as a Key Vault reference (do not put the map in App
+Configuration or as plain-text app settings). Do not put secrets in this public
+repository, issues, or PR descriptions.
 
 ```json
 {

@@ -36,6 +36,17 @@ describe('render-template', () => {
     });
   });
 
+  it('mergeTemplateVariables drops undefined branding values so required checks still fail', () => {
+    const branding = { name: undefined as unknown as string, greeting: 'Hi' };
+    assert.deepEqual(mergeTemplateVariables(branding, {}), { greeting: 'Hi' });
+
+    const result = validateAndRenderTemplate(COMPILED, branding, {});
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.deepEqual(result.missing, ['name']);
+    }
+  });
+
   it('validateRequiredVariables reports missing own properties', () => {
     const result = validateRequiredVariables(COMPILED, { name: 'Ada' });
     assert.equal(result.ok, false);

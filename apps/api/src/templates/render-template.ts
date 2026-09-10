@@ -23,8 +23,14 @@ export function mergeTemplateVariables(
   branding: TenantBranding | undefined,
   variables: TemplateVariables,
 ): TemplateVariables {
+  const brandingVariables = Object.fromEntries(
+    Object.entries(branding ?? {}).filter((entry): entry is [string, string] => {
+      return typeof entry[1] === 'string';
+    }),
+  );
+
   return {
-    ...(branding ?? {}),
+    ...brandingVariables,
     ...variables,
   };
 }
