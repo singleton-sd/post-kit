@@ -170,25 +170,23 @@ Free tier (per [Microsoft docs](https://learn.microsoft.com/en-us/azure/azure-ap
 Upgrade to Developer/Standard only if request volume or store count requires it.
 Y1 Consumption Function Apps remain the cost default for the API.
 
-### Key Vault choice
+### Key Vault
 
-**Preferred:** create `ssd-postkit-kv-prod-ae` in `rg-postkit-prod-ae` (same
+**Production:** `ssd-postkit-kv-prod-ae` in `rg-postkit-prod-ae` (same
 subscription as the Function App). Bicep creates this vault with RBAC
-authorization enabled.
+authorization enabled. Secrets `forwardemail-api-key` and
+`recipient-hash-hmac-key` live here.
 
-**Alternative (legacy):** keep using `ssd-global-kv-prod-ae` on Singleton SD.
-That path is **ops-only** (cross-subscription RBAC + App Config Key Vault
-references) — do **not** pass the shared vault name into this template with
-`createKeyVault=true` (globally unique names; create would fail). Same-RG
-existing vaults use `createKeyVault=false` (see
-[`infra/README.md`](infra/README.md)). Prefer the dedicated vault unless a
-human explicitly chooses to share.
+**Legacy note:** an older shared vault `ssd-global-kv-prod-ae` on Singleton SD
+is no longer the PostKit production target. Do not pass that name into this
+template with `createKeyVault=true`. See [`infra/README.md`](infra/README.md)
+for same-RG `createKeyVault=false` only.
 
 ### Secrets + configuration (locked)
 
 | Layer | Store | Rule |
 | --- | --- | --- |
-| **Secrets** | Azure Key Vault `ssd-postkit-kv-prod-ae` (preferred) | Tokens, connection strings. Never in git or GitHub Actions secrets. |
+| **Secrets** | Azure Key Vault `ssd-postkit-kv-prod-ae` | Tokens, connection strings. Never in git or GitHub Actions secrets. |
 | **App configuration** | Azure App Configuration `ssd-postkit-appcs-prod-ae` | Non-secret settings, including branding keys, + **Key Vault references** for secret values. |
 | **CI/CD** | GitHub Actions **OIDC** → Azure | Workflows log in with federated creds, then at job runtime: `az appconfig kv show` / `az keyvault secret show`. Mask secret values; never print them. |
 
@@ -236,7 +234,7 @@ Phase 2 provision/deploy ([#116](https://github.com/singleton-sd/post-kit/issues
       `AZURE_SUBSCRIPTION_ID` (`9b6fc2b1-064a-4eb2-81fe-0aa8c7c751b5`).
 6. [x] **Comment on [#120](https://github.com/singleton-sd/post-kit/issues/120)**
       with the subscription **GUID** (Phase 2 tracker; #116 was Phase 1 docs).
-7. [ ] After RG/resources exist: put secret **values** into Key Vault names
+7. [x] After RG/resources exist: put secret **values** into Key Vault names
       `forwardemail-api-key` and `recipient-hash-hmac-key` (portal/CLI — never
       commit values). Branding keys `app:email:validation:*` are seeded on
       first Function deploy.
@@ -250,7 +248,8 @@ Tracked as [#120](https://github.com/singleton-sd/post-kit/issues/120)
 - [x] Ensure `deploy-api.yml` targets `rg-postkit-prod-ae` (defaults already set)
 - [x] Create RG; run bicep / Deploy API workflow
 - [ ] Verify OIDC login, App Config seed, Function zip deploy
-- [ ] Place Key Vault secret **values** (human)
+- [x] Place Key Vault secret **values** (copied into `ssd-postkit-kv-prod-ae`;
+  PostKit copy of `recipient-hash-hmac-key` removed from legacy global vault)
 
 ## 6. npmjs (public packages)
 

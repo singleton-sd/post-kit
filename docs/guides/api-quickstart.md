@@ -11,7 +11,7 @@ Working example: [`examples/backend-password-reset/`](../../examples/backend-pas
 
 The API key is a long-lived tenant credential:
 
-- It is stored in Azure Key Vault (`ssd-global-kv-prod-ae`) and injected into
+- It is stored in Azure Key Vault (`ssd-postkit-kv-prod-ae`) and injected into
   your service's environment at deploy time. It must never be committed, and
   never pasted into an issue, PR, or log line.
 - It must **never appear in browser code** — not in a bundle, not in a

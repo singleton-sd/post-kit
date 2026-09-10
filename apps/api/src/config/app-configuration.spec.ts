@@ -74,14 +74,14 @@ describe('loadAppConfiguration', () => {
           setting(
             'secret:forwardemail-api-key',
             JSON.stringify({
-              uri: 'https://ssd-global-kv-prod-ae.vault.azure.net/secrets/forwardemail-api-key',
+              uri: 'https://ssd-postkit-kv-prod-ae.vault.azure.net/secrets/forwardemail-api-key',
             }),
             'application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8',
           ),
           setting(
             'secret:recipient-hash-hmac-key',
             JSON.stringify({
-              uri: 'https://ssd-global-kv-prod-ae.vault.azure.net/secrets/recipient-hash-hmac-key',
+              uri: 'https://ssd-postkit-kv-prod-ae.vault.azure.net/secrets/recipient-hash-hmac-key',
             }),
             'application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8',
           ),

@@ -115,7 +115,7 @@ group: `rg-postkit-prod-ae` (not legacy `rg-ssd-global`).
 | Send idempotency  | `IDEMPOTENCY_STORAGE_ACCOUNT` (falls back to template account) / container `idempotency` | Blob ledger; see [`send-idempotency.md`](./send-idempotency.md) |
 | Send timeout/retry | `SEND_PROVIDER_TIMEOUT_MS` / `SEND_MAX_ATTEMPTS` (idempotency-gated) | See [`send-timeout-retry.md`](./send-timeout-retry.md) |
 | App configuration | `ssd-postkit-appcs-prod-ae`              | Free SKU (3/region/sub; 1k req/day; 10 MB); non-secret settings + Key Vault references |
-| Secrets           | Key Vault `ssd-postkit-kv-prod-ae` (preferred) | In `rg-postkit-prod-ae`; alternative: shared `ssd-global-kv-prod-ae` + cross-sub RBAC — [`SETUP.md`](../../SETUP.md) |
+| Secrets           | Key Vault `ssd-postkit-kv-prod-ae` | In `rg-postkit-prod-ae` on subscription `SSD Post Kit` |
 | Packages          | npmjs public `@singleton-sd/post-kit-*`  | Trusted Publishing (OIDC) from `release.yml` — see [`SETUP.md`](../../SETUP.md) §6 |
 
 CI is `Lint / test / build` on every PR. Live email-domain branding

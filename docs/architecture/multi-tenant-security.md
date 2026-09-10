@@ -120,7 +120,7 @@ so a variable value cannot inject an email header.
 - **Server-side only.** `PostKitClient` is for trusted server code. Browser
   code must never hold a long-lived PostKit token; a public form should POST
   to the consumer's own server route, which then calls PostKit.
-- **Secrets live in Key Vault** (`ssd-global-kv-prod-ae`). Non-secret settings
+- **Secrets live in Key Vault** (`ssd-postkit-kv-prod-ae`). Non-secret settings
   live in Azure App Configuration or Function App settings. See
   [`SETUP.md`](../../SETUP.md).
 - At startup the API calls `ensureAppConfiguration()`, which reads App
