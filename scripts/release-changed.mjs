@@ -420,8 +420,11 @@ function main() {
   });
 
   // Publish before pushing so OIDC/auth failure does not leave tags on main.
-  publishNpmReleases(releases);
-  console.log('npm publish completed for released packages.');
+  // Already-published versions are skipped so a partial run can recover.
+  const npmResult = publishNpmReleases(releases);
+  console.log(
+    `npm publish completed (published: ${npmResult.published.length}, skipped: ${npmResult.skipped.length}).`,
+  );
 
   // Commit first, then tag. Tagging before a rebase-on-push-failure leaves
   // tags pointing at a rewritten commit SHA.

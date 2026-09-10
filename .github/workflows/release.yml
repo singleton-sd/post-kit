@@ -51,8 +51,8 @@ jobs:
           npm --version
           for npmrc in "$PWD/.npmrc" "$(npm config get userconfig)" "$(npm config get globalconfig)"; do
             if [[ -f "$npmrc" ]] && grep -qE 'always-auth|^//registry\.npmjs\.org|_authToken' "$npmrc"; then
+              # Do not print file contents — they may contain credentials.
               echo "Refusing to publish with an auth .npmrc: $npmrc" >&2
-              cat "$npmrc" >&2
               exit 1
             fi
           done
