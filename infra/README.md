@@ -29,11 +29,22 @@ Historical target was Singleton SD / `rg-ssd-global` /
    `9a0e57d7-e58e-4e8b-814d-037cd7d9015c`.
 5. Do not continue provisioning PostKit resources into `rg-ssd-global`.
 
-**Fallback:** if ops elects to keep `ssd-global-kv-prod-ae`, pass
-`keyVaultName=ssd-global-kv-prod-ae` only when that vault is reachable from
-the deployment (same sub/RG or adjust template for cross-sub `existing`
-references) and grant cross-subscription Key Vault Secrets User to the
-Function App, App Config, and OIDC principals. Prefer the dedicated vault.
+**Fallback (existing vault in this RG):** Azure Key Vault names are globally
+unique. Do **not** pass `keyVaultName=ssd-global-kv-prod-ae` (or any other
+already-used name) with the default `createKeyVault=true` — deployment would
+try to create that vault and fail. To reference a vault that already exists
+**in the same resource group**:
+
+```bash
+az deployment group create ... \
+  --parameters createKeyVault=false keyVaultName=<existing-vault-in-this-rg>
+```
+
+**Cross-subscription shared vault** (`ssd-global-kv-prod-ae` on Singleton SD):
+out of scope for this template (Bicep cannot assign roles on another
+subscription’s vault from an RG deployment without a separate module). Grant
+Key Vault Secrets User + App Config Key Vault references manually; prefer the
+dedicated vault.
 
 Non-secret settings (public API base URL, origins, host profiles, branding
 validation, from/inbox) live in App Configuration. `infra/appconfig-seed.json`

@@ -169,11 +169,13 @@ Y1 Consumption Function Apps remain the cost default for the API.
 subscription as the Function App). Bicep creates this vault with RBAC
 authorization enabled.
 
-**Alternative (legacy):** keep using `ssd-global-kv-prod-ae` on Singleton SD and
-grant the PostKit Function App / App Config / OIDC principals **Key Vault
-Secrets User** via **cross-subscription RBAC**. Document the vault URI in App
-Configuration Key Vault references. Prefer the dedicated vault unless a human
-explicitly chooses to share.
+**Alternative (legacy):** keep using `ssd-global-kv-prod-ae` on Singleton SD.
+That path is **ops-only** (cross-subscription RBAC + App Config Key Vault
+references) — do **not** pass the shared vault name into this template with
+`createKeyVault=true` (globally unique names; create would fail). Same-RG
+existing vaults use `createKeyVault=false` (see
+[`infra/README.md`](infra/README.md)). Prefer the dedicated vault unless a
+human explicitly chooses to share.
 
 ### Secrets + configuration (locked)
 
@@ -187,7 +189,7 @@ explicitly chooses to share.
 
 | Variable | Purpose | Expected value |
 | --- | --- | --- |
-| `AZURE_CLIENT_ID` | OIDC app registration application (client) ID | e.g. existing `ssd-pocpk-gha-oidc-dev` client ID, or a PostKit-dedicated app |
+| `AZURE_CLIENT_ID` | OIDC app registration **application (client) ID** — a UUID, **not** the display name | Resolve with `az ad app list --display-name ssd-pocpk-gha-oidc-dev --query [].appId -o tsv` (or a PostKit-dedicated app’s `appId`). `azure/login` `client-id` rejects names. |
 | `AZURE_TENANT_ID` | Entra tenant ID | `9a0e57d7-e58e-4e8b-814d-037cd7d9015c` |
 | `AZURE_SUBSCRIPTION_ID` | PostKit subscription ID | _TBD — from human after creating `ssd-post-kit`_ |
 
@@ -204,9 +206,16 @@ Phase 2 provision/deploy ([#116](https://github.com/singleton-sd/post-kit/issues
 2. [ ] **Confirm billing** / offer allows Azure Functions (Y1 Consumption) and
       App Configuration **Free**.
 3. [ ] **Grant access** on the new subscription: operators (Contributor or
-      Owner as needed) and the GitHub OIDC service principal (Contributor on
-      the sub; Key Vault Secrets User + App Configuration Data Owner/Reader
-      follow from bicep / ops).
+      Owner as needed) and the GitHub OIDC service principal. Subscription
+      **Contributor alone is not enough** for first deploy: `function-app.bicep`
+      creates App Configuration and Key Vault **role assignments**, which need
+      `Microsoft.Authorization/roleAssignments/write`. Grant the OIDC principal
+      **Contributor** plus **Role Based Access Control Administrator** (or
+      **User Access Administrator**) on the target RG/sub — or **Owner** — or
+      pre-create those assignments and leave `githubOidcPrincipalId` empty so
+      bicep skips the OIDC role resources. Data-plane roles (Key Vault Secrets
+      User, App Configuration Data Owner/Reader) still come from bicep when
+      that principal id is passed.
 4. [ ] **OIDC federated credentials** for repo `singleton-sd/post-kit` on the
       Entra app used by Actions (reuse `ssd-pocpk-gha-oidc-dev` or create a
       PostKit-dedicated app). Subjects must match the token `sub` claim, e.g.:
