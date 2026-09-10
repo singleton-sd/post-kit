@@ -28,6 +28,7 @@ Trusted consumer (server-side only)
         |  @singleton-sd/post-kit-client
         |  POST {endpoint}/emails/send
         |  Authorization: Bearer <token>
+        |  (MCP clients: POST {endpoint}/mcp — same Bearer map; see guides/mcp.md)
         v
 PostKit Functions API — apps/api (Azure Functions, anonymous authLevel)
         |
@@ -39,10 +40,11 @@ PostKit Functions API — apps/api (Azure Functions, anonymous authLevel)
         +--> TemplateStore (BlobTemplateStore, Azure Blob Storage)
         |        tenants/{tenantId}/{environment}/templates/{templateKey}/
         |          template.html + metadata.json
+        |        list() discovers template keys for MCP / tooling
         |
-        +--> branding + request variables merge, required-variable check
-        |
-        +--> Handlebars.compile(subject) / Handlebars.compile(templateHtml)
+        +--> TemplateApplicationService (shared REST + MCP)
+        |        branding + request variables merge, required-variable check
+        |        Handlebars.compile(subject) / Handlebars.compile(templateHtml)
         |
         v
 @singleton-sd/post-kit-email  ->  EmailProvider
@@ -53,13 +55,15 @@ Forward Email  ->  per-tenant mail domains
 ```
 
 Every response — success or failure — carries `X-Correlation-Id`, and every
-error body carries `correlationId` plus a stable `PostKitErrorCode`.
+error body carries `correlationId` plus a stable `PostKitErrorCode`. MCP tool
+calls reuse the same template validation/render path; they never invoke the
+email provider in iteration 1.
 
 ## Package ownership
 
 | Workspace                  | npm name                            | Role                                                                                                                                      | Must not                                                                                                              |
 | -------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `apps/api`                 | private (`@singleton-sd/post-kit-api`, not published) | HTTP surface on Azure Functions: `POST /emails/send`, `POST /contact`, `GET /health`. Owns tenant resolution, template loading, rendering, and telemetry. | Be imported by packages; accept `tenantId` from a request body; read template *source* files (it loads compiled artifacts only). |
+| `apps/api`                 | private (`@singleton-sd/post-kit-api`, not published) | HTTP surface on Azure Functions: `POST /emails/send`, `POST /contact`, `GET /health`, `POST /mcp` (stateless MCP adapter). Owns tenant resolution, template loading, rendering, and telemetry. | Be imported by packages; accept `tenantId` from a request body; read template *source* files (it loads compiled artifacts only). |
 | `packages/post-kit-types`  | `@singleton-sd/post-kit-types`      | Shared contracts only: `SendRequest`/`SendResponse`, `PostKitErrorCode`, `PostKitErrorResponse`, `TenantContext`, `TenantEnvironment`, `TenantBranding`, template source/manifest types, `TEMPLATE_SCHEMA_VERSION`. | Contain runtime code — it has zero runtime dependencies and exports only types, type aliases, and one enum plus one const. |
 | `packages/post-kit-client` | `@singleton-sd/post-kit-client`     | Thin typed `PostKitClient` for trusted server callers: builds `POST {endpoint}/emails/send` with a Bearer token, maps HTTP and network failures to `PostKitRequestError`, default 30s timeout. | Ship into browser bundles holding a long-lived API key; re-implement template logic.                                  |
 | `packages/post-kit-compiler`| `@singleton-sd/post-kit-compiler`   | Compile a template source directory (`template.json`, `metadata.json`, `preview.json`) into a `CompiledTemplate`: metadata validation, preview-variable coverage, EmailBuilder.js HTML render, Handlebars validation render, SHA-256 content hash. | Talk to Azure or the network; substitute real variable values into the stored HTML (placeholders are preserved for send time). |

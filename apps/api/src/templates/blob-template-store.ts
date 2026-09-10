@@ -9,7 +9,7 @@ import type {
 } from '@singleton-sd/post-kit-types';
 import { PostKitErrorCode, TEMPLATE_SCHEMA_VERSION } from '@singleton-sd/post-kit-types';
 import { ensureAppConfiguration } from '../config/app-configuration';
-import type { TemplateStore } from './template-store';
+import type { TemplateListItem, TemplateStore } from './template-store';
 
 /** Allowlist regex for safe template keys — alphanumeric, dots, hyphens, underscores only. */
 const SAFE_TEMPLATE_KEY = /^[a-zA-Z0-9._-]+$/;
@@ -141,6 +141,53 @@ export class BlobTemplateStore implements TemplateStore {
         contentHash: '',
       },
     };
+  }
+
+  /**
+   * List templates under `tenants/{tenantId}/{environment}/templates/`.
+   * Discovers keys from `metadata.json` blob paths, then loads each metadata
+   * file for the summary row.
+   */
+  async list(tenant: TenantContext): Promise<TemplateListItem[]> {
+    validateTenantId(tenant.tenantId);
+    validateEnvironment(tenant.environment);
+
+    const { tenantId, environment } = tenant;
+    const prefix = `tenants/${tenantId}/${environment}/templates/`;
+    const containerClient = this.client.getContainerClient(this.container);
+
+    const keys = new Set<string>();
+    for await (const blob of containerClient.listBlobsFlat({ prefix })) {
+      const name = blob.name;
+      if (!name.startsWith(prefix) || !name.endsWith('/metadata.json')) {
+        continue;
+      }
+      const relative = name.slice(prefix.length, -'/metadata.json'.length);
+      // Template keys may contain dots (e.g. marketing.contact-us) but not slashes.
+      if (!relative || relative.includes('/')) {
+        continue;
+      }
+      try {
+        validateTemplateKey(relative);
+        keys.add(relative);
+      } catch {
+        // Skip path segments that fail the key allowlist.
+      }
+    }
+
+    const sortedKeys = [...keys].sort((a, b) => a.localeCompare(b));
+    const items: TemplateListItem[] = [];
+    for (const key of sortedKeys) {
+      const metadataJson = await downloadBlob(containerClient, `${prefix}${key}/metadata.json`);
+      const metadata = parseMetadata(metadataJson, key);
+      items.push({
+        key: metadata.key,
+        name: metadata.name,
+        description: metadata.description,
+        variables: metadata.variables,
+      });
+    }
+    return items;
   }
 }
 

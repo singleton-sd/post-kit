@@ -38,6 +38,7 @@ docs/
 │   ├── template-publishing.md (post-kit-publish, blob layout, environments)
 │   ├── editor-integration.md (embed @singleton-sd/post-kit-editor in admin UIs)
 │   ├── api-quickstart.md     (send API + client quick start)
+│   ├── mcp.md                (MCP /mcp endpoint: tools, auth, local + deployed clients)
 │   ├── packages.md           (install, pin, upgrade @singleton-sd/post-kit-*)
 │   └── public-forms.md       (public web forms: trusted server endpoint pattern)
 ├── integrations/
@@ -63,6 +64,7 @@ docs/
 | [`architecture/overview.md`](./architecture/overview.md) | Phase-1 architecture: Functions API, EmailProvider, consumers |
 | [`email-forward-email.md`](./email-forward-email.md) | Forward Email provider, DNS, `pnpm email:provision`, Function contact, branding CI |
 | [`guides/api-quickstart.md`](./guides/api-quickstart.md) | `POST /emails/send` contract, `PostKitClient` usage, error taxonomy and retries |
+| [`guides/mcp.md`](./guides/mcp.md) | Stateless `POST /mcp` Streamable HTTP adapter, iteration-1 tools, Bearer PoC auth, local + deployed client config |
 | [`guides/packages.md`](./guides/packages.md) | Install, pin, upgrade published `@singleton-sd/post-kit-*` packages; semver and compatibility |
 | [`guides/template-authoring.md`](./guides/template-authoring.md) | Consumer template layout, `metadata.json` fields, template keys, variables, local validation |
 | [`guides/template-publishing.md`](./guides/template-publishing.md) | `post-kit-publish` flags, blob layout, fail-fast, per-environment promotion, OIDC + RBAC |

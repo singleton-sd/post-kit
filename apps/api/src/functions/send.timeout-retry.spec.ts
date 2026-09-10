@@ -68,7 +68,7 @@ function fakeResolver(): TenantResolver {
 }
 
 function fakeStore(): TemplateStore {
-  return { load: async () => COMPILED };
+  return { load: async () => COMPILED, list: async () => [] };
 }
 
 function stubSender() {

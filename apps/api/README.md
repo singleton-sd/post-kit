@@ -23,6 +23,8 @@ pnpm --filter @singleton-sd/post-kit-api test
 pnpm --filter @singleton-sd/post-kit-api start
 ```
 
+MCP (`POST /mcp`): see [`docs/guides/mcp.md`](../../docs/guides/mcp.md).
+
 See [`docs/email-forward-email.md`](../../docs/email-forward-email.md),
 [`docs/integrations/inkads-marketing.md`](../../docs/integrations/inkads-marketing.md),
 and [`infra/README.md`](../../infra/README.md).

@@ -1,5 +1,13 @@
 import type { CompiledTemplate, TenantContext } from '@singleton-sd/post-kit-types';
 
+/** Summary row returned by {@link TemplateStore.list}. */
+export interface TemplateListItem {
+  key: string;
+  name: string;
+  description?: string;
+  variables: string[];
+}
+
 /**
  * Abstraction over compiled template artifact storage.
  * Implementations load compiled template artifacts (HTML + metadata)
@@ -16,4 +24,10 @@ export interface TemplateStore {
    * @throws {TemplateStoreError} with code INVALID_TEMPLATE if the artifact is corrupt.
    */
   load(tenant: TenantContext, templateKey: string): Promise<CompiledTemplate>;
+
+  /**
+   * List compiled templates available for the tenant/environment.
+   * Returns metadata summaries only (no HTML bodies).
+   */
+  list(tenant: TenantContext): Promise<TemplateListItem[]>;
 }
