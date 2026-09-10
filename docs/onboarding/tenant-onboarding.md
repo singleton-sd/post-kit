@@ -273,9 +273,8 @@ const result = await postKit.send({
 });
 ```
 
-> The client package is not published to npm yet — see
-> [#4](https://github.com/singleton-sd/post-kit/issues/4). Consume it from the
-> workspace (`workspace:*`) until then.
+Install from npmjs (`pnpm add @singleton-sd/post-kit-client`) or consume from
+the monorepo workspace (`workspace:*`) during local development.
 
 Success — HTTP `200`, with the correlation id in both the body and the
 `X-Correlation-Id` response header:
@@ -322,7 +321,9 @@ Deeper operational triage is being written under
 
 | Topic | Status |
 | --- | --- |
-| Installing the client from npm | Not yet published — [#4](https://github.com/singleton-sd/post-kit/issues/4) |
-| Admin template editor (`@singleton-sd/post-kit-editor`) | Package does not exist yet — [#5](https://github.com/singleton-sd/post-kit/issues/5) |
 | Per-tenant sender, provider, and branding configuration | [#35](https://github.com/singleton-sd/post-kit/issues/35) |
 | Onboarding automation (token minting, tenant bootstrap CLI) | None. Every step above that touches configuration is manual. |
+
+`@singleton-sd/post-kit-client` and `@singleton-sd/post-kit-editor` are
+published on npmjs. Further editor epic work (if any) is tracked by
+[#5](https://github.com/singleton-sd/post-kit/issues/5).

@@ -148,9 +148,6 @@ surfaces as `404 TEMPLATE_NOT_FOUND`. See
 
 ## Not yet implemented
 
-- **Editor** — `@singleton-sd/post-kit-editor` does not exist. Template JSON
-  is authored by hand or with an external EmailBuilder.js instance. Tracked
-  by [#5](https://github.com/singleton-sd/post-kit/issues/5).
 - **A reusable publish workflow** — this repository ships no reusable GitHub
   Actions workflow or composite action for consumer template publishing.
   Consumers wire `post-kit-publish` into their own CI. Onboarding and
@@ -158,3 +155,7 @@ surfaces as `404 TEMPLATE_NOT_FOUND`. See
   [#7](https://github.com/singleton-sd/post-kit/issues/7).
 - **Template deletion / unpublish** — the publisher only uploads. Removing a
   template directory from source does not remove its blobs.
+
+Template source may be authored by hand or with
+[`@singleton-sd/post-kit-editor`](../../packages/post-kit-editor/README.md)
+(published on npmjs; epic [#5](https://github.com/singleton-sd/post-kit/issues/5)).
