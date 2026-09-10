@@ -13,6 +13,7 @@ export {
   apiKeyHashesEqual,
   asTenantKeyRegistry,
   hashApiKey,
+  isValidIsoTimestamp,
   parseTenantKeyRegistry,
   TENANT_KEY_REGISTRY_SCHEMA_VERSION,
   type ApiKeyRecord,

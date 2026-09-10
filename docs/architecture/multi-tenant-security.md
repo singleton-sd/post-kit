@@ -23,8 +23,9 @@ scopes, opaque `id`). New registrations store only a SHA-256 hex digest of the
 token in Key Vault secret `tenant-key-map` / env `TENANT_KEY_MAP` (schema v2).
 Legacy plaintext map entries remain dual-readable under `legacyPlaintext` (or
 as a pure legacy document) until operators re-register. An unparseable value
-yields an empty registry, so every request then fails closed with
-`403 UNAUTHORIZED`.
+yields an empty registry, so requests with a non-empty Bearer token fail closed
+with `403 UNAUTHORIZED`; missing or malformed authentication remains
+`401 UNAUTHENTICATED`.
 
 Schema v2 shape (placeholder values only — never commit real tokens or hashes
 from production):

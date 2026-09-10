@@ -36,7 +36,9 @@ export function parseTenantKeyMap(raw: string | undefined, log: Logger = createL
 export function createDefaultMcpDependencies(templateStore: TemplateStore): McpHandlerDependencies {
   return {
     get authenticator(): Authenticator {
-      return new ApiKeyAuthenticator(parseTenantKeyRegistry(process.env.TENANT_KEY_MAP));
+      return new ApiKeyAuthenticator(
+        parseTenantKeyRegistry(process.env.TENANT_KEY_MAP, createLogger('config')),
+      );
     },
     templateStore,
     resolveBranding: async () => ({}),

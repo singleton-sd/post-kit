@@ -74,10 +74,21 @@ function parseScopes(value: unknown): readonly PostKitScope[] | undefined {
   if (!Array.isArray(value) || value.length === 0) return undefined;
   const scopes: PostKitScope[] = [];
   for (const item of value) {
-    if (typeof item !== 'string' || !KNOWN_SCOPES.has(item)) return undefined;
+    if (typeof item !== 'string' || item.length === 0 || !KNOWN_SCOPES.has(item)) return undefined;
     scopes.push(item as PostKitScope);
   }
   return scopes;
+}
+
+/** Non-null timestamps must be non-empty ISO-8601 strings that Date.parse accepts. */
+export function isValidIsoTimestamp(value: string): boolean {
+  if (typeof value !== 'string' || value.trim() === '') return false;
+  return !Number.isNaN(Date.parse(value));
+}
+
+function isOptionalTimestamp(value: unknown): value is string | null {
+  if (value === null) return true;
+  return typeof value === 'string' && isValidIsoTimestamp(value);
 }
 
 function isApiKeyRecord(value: unknown): value is ApiKeyRecord {
@@ -88,8 +99,8 @@ function isApiKeyRecord(value: unknown): value is ApiKeyRecord {
   if (!isTenantEnvironment(obj['environment'])) return false;
   const scopes = parseScopes(obj['scopes']);
   if (!scopes) return false;
-  if (obj['revokedAt'] !== null && typeof obj['revokedAt'] !== 'string') return false;
-  if (obj['expiresAt'] !== null && typeof obj['expiresAt'] !== 'string') return false;
+  if (!isOptionalTimestamp(obj['revokedAt'])) return false;
+  if (!isOptionalTimestamp(obj['expiresAt'])) return false;
   return true;
 }
 

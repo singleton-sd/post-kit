@@ -114,15 +114,27 @@ function findHashedRecord(
 }
 
 function assertKeyActive(record: ApiKeyRecord): void {
-  if (record.revokedAt != null && record.revokedAt !== '') {
+  if (record.revokedAt != null) {
+    if (record.revokedAt === '' || Number.isNaN(Date.parse(record.revokedAt))) {
+      throw new AuthError(
+        'The provided credential is no longer valid.',
+        PostKitErrorCode.UNAUTHORIZED,
+      );
+    }
     throw new AuthError(
       'The provided credential is no longer valid.',
       PostKitErrorCode.UNAUTHORIZED,
     );
   }
-  if (record.expiresAt != null && record.expiresAt !== '') {
+  if (record.expiresAt != null) {
+    if (record.expiresAt === '') {
+      throw new AuthError(
+        'The provided credential is no longer valid.',
+        PostKitErrorCode.UNAUTHORIZED,
+      );
+    }
     const expiresMs = Date.parse(record.expiresAt);
-    if (!Number.isNaN(expiresMs) && expiresMs <= Date.now()) {
+    if (Number.isNaN(expiresMs) || expiresMs <= Date.now()) {
       throw new AuthError(
         'The provided credential is no longer valid.',
         PostKitErrorCode.UNAUTHORIZED,

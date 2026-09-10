@@ -88,6 +88,38 @@ function isLegacyPlaintextMap(value) {
 }
 
 /**
+ * Non-null timestamps must be non-empty ISO-8601 strings that Date.parse accepts.
+ * @param {string} value
+ */
+export function isValidIsoTimestamp(value) {
+  if (typeof value !== 'string' || value.trim() === '') return false;
+  return !Number.isNaN(Date.parse(value));
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is string | null}
+ */
+function isOptionalTimestamp(value) {
+  if (value === null) return true;
+  return typeof value === 'string' && isValidIsoTimestamp(value);
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is readonly string[]}
+ */
+function isKnownScopes(value) {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  for (const item of value) {
+    if (typeof item !== 'string' || item.length === 0 || !DEFAULT_POC_SCOPES.includes(item)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * @param {unknown} value
  * @returns {value is ApiKeyRecord}
  */
@@ -97,9 +129,9 @@ function isApiKeyRecord(value) {
   if (typeof obj.keyHash !== 'string' || !/^[a-f0-9]{64}$/.test(obj.keyHash)) return false;
   if (typeof obj.tenantId !== 'string' || obj.tenantId.length === 0) return false;
   if (typeof obj.environment !== 'string' || !isTenantEnvironment(obj.environment)) return false;
-  if (!Array.isArray(obj.scopes) || obj.scopes.length === 0) return false;
-  if (obj.revokedAt !== null && typeof obj.revokedAt !== 'string') return false;
-  if (obj.expiresAt !== null && typeof obj.expiresAt !== 'string') return false;
+  if (!isKnownScopes(obj.scopes)) return false;
+  if (!isOptionalTimestamp(obj.revokedAt)) return false;
+  if (!isOptionalTimestamp(obj.expiresAt)) return false;
   return true;
 }
 
@@ -224,7 +256,13 @@ export function upsertHashedKeyRecord(existing, token, tenantId, environment, op
 
   const principalId = principalIdFromApiKey(token);
   const scopes = options.scopes ? [...options.scopes] : [...DEFAULT_POC_SCOPES];
+  if (!isKnownScopes(scopes)) {
+    throw new Error('scopes must be a non-empty list of known PostKit scope strings');
+  }
   const expiresAt = options.expiresAt === undefined ? null : options.expiresAt;
+  if (expiresAt !== null && !isValidIsoTimestamp(expiresAt)) {
+    throw new Error('expiresAt must be null or a valid ISO-8601 timestamp');
+  }
   const replaced = Object.prototype.hasOwnProperty.call(existing.keys, principalId);
 
   /** @type {Record<string, ApiKeyRecord>} */

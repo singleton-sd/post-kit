@@ -150,6 +150,31 @@ describe('upsertHashedKeyRecord', () => {
     assert.equal(second.replaced, true);
     assert.equal(Object.keys(second.registry.keys).length, 1);
   });
+
+  it('rejects invalid expiresAt and unknown scopes', () => {
+    assert.throws(
+      () =>
+        upsertHashedKeyRecord(
+          { schemaVersion: 2, keys: {} },
+          'tk_live_eeeeeeeeeeeeeeee',
+          'acme',
+          'production',
+          { expiresAt: 'not-iso' },
+        ),
+      /expiresAt/,
+    );
+    assert.throws(
+      () =>
+        upsertHashedKeyRecord(
+          { schemaVersion: 2, keys: {} },
+          'tk_live_ffffffffffffffff',
+          'acme',
+          'production',
+          { scopes: ['templates:read', 'not:a:scope'] },
+        ),
+      /scopes/,
+    );
+  });
 });
 
 describe('serializeTenantKeyRegistry', () => {

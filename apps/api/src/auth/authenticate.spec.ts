@@ -258,6 +258,42 @@ describe('ApiKeyAuthenticator', () => {
     }
   });
 
+  it('rejects hashed keys with unparsable expiresAt (fail closed)', async () => {
+    const hashedAuth = new ApiKeyAuthenticator(hashedRegistry({ expiresAt: 'not-a-date' }));
+    await assert.rejects(
+      () => hashedAuth.authenticate(makeRequest({ authorization: `Bearer ${FIXTURE_TOKEN}` })),
+      (err: unknown) =>
+        err instanceof AuthError &&
+        err.code === PostKitErrorCode.UNAUTHORIZED &&
+        err.message === 'The provided credential is no longer valid.',
+    );
+  });
+
+  it('parseTenantKeyRegistry rejects empty or invalid key timestamps', () => {
+    const base = {
+      schemaVersion: 2,
+      keys: {
+        [FIXTURE_ID]: {
+          keyHash: FIXTURE_HASH,
+          tenantId: 'acme',
+          environment: 'development',
+          scopes: [...DEFAULT_POC_SCOPES],
+          revokedAt: null,
+          expiresAt: '',
+        },
+      },
+    };
+    assert.deepEqual(parseTenantKeyRegistry(JSON.stringify(base)), {
+      keys: {},
+      legacyPlaintext: {},
+    });
+    base.keys[FIXTURE_ID]!.expiresAt = 'tomorrow';
+    assert.deepEqual(parseTenantKeyRegistry(JSON.stringify(base)), {
+      keys: {},
+      legacyPlaintext: {},
+    });
+  });
+
   it('dual-reads legacy plaintext while hashed keys are present', async () => {
     const hashedAuth = new ApiKeyAuthenticator(
       hashedRegistry({}, { tk_dev_test_legacy: { tenantId: 'acme', environment: 'staging' } }),

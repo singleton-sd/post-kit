@@ -100,7 +100,9 @@ export function createDefaultSendDependencies(
   return {
     // Re-read env after App Configuration in the handler via factories.
     get authenticator(): Authenticator {
-      return new ApiKeyAuthenticator(parseTenantKeyRegistry(process.env.TENANT_KEY_MAP));
+      return new ApiKeyAuthenticator(
+        parseTenantKeyRegistry(process.env.TENANT_KEY_MAP, createLogger('config')),
+      );
     },
     templateStore,
     createEmailProvider: (options) =>
