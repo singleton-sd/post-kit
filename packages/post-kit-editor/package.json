@@ -20,11 +20,12 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "pnpm --filter @singleton-sd/post-kit-types run build && tsc -p tsconfig.json",
+    "build": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.json",
     "lint": "echo \"lint:editor — covered by root eslint on staged files\"",
     "test": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.spec.json && node --import tsx --test \"src/**/*.spec.ts\" \"src/**/*.spec.tsx\""
   },
   "dependencies": {
+    "@singleton-sd/post-kit-compiler": "workspace:*",
     "@singleton-sd/post-kit-types": "workspace:*",
     "@usewaypoint/block-avatar": "^0.0.3",
     "@usewaypoint/block-button": "^0.0.3",
@@ -45,7 +46,6 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@singleton-sd/post-kit-compiler": "workspace:*",
     "@types/node": "^20.17.9",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",

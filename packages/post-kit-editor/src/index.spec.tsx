@@ -82,6 +82,13 @@ describe('EmailTemplateEditor', () => {
     assert.match(html, /\{\{name\}\}/);
   });
 
+  it('renders the preview-data editor and preview pane', () => {
+    const html = renderToStaticMarkup(<EmailTemplateEditor {...baseProps} />);
+    assert.match(html, new RegExp(`${EDITOR_CLASS_PREFIX}preview-data`));
+    assert.match(html, new RegExp(`${EDITOR_CLASS_PREFIX}preview-pane`));
+    assert.match(html, /data-testid="pk-editor-preview-value-name"/);
+  });
+
   it('lists availableVariables when the consumer supplies them', () => {
     const html = renderToStaticMarkup(
       <EmailTemplateEditor
