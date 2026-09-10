@@ -12,6 +12,7 @@
  * props once validation is clean (mirrors the editor after preview resolves).
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
@@ -54,6 +55,7 @@ function installSideChannelGuards(): {
   const fetchCalls: unknown[][] = [];
   const httpCalls: unknown[][] = [];
   const httpsCalls: unknown[][] = [];
+  const fsCalls: unknown[][] = [];
 
   const previousFetch = globalThis.fetch;
   globalThis.fetch = ((...args: unknown[]) => {
@@ -72,11 +74,33 @@ function installSideChannelGuards(): {
     throw new Error('unexpected https.request during editor e2e flow');
   }) as typeof https.request;
 
+  const previousReadFileSync = fs.readFileSync;
+  const previousWriteFileSync = fs.writeFileSync;
+  const previousReadFile = fs.promises.readFile;
+  const previousWriteFile = fs.promises.writeFile;
+  fs.readFileSync = ((...args: unknown[]) => {
+    fsCalls.push(['readFileSync', ...args]);
+    throw new Error('unexpected fs.readFileSync during editor e2e flow');
+  }) as typeof fs.readFileSync;
+  fs.writeFileSync = ((...args: unknown[]) => {
+    fsCalls.push(['writeFileSync', ...args]);
+    throw new Error('unexpected fs.writeFileSync during editor e2e flow');
+  }) as typeof fs.writeFileSync;
+  fs.promises.readFile = ((...args: unknown[]) => {
+    fsCalls.push(['promises.readFile', ...args]);
+    return Promise.reject(new Error('unexpected fs.promises.readFile during editor e2e flow'));
+  }) as typeof fs.promises.readFile;
+  fs.promises.writeFile = ((...args: unknown[]) => {
+    fsCalls.push(['promises.writeFile', ...args]);
+    return Promise.reject(new Error('unexpected fs.promises.writeFile during editor e2e flow'));
+  }) as typeof fs.promises.writeFile;
+
   return {
     assertClean: () => {
       assert.equal(fetchCalls.length, 0, 'fetch must not be called');
       assert.equal(httpCalls.length, 0, 'http.request must not be called');
       assert.equal(httpsCalls.length, 0, 'https.request must not be called');
+      assert.equal(fsCalls.length, 0, 'filesystem must not be accessed');
     },
     restore: () => {
       if (previousFetch) {
@@ -86,12 +110,16 @@ function installSideChannelGuards(): {
       }
       http.request = previousHttpRequest;
       https.request = previousHttpsRequest;
+      fs.readFileSync = previousReadFileSync;
+      fs.writeFileSync = previousWriteFileSync;
+      fs.promises.readFile = previousReadFile;
+      fs.promises.writeFile = previousWriteFile;
     },
   };
 }
 
 describe('EmailTemplateEditor e2e (SSR + pure helpers)', () => {
-  it('load → panels populated; edit → validate → save round-trip; send-test; no network', async () => {
+  it('load → panels populated; edit → validate → save round-trip; send-test; no network/fs', async () => {
     const seed = await loadNestedBlocksFixture();
     const guards = installSideChannelGuards();
 
