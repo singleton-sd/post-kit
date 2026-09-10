@@ -183,9 +183,15 @@ of [`docs/pr-pipelines.md`](docs/pr-pipelines.md).
 
 ## Solo-repo merge (locked)
 
-Branch protection must require **CI status checks** + **human merge**, but
-must not require approving reviews. Connected review bots provide comments
-and agents never approve. See `SETUP.md`.
+Humans merge product PRs only after required CI (`Lint / test / build`) is
+green. Do not require approving reviews (solo identity cannot self-approve).
+Connected review bots comment; agents never approve or merge.
+
+**Branch protection nuance:** classic “required PR / required status checks”
+on `main` must stay **off** until an **organization** ruleset can bypass
+GitHub Actions for `release.yml` (that workflow pushes `chore: Release…`
+directly to `main`). Process still forbids merging red CI and forbids agents
+pushing to `main`. See `SETUP.md` §1 Release exception.
 
 ## Shared hub files (conflict prevention)
 
