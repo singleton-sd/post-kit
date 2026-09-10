@@ -3,13 +3,12 @@
  *
  * Interaction (clicks / controlled inputs) is not available without a DOM.
  * Edit → validate → save / send-test are driven through the same pure helpers
- * and presentational props the editor uses internally
- * (`withMetadata` / `withPreviewData` / `withDocument`, `validateTemplate`,
- * `buildSavePayload`, `SaveSendBar`, `validateSendTestRecipient`,
- * `invokeConsumerAction`). Markup assertions cover panels, loading shells,
- * and Send-test chrome. Preview-pending Save gating under SSR is asserted on
- * the full editor; “enabled after preview settles” is covered via SaveSendBar
- * props once validation is clean (mirrors the editor after preview resolves).
+ * and action controllers the editor uses (`withMetadata` / `validateTemplate`,
+ * `startSaveAction` / `finishSaveAction`, `startSendTestAction` /
+ * `finishSendTestAction`, `SaveSendBar`). Markup assertions cover panels,
+ * loading shells, and Send-test chrome. Preview-pending Save gating under SSR
+ * is asserted on the full editor; “enabled after preview settles” is covered
+ * via SaveSendBar props once validation is clean.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -28,9 +27,13 @@ import {
   type EmailTemplateEditorProps,
 } from './email-template-editor';
 import { loadTemplateSource, serializeTemplateSource } from './serialization';
-import { validateSendTestRecipient } from './save-send/recipient';
+import {
+  finishSaveAction,
+  finishSendTestAction,
+  startSaveAction,
+  startSendTestAction,
+} from './save-send/actions';
 import { SaveSendBar } from './save-send/SaveSendBar';
-import { buildSavePayload, invokeConsumerAction } from './save-send/types';
 import type { EmailBuilderDocument, TemplateSourceFiles } from './types';
 import { hasValidationErrors, validateTemplate } from './validation/validate';
 import { withDocument, withMetadata, withPreviewData } from './working-files';
@@ -254,17 +257,32 @@ describe('EmailTemplateEditor e2e (SSR + pure helpers)', () => {
       assert.doesNotMatch(enabledBar, new RegExp(`data-testid="${p}save"[^>]*disabled`));
       assert.equal(saveClicked, false);
 
-      // --- onSave payload round-trips losslessly ---
+      // --- onSave via action controllers (same path as EmailTemplateEditor) ---
       const recorded: {
         serialized: ReturnType<typeof serializeTemplateSource>;
         files: TemplateSourceFiles;
       }[] = [];
-      const payload = buildSavePayload(fixed);
-      const saveResult = await invokeConsumerAction(() => {
-        recorded.push({ serialized: payload.serialized, files: payload.files });
-        return undefined;
+      assert.equal(
+        startSaveAction({ busy: false, validationBlocked: true, files: fixed }).status,
+        'noop',
+      );
+      const saveStarted = startSaveAction({
+        busy: false,
+        validationBlocked: false,
+        files: fixed,
       });
-      assert.equal(saveResult.ok, true);
+      assert.equal(saveStarted.status, 'ready');
+      if (saveStarted.status !== 'ready') {
+        throw new Error('expected save ready');
+      }
+      const saveResult = await finishSaveAction({
+        payload: saveStarted.payload,
+        isGenerationCurrent: () => true,
+        onSave: (serialized, files) => {
+          recorded.push({ serialized, files });
+        },
+      });
+      assert.equal(saveResult.status, 'success');
       assert.equal(recorded.length, 1);
 
       const roundTripped = loadTemplateSource({
@@ -285,32 +303,64 @@ describe('EmailTemplateEditor e2e (SSR + pure helpers)', () => {
       assert.equal(hasValidationErrors(validateTemplate(withUndeclared)), true);
       assert.equal(hasValidationErrors(validateTemplate(fixed)), false);
 
-      // --- onSendTest: appears only when provided; recipient validates; invokes ---
-      assert.equal(validateSendTestRecipient(''), 'Enter a recipient email address.');
-      assert.match(validateSendTestRecipient('not-an-email') ?? '', /valid email/i);
-      assert.equal(validateSendTestRecipient('tester@example.com'), null);
+      // --- onSendTest via action controllers ---
+      assert.equal(
+        startSendTestAction({
+          busy: false,
+          validationBlocked: false,
+          sendTestEnabled: true,
+          files: fixed,
+          recipient: '',
+        }).status,
+        'recipient-error',
+      );
+      assert.equal(
+        startSendTestAction({
+          busy: false,
+          validationBlocked: false,
+          sendTestEnabled: true,
+          files: fixed,
+          recipient: 'not-an-email',
+        }).status,
+        'recipient-error',
+      );
 
       const sendCalls: Array<{
         serialized: ReturnType<typeof serializeTemplateSource>;
         files: TemplateSourceFiles;
         recipient: string;
       }> = [];
-      const sendPayload = buildSavePayload(fixed);
-      const sendResult = await invokeConsumerAction(() => {
-        const recipient = 'tester@example.com';
-        const recipientError = validateSendTestRecipient(recipient);
-        assert.equal(recipientError, null);
-        sendCalls.push({
-          serialized: sendPayload.serialized,
-          files: sendPayload.files,
-          recipient,
-        });
-        return undefined;
+      const sendStarted = startSendTestAction({
+        busy: false,
+        validationBlocked: false,
+        sendTestEnabled: true,
+        files: fixed,
+        recipient: 'tester@example.com',
       });
-      assert.equal(sendResult.ok, true);
+      assert.equal(sendStarted.status, 'ready');
+      if (sendStarted.status !== 'ready') {
+        throw new Error('expected send ready');
+      }
+      const sendResult = await finishSendTestAction({
+        payload: sendStarted.payload,
+        recipient: sendStarted.recipient,
+        isGenerationCurrent: () => true,
+        onSendTest: (serialized, files, recipient) => {
+          sendCalls.push({ serialized, files, recipient });
+        },
+      });
+      assert.equal(sendResult.status, 'success');
       assert.equal(sendCalls.length, 1);
       assert.equal(sendCalls[0]!.recipient, 'tester@example.com');
       assert.deepEqual(sendCalls[0]!.files.metadata, fixed.metadata);
+
+      // Stale generation is ignored (same guard as EmailTemplateEditor).
+      const staleSave = await finishSaveAction({
+        payload: saveStarted.payload,
+        isGenerationCurrent: () => false,
+        onSave: () => undefined,
+      });
+      assert.equal(staleSave.status, 'stale');
 
       // Canvas still renders the edited document without network.
       const canvasHtml = renderToStaticMarkup(

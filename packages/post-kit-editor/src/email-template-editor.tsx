@@ -13,12 +13,16 @@ import type { PreviewRenderResult } from './preview/render-template-preview';
 import { isWorkingDirty } from './save-send/dirty';
 import { SaveSendBar } from './save-send/SaveSendBar';
 import {
-  buildSavePayload,
-  invokeConsumerAction,
-  type ActionFeedback,
-  type SaveResult,
-  type SendTestResult,
-  type SerializedTemplateSource,
+  finishSaveAction,
+  finishSendTestAction,
+  startSaveAction,
+  startSendTestAction,
+} from './save-send/actions';
+import type {
+  ActionFeedback,
+  SaveResult,
+  SendTestResult,
+  SerializedTemplateSource,
 } from './save-send/types';
 import type { EmailBuilderDocument, TemplateSourceFiles, TemplateVariable } from './types';
 import type { TemplatePreviewData, TemplateSourceMetadata } from '@singleton-sd/post-kit-types';
@@ -204,33 +208,36 @@ function EmailTemplateEditorInner({
   const busy = saveFeedback.status === 'pending' || sendFeedback.status === 'pending';
 
   const handleSave = useCallback(() => {
-    if (busy || validationBlocked) {
+    const started = startSaveAction({
+      busy,
+      validationBlocked,
+      files: workingFiles,
+    });
+    if (started.status === 'noop') {
       return;
     }
-    let payload: ReturnType<typeof buildSavePayload>;
-    try {
-      payload = buildSavePayload(workingFiles);
-    } catch (error) {
-      setSaveFeedback({
-        status: 'failure',
-        message: error instanceof Error ? error.message : String(error),
-      });
+    if (started.status === 'serialize-error') {
+      setSaveFeedback({ status: 'failure', message: started.message });
       return;
     }
     const generation = templateGenerationRef.current;
     setSaveFeedback({ status: 'pending' });
     void (async () => {
-      const result = await invokeConsumerAction(() => onSave(payload.serialized, payload.files));
-      if (generation !== templateGenerationRef.current) {
+      const result = await finishSaveAction({
+        payload: started.payload,
+        isGenerationCurrent: () => generation === templateGenerationRef.current,
+        onSave,
+      });
+      if (result.status === 'stale') {
         return;
       }
-      if (result.ok) {
-        setSeedFiles(payload.files);
+      if (result.status === 'success') {
+        setSeedFiles(result.files);
         setSaveFeedback({ status: 'success', message: result.message });
       } else {
         setSaveFeedback({
           status: 'failure',
-          message: result.message ?? 'Save failed.',
+          message: result.message,
         });
       }
     })();
@@ -238,34 +245,38 @@ function EmailTemplateEditorInner({
 
   const handleSendTest = useCallback(
     (recipient: string) => {
-      if (busy || validationBlocked || !onSendTest) {
+      const started = startSendTestAction({
+        busy,
+        validationBlocked,
+        sendTestEnabled: typeof onSendTest === 'function',
+        files: workingFiles,
+        recipient,
+      });
+      if (started.status === 'noop') {
         return;
       }
-      let payload: ReturnType<typeof buildSavePayload>;
-      try {
-        payload = buildSavePayload(workingFiles);
-      } catch (error) {
-        setSendFeedback({
-          status: 'failure',
-          message: error instanceof Error ? error.message : String(error),
-        });
+      if (started.status === 'recipient-error' || started.status === 'serialize-error') {
+        setSendFeedback({ status: 'failure', message: started.message });
         return;
       }
       const generation = templateGenerationRef.current;
       setSendFeedback({ status: 'pending' });
       void (async () => {
-        const result = await invokeConsumerAction(() =>
-          onSendTest(payload.serialized, payload.files, recipient),
-        );
-        if (generation !== templateGenerationRef.current) {
+        const result = await finishSendTestAction({
+          payload: started.payload,
+          recipient: started.recipient,
+          isGenerationCurrent: () => generation === templateGenerationRef.current,
+          onSendTest: onSendTest!,
+        });
+        if (result.status === 'stale') {
           return;
         }
-        if (result.ok) {
+        if (result.status === 'success') {
           setSendFeedback({ status: 'success', message: result.message });
         } else {
           setSendFeedback({
             status: 'failure',
-            message: result.message ?? 'Send test failed.',
+            message: result.message,
           });
         }
       })();

@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { invokeConsumerAction } from './types';
-import { validateSendTestRecipient } from './recipient';
-import { isWorkingDirty } from './dirty';
-import type { TemplateSourceFiles } from '../types';
 import { TEMPLATE_SCHEMA_VERSION } from '@singleton-sd/post-kit-types';
+
+import type { TemplateSourceFiles } from '../types';
+import {
+  finishSaveAction,
+  finishSendTestAction,
+  startSaveAction,
+  startSendTestAction,
+} from './actions';
+import { isWorkingDirty } from './dirty';
+import { validateSendTestRecipient } from './recipient';
+import { invokeConsumerAction } from './types';
 
 const baseFiles: TemplateSourceFiles = {
   templateJson: {
@@ -82,5 +89,105 @@ describe('isWorkingDirty', () => {
       previewData: {},
     };
     assert.equal(isWorkingDirty(baseFiles, reordered), false);
+  });
+});
+
+describe('startSaveAction / finishSaveAction', () => {
+  it('noops when busy or validation-blocked', () => {
+    assert.equal(
+      startSaveAction({ busy: true, validationBlocked: false, files: baseFiles }).status,
+      'noop',
+    );
+    assert.equal(
+      startSaveAction({ busy: false, validationBlocked: true, files: baseFiles }).status,
+      'noop',
+    );
+  });
+
+  it('invokes onSave with serialized payload and honors stale generation', async () => {
+    const started = startSaveAction({
+      busy: false,
+      validationBlocked: false,
+      files: baseFiles,
+    });
+    assert.equal(started.status, 'ready');
+    if (started.status !== 'ready') {
+      throw new Error('expected ready');
+    }
+
+    const args: unknown[] = [];
+    const success = await finishSaveAction({
+      payload: started.payload,
+      isGenerationCurrent: () => true,
+      onSave: (serialized, files) => {
+        args.push(serialized, files);
+        return { ok: true, message: 'saved' };
+      },
+    });
+    assert.equal(success.status, 'success');
+    if (success.status === 'success') {
+      assert.equal(success.message, 'saved');
+      assert.equal(args[1], baseFiles);
+    }
+
+    const stale = await finishSaveAction({
+      payload: started.payload,
+      isGenerationCurrent: () => false,
+      onSave: () => ({ ok: true }),
+    });
+    assert.equal(stale.status, 'stale');
+  });
+});
+
+describe('startSendTestAction / finishSendTestAction', () => {
+  it('noops when send-test is disabled', () => {
+    assert.equal(
+      startSendTestAction({
+        busy: false,
+        validationBlocked: false,
+        sendTestEnabled: false,
+        files: baseFiles,
+        recipient: 'a@b.co',
+      }).status,
+      'noop',
+    );
+  });
+
+  it('rejects bad recipients and passes trimmed recipient to onSendTest', async () => {
+    assert.equal(
+      startSendTestAction({
+        busy: false,
+        validationBlocked: false,
+        sendTestEnabled: true,
+        files: baseFiles,
+        recipient: 'bad',
+      }).status,
+      'recipient-error',
+    );
+
+    const started = startSendTestAction({
+      busy: false,
+      validationBlocked: false,
+      sendTestEnabled: true,
+      files: baseFiles,
+      recipient: '  a@b.co  ',
+    });
+    assert.equal(started.status, 'ready');
+    if (started.status !== 'ready') {
+      throw new Error('expected ready');
+    }
+    assert.equal(started.recipient, 'a@b.co');
+
+    let seenRecipient = '';
+    const result = await finishSendTestAction({
+      payload: started.payload,
+      recipient: started.recipient,
+      isGenerationCurrent: () => true,
+      onSendTest: (_s, _f, recipient) => {
+        seenRecipient = recipient;
+      },
+    });
+    assert.equal(result.status, 'success');
+    assert.equal(seenRecipient, 'a@b.co');
   });
 });
