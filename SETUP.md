@@ -204,7 +204,7 @@ for same-RG `createKeyVault=false` only.
 ### Human checklist — subscription, OIDC FIC, GitHub Variables
 
 Agents cannot create Azure **billing** subscriptions. Complete these before
-Phase 2 provision/deploy ([#116](https://github.com/singleton-sd/post-kit/issues/116)):
+Phase 2 provision/deploy ([#120](https://github.com/singleton-sd/post-kit/issues/120)):
 
 1. [x] **Create** Azure subscription (`SSD Post Kit` /
       `9b6fc2b1-064a-4eb2-81fe-0aa8c7c751b5`) under tenant
