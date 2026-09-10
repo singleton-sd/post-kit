@@ -19,7 +19,13 @@ export function EmailBuilderCanvas({
 }: EmailBuilderCanvasProps): JSX.Element {
   if (readOnly) {
     return (
-      <div className={`${EDITOR_CLASS_PREFIX}canvas`} data-testid={`${EDITOR_CLASS_PREFIX}canvas`}>
+      <div
+        id={`${EDITOR_CLASS_PREFIX}canvas`}
+        className={`${EDITOR_CLASS_PREFIX}canvas`}
+        data-testid={`${EDITOR_CLASS_PREFIX}canvas`}
+        tabIndex={-1}
+        aria-label="Email document canvas"
+      >
         <Reader document={document} rootBlockId="root" />
       </div>
     );
@@ -27,7 +33,13 @@ export function EmailBuilderCanvas({
 
   return (
     <CanvasEditorProvider document={document} onChange={onChange}>
-      <div className={`${EDITOR_CLASS_PREFIX}canvas`} data-testid={`${EDITOR_CLASS_PREFIX}canvas`}>
+      <div
+        id={`${EDITOR_CLASS_PREFIX}canvas`}
+        className={`${EDITOR_CLASS_PREFIX}canvas`}
+        data-testid={`${EDITOR_CLASS_PREFIX}canvas`}
+        tabIndex={-1}
+        aria-label="Email document canvas"
+      >
         <EditorBlock id="root" />
       </div>
     </CanvasEditorProvider>

@@ -2,6 +2,7 @@ import React, { useCallback, useId, useState } from 'react';
 import type { TemplatePreviewData } from '@singleton-sd/post-kit-types';
 
 import { EDITOR_CLASS_PREFIX } from '../email-template-editor';
+import { inlineIssueId, type ValidationIssue } from '../validation/validate';
 import { addPreviewKey, buildPreviewRows, removePreviewKey, setPreviewValue } from './preview-rows';
 
 export interface PreviewDataEditorProps {
@@ -11,6 +12,8 @@ export interface PreviewDataEditorProps {
   previewData: TemplatePreviewData;
   /** Replace the working preview data object. */
   onChange: (previewData: TemplatePreviewData) => void;
+  /** Validation issues that belong to preview-data rows. */
+  issues?: readonly ValidationIssue[];
 }
 
 /**
@@ -23,12 +26,16 @@ export function PreviewDataEditor({
   declaredVariables,
   previewData,
   onChange,
+  issues = [],
 }: PreviewDataEditorProps): JSX.Element {
   const p = EDITOR_CLASS_PREFIX;
   const rows = buildPreviewRows(declaredVariables, previewData);
   const [newKey, setNewKey] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
   const addInputId = useId();
+
+  const issuesForKey = (key: string): ValidationIssue[] =>
+    issues.filter((i) => i.field === 'previewData' && i.variable === key);
 
   const handleValueChange = useCallback(
     (key: string, value: string) => {
@@ -70,42 +77,64 @@ export function PreviewDataEditor({
       </p>
 
       <ul className={`${p}preview-data-list`} data-testid={`${p}preview-data-list`}>
-        {rows.map((row) => (
-          <li
-            key={row.key}
-            className={`${p}preview-data-row${row.extra ? ` ${p}preview-data-row-extra` : ''}`}
-            data-testid={`${p}preview-data-row`}
-            data-extra={row.extra ? 'true' : 'false'}
-            data-key={row.key}
-          >
-            <label className={`${p}preview-data-key`} htmlFor={`${p}preview-${row.key}`}>
-              {row.key}
-              {row.extra ? (
-                <span className={`${p}preview-data-extra-badge`} data-testid={`${p}preview-extra`}>
-                  extra
-                </span>
-              ) : null}
-            </label>
-            <input
-              id={`${p}preview-${row.key}`}
-              className={`${p}preview-data-value`}
-              type="text"
-              value={row.value}
-              onChange={(event) => handleValueChange(row.key, event.target.value)}
-              data-testid={`${p}preview-value-${row.key}`}
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <button
-              type="button"
-              className={`${p}preview-data-remove`}
-              onClick={() => handleRemove(row.key)}
-              data-testid={`${p}preview-remove-${row.key}`}
+        {rows.map((row) => {
+          const rowIssues = issuesForKey(row.key);
+          const describedBy = rowIssues.map((i) => inlineIssueId(i.code, i.variable)).join(' ');
+          return (
+            <li
+              key={row.key}
+              className={`${p}preview-data-row${row.extra ? ` ${p}preview-data-row-extra` : ''}`}
+              data-testid={`${p}preview-data-row`}
+              data-extra={row.extra ? 'true' : 'false'}
+              data-key={row.key}
             >
-              Remove
-            </button>
-          </li>
-        ))}
+              <label className={`${p}preview-data-key`} htmlFor={`${p}preview-${row.key}`}>
+                {row.key}
+                {row.extra ? (
+                  <span
+                    className={`${p}preview-data-extra-badge`}
+                    data-testid={`${p}preview-extra`}
+                  >
+                    extra
+                  </span>
+                ) : null}
+              </label>
+              <input
+                id={`${p}preview-${row.key}`}
+                className={`${p}preview-data-value`}
+                type="text"
+                value={row.value}
+                onChange={(event) => handleValueChange(row.key, event.target.value)}
+                data-testid={`${p}preview-value-${row.key}`}
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={rowIssues.length > 0}
+                aria-describedby={describedBy || undefined}
+              />
+              {rowIssues.map((issue) => (
+                <p
+                  key={`${issue.code}:${issue.variable}`}
+                  id={inlineIssueId(issue.code, issue.variable)}
+                  className={`${p}preview-data-row-error`}
+                  data-testid={`${p}preview-validation-${row.key}`}
+                  role="status"
+                >
+                  <span aria-hidden="true">{issue.severity === 'error' ? '!' : 'i'}</span>{' '}
+                  {issue.message}
+                </p>
+              ))}
+              <button
+                type="button"
+                className={`${p}preview-data-remove`}
+                onClick={() => handleRemove(row.key)}
+                data-testid={`${p}preview-remove-${row.key}`}
+                aria-label={`Remove preview value ${row.key}`}
+              >
+                Remove
+              </button>
+            </li>
+          );
+        })}
       </ul>
 
       <form
