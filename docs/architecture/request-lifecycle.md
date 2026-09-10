@@ -82,7 +82,8 @@ credential.
 10. provider.send (bounded timeout; see send-timeout-retry.md)
         createEmailProvider(..., { maxRetries: 0 }) — send path owns retries
         AbortSignal after SEND_PROVIDER_TIMEOUT_MS (default 15s) -> SendTimeoutError
-        with claim: retry transient failures up to SEND_MAX_ATTEMPTS (same claim)
+        with claim: retry clear HTTP transient failures (statusCode present) up to SEND_MAX_ATTEMPTS
+        timeouts / transport drops: transient in logs but not retried internally
         without claim: single attempt
         on success with claim -> complete ledger; on final failure -> release claim
         failure -> 502/503 PROVIDER_FAILURE (failureClass transient|permanent in logs)
@@ -129,8 +130,9 @@ Consumers should branch on `code`, not on the message text or the status.
 | `metadata.json` is malformed, mismatched key, or wrong `schemaVersion`; unsafe key reached the store | `400` | `INVALID_TEMPLATE` | Re-publish the template with `post-kit-publish`.                          |
 | Any other template-store failure (e.g. storage unreachable)      | `500` | `PROVIDER_FAILURE`   | Retry with backoff; include the correlation ID in a support request.                       |
 | `EMAIL_FROM_ADDRESS` is not configured                           | `503` | `PROVIDER_FAILURE`   | Service-side misconfiguration. Retry later; report the correlation ID.                     |
-| Provider failed with kind `configuration`, `transient`, or `rate_limit`; or send-path timeout | `503` | `PROVIDER_FAILURE` | Retry with backoff. Prefer the same `Idempotency-Key` when one was used. |
-| Provider failed with any other kind (`validation`, `permanent`, `cancelled`) | `502` | `PROVIDER_FAILURE` | Do not blindly retry — the message was rejected downstream.               |
+| Provider failed with kind `configuration`, `transient`, or `rate_limit` | `503` | `PROVIDER_FAILURE` | `configuration`: fix service config (do not retry unchanged). Clear HTTP `transient`/`rate_limit`: retry with backoff; prefer the same `Idempotency-Key`. |
+| Send-path timeout or transport failure without HTTP status (`failureCategory=timeout` / no `statusCode`) | `503` | `PROVIDER_FAILURE` | Prefer the same `Idempotency-Key` for ledger replay, but treat as at-least-once — not retried internally. |
+| Provider failed with kind `validation`, `permanent`, or `cancelled` | `502` | `PROVIDER_FAILURE` | Do not blindly retry — the message was rejected or cancelled downstream. |
 | Same `Idempotency-Key` still in flight for this tenant                   | `409` | `IDEMPOTENCY_IN_PROGRESS` | Wait and retry the same key; do not start a parallel send.              |
 | `Idempotency-Key` present but empty, oversized, or bad charset           | `400` | `INVALID_RECIPIENT` | Fix the header: 1–128 of `[A-Za-z0-9._:~-]`. (Code reused for request-input validation.) |
 | Unhandled exception                                              | `500` | `PROVIDER_FAILURE`   | Retry with backoff; report the correlation ID.                                            |

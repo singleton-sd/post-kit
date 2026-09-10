@@ -108,7 +108,8 @@ export function createDefaultSendDependencies(
       createEmailProvider(process.env, {
         ...options,
         // Send path owns timeout + idempotency-gated retry; disable provider-internal retries.
-        maxRetries: options?.maxRetries ?? 0,
+        maxRetries: 0,
+        timeoutMs: options?.timeoutMs,
       }),
     resolveBranding: async () => ({}),
     resolveTenantEmailConfig: (tenant) => resolveTenantEmailConfig(tenant),
@@ -322,22 +323,21 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         deps.resolveTenantEmailConfig ?? ((tenant) => resolveTenantEmailConfig(tenant));
       const tenantEmailConfig = await resolveTenantEmailConfigFn(tenant);
 
+      const deliveryPolicy = deps.deliveryPolicy ?? resolveSendDeliveryPolicy();
+      const providerFactoryOptions = {
+        ...(tenantEmailConfig.providerApiToken
+          ? { apiToken: tenantEmailConfig.providerApiToken }
+          : {}),
+        // Send path owns timeout + retry; never leave ForwardEmailProvider defaults
+        // (timeoutMs 15s / maxRetries 2) in place for production construction.
+        timeoutMs: deliveryPolicy.providerTimeoutMs,
+        maxRetries: 0 as const,
+      };
       const provider =
         deps.emailProvider ??
-        (
-          deps.createEmailProvider ??
-          ((options) =>
-            createEmailProvider(process.env, {
-              ...options,
-              maxRetries: options?.maxRetries ?? 0,
-            }))
-        )(
-          tenantEmailConfig.providerApiToken
-            ? { apiToken: tenantEmailConfig.providerApiToken }
-            : undefined,
+        (deps.createEmailProvider ?? ((options) => createEmailProvider(process.env, options)))(
+          providerFactoryOptions,
         );
-
-      const deliveryPolicy = deps.deliveryPolicy ?? resolveSendDeliveryPolicy();
 
       let idempotencyStore: IdempotencyStore | undefined;
       let idempotencyClaimed = false;

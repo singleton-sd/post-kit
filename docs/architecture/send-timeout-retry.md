@@ -16,8 +16,9 @@ under that limit minus headroom for auth, template load, render, and
 idempotency I/O (~60 s).
 
 Operators can override `FUNCTION_TIMEOUT_MS` in docs/tests to match a custom
-`host.json` `functionTimeout`; the policy resolver clamps `SEND_MAX_ATTEMPTS`
-when the configured budget would otherwise exceed the available window.
+`host.json` `functionTimeout`; the policy resolver clamps both
+`SEND_PROVIDER_TIMEOUT_MS` and `SEND_MAX_ATTEMPTS` so a single attempt and the
+retry budget stay inside the usable window (`functionTimeout − headroom`).
 
 ## Timeouts
 

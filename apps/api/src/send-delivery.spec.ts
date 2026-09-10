@@ -148,13 +148,25 @@ describe('resolveSendDeliveryPolicy', () => {
       SEND_MAX_ATTEMPTS: '5',
       SEND_RETRY_BASE_DELAY_MS: '100',
     });
-    // 5 * 10s exceeds 20s - 60s headroom (available = max(10s, -40s) = 10s) → clamp to 1
+    // usable window = max(1000, 20000 - 60000) = 1000; provider timeout clamps to 1000 → 1 attempt
+    assert.equal(policy.providerTimeoutMs, 1_000);
     assert.equal(policy.maxAttempts, 1);
     assert.ok(
       computeRetryBudgetMs(policy.maxAttempts, policy.providerTimeoutMs, policy.retryBaseDelayMs) <=
-        Math.max(policy.providerTimeoutMs, policy.functionTimeoutMs - 60_000) ||
-        policy.maxAttempts === 1,
+        Math.max(1_000, policy.functionTimeoutMs - 60_000),
     );
+  });
+
+  it('clamps providerTimeoutMs that would exceed the usable function window', () => {
+    const policy = resolveSendDeliveryPolicy({
+      FUNCTION_TIMEOUT_MS: '10000',
+      SEND_PROVIDER_TIMEOUT_MS: '15000',
+      SEND_MAX_ATTEMPTS: '3',
+    });
+    // usable = max(1000, 10000 - 60000) = 1000
+    assert.equal(policy.providerTimeoutMs, 1_000);
+    assert.ok(policy.providerTimeoutMs <= policy.functionTimeoutMs);
+    assert.ok(policy.retryBudgetMs <= Math.max(1_000, policy.functionTimeoutMs - 60_000));
   });
 
   it('honours explicit positive overrides', () => {

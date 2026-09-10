@@ -157,31 +157,34 @@ export function computeRetryBudgetMs(
 /**
  * Resolve timeout / retry knobs from env and clamp so the retry budget fits
  * inside the Function App execution limit (minus headroom).
+ *
+ * `SEND_PROVIDER_TIMEOUT_MS` is never allowed to exceed the usable function
+ * window — otherwise the host can kill the invocation before `SendTimeoutError`
+ * and claim cleanup run.
  */
 export function resolveSendDeliveryPolicy(
   env: NodeJS.ProcessEnv = process.env,
 ): SendDeliveryPolicy {
   const functionTimeoutMs = parsePositiveInt(env.FUNCTION_TIMEOUT_MS, DEFAULT_FUNCTION_TIMEOUT_MS);
-  const providerTimeoutMs = parsePositiveInt(
+  const usableWindowMs = Math.max(1_000, functionTimeoutMs - SEND_RETRY_BUDGET_HEADROOM_MS);
+  const configuredProviderTimeoutMs = parsePositiveInt(
     env.SEND_PROVIDER_TIMEOUT_MS,
     DEFAULT_SEND_PROVIDER_TIMEOUT_MS,
   );
+  const providerTimeoutMs = Math.min(configuredProviderTimeoutMs, usableWindowMs);
   const retryBaseDelayMs = parsePositiveInt(
     env.SEND_RETRY_BASE_DELAY_MS,
     DEFAULT_SEND_RETRY_BASE_DELAY_MS,
   );
   let maxAttempts = parsePositiveInt(env.SEND_MAX_ATTEMPTS, DEFAULT_SEND_MAX_ATTEMPTS);
 
-  const available = Math.max(providerTimeoutMs, functionTimeoutMs - SEND_RETRY_BUDGET_HEADROOM_MS);
   while (
     maxAttempts > 1 &&
-    computeRetryBudgetMs(maxAttempts, providerTimeoutMs, retryBaseDelayMs) > available
+    computeRetryBudgetMs(maxAttempts, providerTimeoutMs, retryBaseDelayMs) > usableWindowMs
   ) {
     maxAttempts -= 1;
   }
 
-  // A single attempt must still fit; if timeout alone exceeds available, keep it
-  // but document that operators must lower SEND_PROVIDER_TIMEOUT_MS.
   const retryBudgetMs = computeRetryBudgetMs(maxAttempts, providerTimeoutMs, retryBaseDelayMs);
 
   return {
