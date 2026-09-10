@@ -26,7 +26,7 @@ export interface MemoryPersistence {
 }
 
 export interface MemoryPersistenceOptions {
-  /** When true, every `save` returns `{ ok: false, message }` without writing. */
+  /** When true, the next `save` returns `{ ok: false, message }` without writing. */
   failNextSave?: boolean;
 }
 

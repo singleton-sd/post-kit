@@ -35,8 +35,9 @@ It does **not**:
 - run the publish pipeline (`post-kit-publish` / compiler content hashing)
 
 Persistence and test delivery leave the package only through the props you pass
-in. Secrets stay on your trusted server (Key Vault / env), never in the admin
-browser bundle.
+in. Production secrets stay in Azure Key Vault **`ssd-postkit-kv-prod-ae`**
+(never in the admin browser bundle). Local development may use an uncommitted
+`.env` copied from `.env.example` — never commit secrets.
 
 ## Installation and peers
 
@@ -207,8 +208,9 @@ output for every request payload. Escaping and Handlebars rules for send are
 documented in [`template-authoring.md`](./template-authoring.md).
 
 Optional `onSendTest` must POST to **your** trusted server; that server may
-call `@singleton-sd/post-kit-client` with Key Vault / env secrets. Omitting
-`onSendTest` hides Send-test chrome entirely.
+call `@singleton-sd/post-kit-client` with secrets from Azure Key Vault
+`ssd-postkit-kv-prod-ae` (or local uncommitted `.env` from `.env.example`).
+Omitting `onSendTest` hides Send-test chrome entirely.
 
 ## Lifecycle: editor → PR → Blob → send
 
@@ -239,7 +241,8 @@ PostKit API loads Blob at send time
   `@singleton-sd/post-kit-client` configured with a real API key) in the
   browser bundle.
 - Browser → your admin API (session / SSO). Server → PostKit / Git / staging
-  store with secrets from Key Vault or local `.env`.
+  store with secrets from Azure Key Vault `ssd-postkit-kv-prod-ae` (production)
+  or a local uncommitted `.env` copied from `.env.example` (development only).
 
 Public marketing forms are a different pattern; see
 [`public-forms.md`](./public-forms.md).
