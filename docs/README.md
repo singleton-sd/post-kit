@@ -37,6 +37,7 @@ docs/
 │   ├── template-authoring.md  (consumer template source files + variables)
 │   ├── template-publishing.md (post-kit-publish, blob layout, environments)
 │   ├── api-quickstart.md     (send API + client quick start)
+│   ├── packages.md           (install, pin, upgrade @singleton-sd/post-kit-*)
 │   └── public-forms.md       (public web forms: trusted server endpoint pattern)
 ├── integrations/
 │   └── inkads-marketing.md   (InkAds PoC site → POST /contact)
@@ -45,7 +46,8 @@ docs/
 │   └── environments.md       (dev/staging/prod separation, local dev)
 ├── operations/
 │   ├── troubleshooting.md    (send endpoint triage, correlation IDs, runbooks)
-│   └── send-metrics-queries.md (Kusto queries for send telemetry)
+│   ├── send-metrics-queries.md (Kusto queries for send telemetry)
+│   └── releasing.md          (release.yml bump + OIDC npm publish checklist)
 └── examples/
     └── publish-email-templates.yml (sample consumer publish workflow)
 ```
@@ -60,6 +62,7 @@ docs/
 | [`architecture/overview.md`](./architecture/overview.md) | Phase-1 architecture: Functions API, EmailProvider, consumers |
 | [`email-forward-email.md`](./email-forward-email.md) | Forward Email provider, DNS, `pnpm email:provision`, Function contact, branding CI |
 | [`guides/api-quickstart.md`](./guides/api-quickstart.md) | `POST /emails/send` contract, `PostKitClient` usage, error taxonomy and retries |
+| [`guides/packages.md`](./guides/packages.md) | Install, pin, upgrade published `@singleton-sd/post-kit-*` packages; semver and compatibility |
 | [`guides/template-authoring.md`](./guides/template-authoring.md) | Consumer template layout, `metadata.json` fields, template keys, variables, local validation |
 | [`guides/template-publishing.md`](./guides/template-publishing.md) | `post-kit-publish` flags, blob layout, fail-fast, per-environment promotion, OIDC + RBAC |
 | [`examples/publish-email-templates.yml`](./examples/publish-email-templates.yml) | Sample consumer-repository publish workflow (not installed in this repo) |
@@ -70,5 +73,6 @@ docs/
 | [`architecture/multi-tenant-security.md`](./architecture/multi-tenant-security.md) | Tenant resolution, environment separation, path safety, credential boundaries, unimplemented controls |
 | [`operations/troubleshooting.md`](./operations/troubleshooting.md) | `POST /emails/send` error triage, correlation-ID tracing, incident runbooks |
 | [`operations/send-metrics-queries.md`](./operations/send-metrics-queries.md) | Kusto queries for send volume, success rate, provider failures, latency, duplicates |
+| [`operations/releasing.md`](./operations/releasing.md) | `release.yml` triggers, path-aware bumps, OIDC Trusted Publishing, maintainer checklist |
 | [`guides/public-forms.md`](./guides/public-forms.md) | Public web forms (Contact Us, waitlist): trusted server endpoint pattern, credential-exposure anti-patterns, consumer-side validation / abuse / rate-limit duties |
 | [`integrations/inkads-marketing.md`](./integrations/inkads-marketing.md) | InkAds PoC site → `POST /contact` integration |
