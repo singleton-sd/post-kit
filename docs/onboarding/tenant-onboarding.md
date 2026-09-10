@@ -68,8 +68,42 @@ The API authenticates with `Authorization: Bearer <token>`.
 looks the token up in a map and returns `{ tenantId, environment }`. The token
 **is** the tenant identity — nothing in the request body can change it.
 
-The map is supplied as JSON in the `TENANT_KEY_MAP` environment variable and
-parsed in [`send.ts`](../../apps/api/src/functions/send.ts):
+### Register with the repo script (preferred)
+
+```bash
+# Dry-run (no Azure writes) — prints a sample token once
+./scripts/register-tenant-api-key.sh \
+  --tenant-id inkads \
+  --environment production \
+  --dry-run
+
+# Create / merge into Key Vault + wire Function App Key Vault reference
+./scripts/register-tenant-api-key.sh \
+  --tenant-id inkads \
+  --environment production
+```
+
+Or: `pnpm tenant:register-key -- --tenant-id inkads --environment production`
+
+The script:
+
+1. Generates a high-entropy token (`tk_live_…` / `tk_stg_…` / `tk_dev_…`)
+2. Merges it into Key Vault secret `tenant-key-map` on `ssd-postkit-kv-prod-ae`
+   (preserves existing entries)
+3. Sets Function App `TENANT_KEY_MAP` to a **Key Vault reference** (not plain
+   text, not App Configuration)
+4. Prints the new token **once** on stdout — copy it into the consumer’s secret
+   store; never commit it
+
+Defaults match the dedicated PostKit subscription / RG / Function App / vault
+(`ssd-postkit-kv-prod-ae` — not the legacy shared vault). Override with flags
+or `AZURE_*` env vars (`--help` for the list).
+
+**Serialize registrations.** The script read-modify-writes one Key Vault
+secret. Do not run it concurrently across operators or hosts; run one
+registration at a time.
+
+### Map shape
 
 ```json
 {
@@ -81,26 +115,19 @@ parsed in [`send.ts`](../../apps/api/src/functions/send.ts):
 Rules that the code enforces or that you must uphold:
 
 - **One token per tenant + environment.** A token maps to exactly one pair; to
-  serve two environments, issue two tokens.
-- **Generate a high-entropy random value.** PostKit does not mint tokens —
-  there is no issuing endpoint or CLI. Creating the value and adding it to the
-  map is a **manual operator step** today.
+  serve two environments, issue two tokens (run the script twice).
 - **Server-side only.** The credential must never reach a browser. Public
   forms post to your own server endpoint, which then calls PostKit. See
   [`packages/post-kit-client/README.md`](../../packages/post-kit-client/README.md).
-- **Where it lives:** the Function App's own application settings as
-  `TENANT_KEY_MAP`. Unlike every other runtime key, it is **not** in
-  `APP_CONFIGURATION_ENVIRONMENT_KEYS`
-  ([`app-configuration.ts`](../../apps/api/src/config/app-configuration.ts)),
-  so App Configuration does not populate it — there is no `app:…` key for the
-  map. In production, store the JSON in Key Vault (`ssd-postkit-kv-prod-ae`) and
-  reference it from the Function App setting (a Key Vault reference), not as a
-  plain-text value. **Where it never lives:** browser bundles, this repository,
-  committed `.env` files, or GitHub Secrets as a raw token (CI authenticates to
-  Azure with OIDC — see [`docs/pr-pipelines.md`](../pr-pipelines.md)).
+- **Where it lives:** Key Vault `ssd-postkit-kv-prod-ae` secret `tenant-key-map`,
+  referenced from the Function App setting `TENANT_KEY_MAP`. Unlike every other
+  runtime key, it is **not** in `APP_CONFIGURATION_ENVIRONMENT_KEYS`
+  ([`app-configuration.ts`](../../apps/api/src/config/app-configuration.ts)).
+  **Where it never lives:** browser bundles, this repository, committed `.env`
+  files, App Configuration values, or GitHub Secrets as a raw token.
 
-Rotation is a replace-then-remove edit of the same map: add the new token,
-switch the consumer, delete the old entry. There is no rotation automation.
+Rotation: run the script again to add a new token, switch the consumer, then
+remove the old entry from the map (manual edit of the KV secret for now).
 
 Failure modes: a missing or non-`Bearer` header is `401 UNAUTHENTICATED`; a
 well-formed token that is not in the map is `403 UNAUTHORIZED`. Token values
