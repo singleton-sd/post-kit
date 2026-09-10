@@ -26,12 +26,20 @@
     "!dist/**/*.spec.d.ts.map",
     "!dist/fixtures/**",
     "!examples",
-    "!examples/**"
+    "!examples/**",
+    "!.storybook",
+    "!.storybook/**",
+    "!stories",
+    "!stories/**",
+    "!storybook-static",
+    "!storybook-static/**"
   ],
   "scripts": {
     "build": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.json",
     "lint": "echo \"lint:editor — covered by root eslint on staged files\"",
     "test": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.spec.json && node --import tsx --test \"src/**/*.spec.ts\" \"src/**/*.spec.tsx\"",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
@@ -56,13 +64,18 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@storybook/blocks": "8.6.14",
+    "@storybook/react": "8.6.14",
+    "@storybook/react-vite": "8.6.14",
     "@types/node": "^20.17.9",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "storybook": "8.6.14",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vite": "6.3.5"
   },
   "engines": {
     "node": ">=20.18.1"
