@@ -210,7 +210,8 @@ curl -sS "https://registry.npmjs.org/@singleton-sd%2fpost-kit-types/0.3.0" | hea
 npm pack @singleton-sd/post-kit-types@0.3.0
 ```
 
-`release.yml` uses pnpm 11 + npm 11.x, refuses auth-bearing `.npmrc` files (no
-`registry-url` on `setup-node`), and runs `pnpm release:ci`, which publishes
-changed packages **before** pushing tags. `publishConfig.provenance: true` is
-for CI OIDC only — local interactive publish may need it omitted temporarily.
+`release.yml` uses the root `packageManager` pnpm version + npm 11.x, refuses
+auth-bearing `.npmrc` files (no `registry-url` on `setup-node`), and runs
+`pnpm release:ci`, which publishes changed packages **before** pushing tags.
+`publishConfig.provenance: true` is for CI OIDC only — local interactive
+publish may need it omitted temporarily.

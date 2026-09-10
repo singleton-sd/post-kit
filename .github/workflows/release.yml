@@ -33,9 +33,9 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          # Match InkAds OIDC Release (pnpm 11). Root packageManager may differ;
-          # install still consumes the committed lockfile.
-          version: 11.22.0
+          # Must match root package.json "packageManager" (pnpm/action-setup
+          # errors if both disagree). npm ≥11 for OIDC is installed below.
+          version: 9.15.0
 
       - uses: actions/setup-node@v4
         with:
