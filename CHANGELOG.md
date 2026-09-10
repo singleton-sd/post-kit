@@ -2,6 +2,14 @@
 
 ## 2026-09-10
 
+- **@singleton-sd/post-kit-client** `0.3.0` → `0.4.0` (minor)
+- **@singleton-sd/post-kit-compiler** `0.3.0` → `0.4.0` (minor)
+- **@singleton-sd/post-kit-editor** `0.3.0` → `0.4.0` (minor)
+- **@singleton-sd/post-kit-email** `0.4.0` → `0.5.0` (minor)
+- **@singleton-sd/post-kit-publisher** `0.3.0` → `0.4.0` (minor)
+- **@singleton-sd/post-kit-types** `0.3.0` → `0.4.0` (minor)
+## 2026-09-10
+
 - **@singleton-sd/post-kit-client** `0.2.0` → `0.3.0` (minor)
 - **@singleton-sd/post-kit-compiler** `0.2.0` → `0.3.0` (minor)
 - **@singleton-sd/post-kit-editor** `0.2.0` → `0.3.0` (minor)
