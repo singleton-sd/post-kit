@@ -50,6 +50,7 @@ describe('classifySendFailure', () => {
           message: '5xx',
           kind: 'transient',
           provider: 'development',
+          statusCode: 503,
         }),
       ).failureClass,
       'transient',
@@ -60,9 +61,48 @@ describe('classifySendFailure', () => {
           message: '429',
           kind: 'rate_limit',
           provider: 'development',
+          statusCode: 429,
         }),
       ).failureClass,
       'transient',
+    );
+  });
+
+  it('does not mark transport failures without HTTP status as internally retryable', () => {
+    const classified = classifySendFailure(
+      new EmailProviderError({
+        message: 'transport failure',
+        kind: 'transient',
+        provider: 'development',
+      }),
+    );
+    assert.equal(classified.failureClass, 'transient');
+    assert.equal(classified.retryable, false);
+  });
+
+  it('retries only when the provider error is retryable and has an HTTP status', () => {
+    assert.equal(
+      classifySendFailure(
+        new EmailProviderError({
+          message: '5xx',
+          kind: 'transient',
+          provider: 'development',
+          statusCode: 502,
+          retryable: true,
+        }),
+      ).retryable,
+      true,
+    );
+    assert.equal(
+      classifySendFailure(
+        new EmailProviderError({
+          message: 'adapter timeout',
+          kind: 'transient',
+          provider: 'development',
+          retryable: false,
+        }),
+      ).retryable,
+      false,
     );
   });
 
@@ -187,6 +227,7 @@ describe('deliverSend', () => {
         message: '5xx',
         kind: 'transient',
         provider: 'development',
+        statusCode: 503,
       });
     });
     const policy = resolveSendDeliveryPolicy({
@@ -217,6 +258,7 @@ describe('deliverSend', () => {
           message: '5xx',
           kind: 'transient',
           provider: 'development',
+          statusCode: 503,
         });
       }
       return { providerMessageId: 'msg-ok', accepted: true };

@@ -30,7 +30,7 @@ Trusted consumer / contact form
 | Runtime send (`POST /v1/emails`) | `ForwardEmailProvider` |
 | Domain / alias / verify | `ForwardEmailManagementClient` + `pnpm email:provision` |
 | DNS (MX / SPF / DKIM / DMARC / Return-Path) | AWS Route53; credentials from **pc-provision**, not this repo |
-| Secret storage | Azure Key Vault `ssd-global-kv-prod-ae` name **`forwardemail-api-key`** |
+| Secret storage | Azure Key Vault `ssd-global-kv-prod-ae` names **`forwardemail-api-key`**, **`recipient-hash-hmac-key`** |
 | App configuration | Azure App Configuration `ssd-postkit-appcs-prod-ae` (Free) |
 | Runtime Function App | `apps/api` on `ssd-postkit-api-prod-ae`; loads env from App Config |
 | Branding validator | `pnpm validate:email-domain-branding` + scheduled CI |
@@ -43,6 +43,7 @@ Explicit process env always wins (local overrides / tests).
 | Env | App Config key | Notes |
 | --- | --- | --- |
 | `FORWARD_EMAIL_TOKEN` | `secret:forwardemail-api-key` | KV reference, never stored as a value |
+| `RECIPIENT_HASH_HMAC_KEY` | `secret:recipient-hash-hmac-key` | KV reference for send telemetry `recipientHash`; version also published as `RECIPIENT_HASH_HMAC_KEY_VERSION` |
 | `FORWARD_EMAIL_BASE_URL` | `app:email:forwardEmailBaseUrl` | Default `https://api.forwardemail.net` |
 | `EMAIL_PROVIDER` | `app:email:provider` | `development` locally; `forward-email` in prod |
 | `EMAIL_ALLOW_PRODUCTION_SEND` | `app:email:allowProductionSend` | Must be `true` with Forward Email |

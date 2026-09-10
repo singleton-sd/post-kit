@@ -3,8 +3,9 @@
 Azure Functions (anonymous contact + health). Trusted marketing sites POST
 `/contact` with an allowlisted `Origin`. Host-specific sender/inbox and other
 non-secret settings come from Azure App Configuration
-(`ssd-postkit-appcs-prod-ae`). `FORWARD_EMAIL_TOKEN` is a Key Vault reference
-in that store.
+(`ssd-postkit-appcs-prod-ae`). `FORWARD_EMAIL_TOKEN` and
+`RECIPIENT_HASH_HMAC_KEY` are Key Vault references in that store
+(`forwardemail-api-key`, `recipient-hash-hmac-key`).
 
 Local `func start` needs `az login`,
 `AZURE_APPCONFIGURATION_ENDPOINT` in `local.settings.json` (see the example),

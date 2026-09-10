@@ -7,26 +7,73 @@
  * - Logger instances are per-request — never use as a singleton.
  * - Never log PII: no recipient addresses, variable values, or tokens.
  *
- * Recipient privacy: `recipientHash` is a 16-character hex prefix of the
- * SHA-256 digest of the trimmed, lowercased recipient address. The raw address
- * is never logged; the hash is deterministic so duplicate/retry analysis can
- * correlate sends to the same recipient without exposing PII.
+ * Recipient privacy: `recipientHash` is `{keyVersionId}.{digest16}` where
+ * `digest16` is a 16-character hex prefix of HMAC-SHA256 over the trimmed,
+ * lowercased recipient address, keyed by the Key Vault secret
+ * `recipient-hash-hmac-key` (loaded into `RECIPIENT_HASH_HMAC_KEY`).
+ * `keyVersionId` is the first 8 hex characters of that secret's Key Vault
+ * version so operators can tell digests apart after key rotation. The raw
+ * address is never logged. Historical pre-HMAC logs used a bare 16-char
+ * SHA-256 prefix; see docs/operations/send-metrics-queries.md.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import type { PostKitErrorCode } from '@singleton-sd/post-kit-types';
+
+/** Env holding the HMAC key material (from Key Vault via App Configuration). */
+export const RECIPIENT_HASH_HMAC_KEY_ENV = 'RECIPIENT_HASH_HMAC_KEY';
+
+/** Env holding the Key Vault secret version id used in emitted digests. */
+export const RECIPIENT_HASH_HMAC_KEY_VERSION_ENV = 'RECIPIENT_HASH_HMAC_KEY_VERSION';
+
+export type HashRecipientOptions = {
+  /** HMAC key material. Defaults to `process.env.RECIPIENT_HASH_HMAC_KEY`. */
+  secret?: string | Buffer;
+  /**
+   * Key Vault secret version (or a local stand-in). Defaults to
+   * `process.env.RECIPIENT_HASH_HMAC_KEY_VERSION`, then `local`.
+   */
+  keyVersion?: string;
+};
 
 /**
  * Privacy-safe recipient identifier for structured logs.
  * See module header for the documented approach.
  */
-export function hashRecipient(email: string): string {
+export function hashRecipient(email: string, options: HashRecipientOptions = {}): string {
+  const secret = options.secret ?? process.env[RECIPIENT_HASH_HMAC_KEY_ENV];
+  if (secret === undefined || secret.length === 0) {
+    throw new Error(
+      `${RECIPIENT_HASH_HMAC_KEY_ENV} is required for recipientHash (Key Vault secret recipient-hash-hmac-key)`,
+    );
+  }
+
+  const keyVersion =
+    options.keyVersion ?? process.env[RECIPIENT_HASH_HMAC_KEY_VERSION_ENV] ?? 'local';
+  const keyVersionId = recipientHashKeyVersionId(keyVersion);
   const normalized = email.trim().toLowerCase();
-  return createHash('sha256').update(normalized, 'utf8').digest('hex').slice(0, 16);
+  const digest = createHmac('sha256', secret).update(normalized, 'utf8').digest('hex').slice(0, 16);
+  return `${keyVersionId}.${digest}`;
 }
 
-/** 16-character lowercase hex digest emitted by `hashRecipient`. */
-export const RECIPIENT_HASH_PATTERN = /^[a-f0-9]{16}$/;
+/** First 8 hex chars of a Key Vault version, or a stable hex stand-in. */
+export function recipientHashKeyVersionId(keyVersion: string): string {
+  const hex = keyVersion.toLowerCase().replace(/[^a-f0-9]/g, '');
+  if (hex.length >= 8) {
+    return hex.slice(0, 8);
+  }
+  // Non-hex local ids (e.g. "local") still need an 8-hex prefix for the field shape.
+  return createHash('sha256').update(keyVersion, 'utf8').digest('hex').slice(0, 8);
+}
+
+/**
+ * Current `recipientHash` shape: `{8-hex-keyVersionId}.{16-hex-digest}`.
+ * Legacy pre-HMAC values were a bare 16-char hex SHA-256 prefix.
+ */
+export const RECIPIENT_HASH_PATTERN = /^[a-f0-9]{8}\.[a-f0-9]{16}$/;
+
+/** Historical unsalted SHA-256 prefix still present in older Application Insights rows. */
+export const LEGACY_RECIPIENT_HASH_PATTERN = /^[a-f0-9]{16}$/;
 
 export function isValidRecipientHash(value: string): boolean {
   return RECIPIENT_HASH_PATTERN.test(value);

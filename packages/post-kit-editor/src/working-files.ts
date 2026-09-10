@@ -1,4 +1,4 @@
-import type { TemplateSourceMetadata } from '@singleton-sd/post-kit-types';
+import type { TemplatePreviewData, TemplateSourceMetadata } from '@singleton-sd/post-kit-types';
 
 import type { EmailBuilderDocument, TemplateSourceFiles } from './types';
 
@@ -33,4 +33,12 @@ export function withDocument(
   templateJson: EmailBuilderDocument,
 ): TemplateSourceFiles {
   return { ...files, templateJson };
+}
+
+/** Replace working preview data; document and metadata are left unchanged. */
+export function withPreviewData(
+  files: TemplateSourceFiles,
+  previewData: TemplatePreviewData,
+): TemplateSourceFiles {
+  return { ...files, previewData };
 }

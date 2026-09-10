@@ -16,6 +16,7 @@ import { MemoryIdempotencyStore } from '../idempotency';
 import { resetSendRateLimiter } from '../contact-rate-limit';
 import type { TenantResolver } from '../tenant';
 import type { TemplateStore } from '../templates';
+import '../test/recipient-hash-env';
 import { createSendHandler } from './send';
 
 const TENANT: TenantContext = { tenantId: 'inkads', environment: 'development' };

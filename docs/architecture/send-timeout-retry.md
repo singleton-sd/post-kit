@@ -54,8 +54,8 @@ delivery result** and structured logs — not as provider-specific public DTOs:
 | Condition | Behaviour |
 | --- | --- |
 | No `Idempotency-Key` | **Single** provider attempt (at-least-once). Caller retries may double-send. |
-| `Idempotency-Key` claim held | **Clear** transient failures (`EmailProviderError` `transient` / `rate_limit`) retry up to `SEND_MAX_ATTEMPTS` with exponential backoff (`SEND_RETRY_BASE_DELAY_MS`, capped at 2 s). |
-| Timeout / ambiguous abort | Classified **transient** for HTTP (`503`) but **not** retried internally — the provider may already have accepted, and Forward Email has no provider-level idempotency key. |
+| `Idempotency-Key` claim held | **Clear** HTTP transient failures only — `EmailProviderError` with a `statusCode` (`5xx` / `429`) and `retryable: true` — up to `SEND_MAX_ATTEMPTS` with exponential backoff (`SEND_RETRY_BASE_DELAY_MS`, capped at 2 s). |
+| Timeout / transport drop (no HTTP status) | Classified **transient** for HTTP (`503`) but **not** retried internally — the provider may already have accepted, and Forward Email has no provider-level idempotency key. |
 | Permanent failure | No retry. Claim is released so the same key may be reused after the caller fixes the request. |
 
 Retries **reuse the in-progress idempotency claim** — the ledger is not
@@ -70,8 +70,8 @@ returns the stored `SendResponse` without calling the provider again.
 
 | Who | When | Safe? |
 | --- | --- | --- |
-| **Internal** (this policy) | Clear transient / rate limit + Idempotency-Key claim | Yes for concurrent callers (same claim). Still at-least-once at the provider if a 5xx arrives after accept — Forward Email does not dedupe. |
-| **Internal** on timeout | Never | Avoids a second provider POST after an ambiguous abort |
+| **Internal** (this policy) | HTTP `5xx` / `429` with Idempotency-Key claim | Best-effort: a status response means the provider rejected/throttled that attempt. Still at-least-once if a provider lies or accepts then returns 5xx. |
+| **Internal** on timeout or transport drop | Never | Avoids a second provider POST after an ambiguous outcome |
 | **Caller** with same `Idempotency-Key` | After `503` / timeout / network | Replay or re-claim after release; completed keys never re-send. After a timeout, a caller retry may still double-deliver at the provider (same ambiguity). |
 | **Caller** without `Idempotency-Key` | Any retry after uncertainty | **Not safe** — may deliver twice |
 | **Caller** after `502` permanent | Same payload | No — fix the request; retrying will fail the same way |

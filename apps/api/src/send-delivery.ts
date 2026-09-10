@@ -224,12 +224,19 @@ export function classifySendFailure(error: unknown): ClassifiedFailure {
 
     switch (error.kind) {
       case 'transient':
-      case 'rate_limit':
+      case 'rate_limit': {
+        // Honor the provider's retryable flag (e.g. adapter-local timeouts).
+        // Only retry when we observed an HTTP status — a bare transport failure
+        // after the request left the client is ambiguous (provider may have
+        // accepted; Forward Email has no provider-level idempotency key).
+        const sawHttpStatus = typeof error.statusCode === 'number';
+        const retryable = error.retryable && sawHttpStatus;
         return {
           failureClass: 'transient',
           failureCategory: error.failureCategory,
-          retryable: true,
+          retryable,
         };
+      }
       case 'permanent':
       case 'validation':
       case 'configuration':
@@ -253,7 +260,7 @@ export function classifySendFailure(error: unknown): ClassifiedFailure {
   return {
     failureClass: 'transient',
     failureCategory: 'unhandled',
-    retryable: true,
+    retryable: false,
   };
 }
 

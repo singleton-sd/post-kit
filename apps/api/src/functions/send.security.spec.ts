@@ -11,6 +11,7 @@ import {
 import { ApiKeyTenantResolver, type TenantKeyMap } from '../tenant';
 import type { ResolvedTenantEmailConfig } from '../tenant/tenant-email-config';
 import type { TemplateStore } from '../templates';
+import '../test/recipient-hash-env';
 import { createSendHandler } from './send';
 
 /**

@@ -23,6 +23,7 @@ import {
 import { createLogger } from '../telemetry';
 import type { TenantResolver } from '../tenant';
 import type { TemplateStore } from '../templates';
+import '../test/recipient-hash-env';
 import { createSendHandler } from './send';
 
 const TENANT: TenantContext = { tenantId: 'inkads', environment: 'development' };
@@ -151,6 +152,7 @@ describe('sendHandler timeout / retry / classification', () => {
           message: '5xx',
           kind: 'transient',
           provider: 'development',
+          statusCode: 503,
         });
       },
     };
@@ -183,6 +185,7 @@ describe('sendHandler timeout / retry / classification', () => {
             message: '5xx',
             kind: 'transient',
             provider: 'development',
+            statusCode: 503,
           });
         }
         return { providerMessageId: 'msg-ok', accepted: true };
@@ -269,6 +272,7 @@ describe('sendHandler timeout / retry / classification', () => {
             message: '5xx',
             kind: 'transient',
             provider: 'development',
+            statusCode: 503,
           });
         }
         return { providerMessageId: `msg-${calls}`, accepted: true };

@@ -110,7 +110,7 @@ Fields that may appear (only non-`undefined` values are emitted):
 | `failureCategory` | failed | Stable failure bucket — API-level categories (`template_not_found`, `missing_variables`, `timeout`, …) or one of the six provider kinds (`configuration`, `transient`, `rate_limit`, `permanent`, `validation`, `cancelled`) |
 | `failureClass` | failed (provider / timeout) | `transient` or `permanent` — send-path classification for retry decisions; see [`send-timeout-retry.md`](../architecture/send-timeout-retry.md) |
 | `attempt` | completed / failed (provider path) | How many provider attempts this invocation used |
-| `recipientHash` | completed / failed | 16-character SHA-256 prefix of the normalized recipient address; see [`send-metrics-queries.md`](./send-metrics-queries.md) |
+| `recipientHash` | completed / failed | Versioned HMAC digest `{keyVersionId}.{digest16}` of the normalized recipient (Key Vault `recipient-hash-hmac-key`); historical rows may be a bare 16-char SHA-256 prefix — see [`send-metrics-queries.md`](./send-metrics-queries.md) |
 
 Three additional diagnostic entries are written through the Functions invocation
 context rather than the structured logger, so they are searchable by message

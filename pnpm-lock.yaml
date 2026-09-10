@@ -163,6 +163,9 @@ importers:
 
   packages/post-kit-editor:
     dependencies:
+      '@singleton-sd/post-kit-compiler':
+        specifier: workspace:*
+        version: link:../post-kit-compiler
       '@singleton-sd/post-kit-types':
         specifier: workspace:*
         version: link:../post-kit-types
@@ -206,9 +209,6 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
-      '@singleton-sd/post-kit-compiler':
-        specifier: workspace:*
-        version: link:../post-kit-compiler
       '@types/node':
         specifier: ^20.17.9
         version: 20.19.43
