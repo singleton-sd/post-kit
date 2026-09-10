@@ -43,7 +43,26 @@ function makeFakeClient(blobs: FakeBlobStore): BlobServiceClient {
       };
       return { download } as unknown as BlobClient;
     };
-    return { getBlobClient } as unknown as ContainerClient;
+    const listBlobsFlat = (options?: { prefix?: string }) => {
+      const prefix = options?.prefix ?? '';
+      const names = [...blobs.keys()]
+        .filter((key) => key.startsWith(`${container}/`))
+        .map((key) => key.slice(container.length + 1))
+        .filter((name) => name.startsWith(prefix))
+        .filter((name) => {
+          const entry = blobs.get(`${container}/${name}`);
+          return typeof entry === 'string';
+        })
+        .map((name) => ({ name }));
+      return {
+        async *[Symbol.asyncIterator]() {
+          for (const item of names) {
+            yield item;
+          }
+        },
+      };
+    };
+    return { getBlobClient, listBlobsFlat } as unknown as ContainerClient;
   };
 
   return { getContainerClient } as unknown as BlobServiceClient;
@@ -93,6 +112,48 @@ function templateBlobKey(tenantId: string, env: string, key: string, file: strin
 // ---------------------------------------------------------------------------
 
 describe('BlobTemplateStore', () => {
+  describe('list', () => {
+    it('returns metadata summaries sorted by key', async () => {
+      const otherKey = 'ops.alert';
+      const otherMeta = {
+        key: otherKey,
+        name: 'Alert',
+        subject: 'Alert',
+        variables: ['level'],
+        schemaVersion: TEMPLATE_SCHEMA_VERSION,
+      };
+      const blobs: FakeBlobStore = new Map([
+        [templateBlobKey('acme', 'production', TEMPLATE_KEY, 'template.html'), HTML],
+        [
+          templateBlobKey('acme', 'production', TEMPLATE_KEY, 'metadata.json'),
+          JSON.stringify(METADATA),
+        ],
+        [templateBlobKey('acme', 'production', otherKey, 'template.html'), '<p>x</p>'],
+        [
+          templateBlobKey('acme', 'production', otherKey, 'metadata.json'),
+          JSON.stringify(otherMeta),
+        ],
+        // Other tenant must not appear
+        [
+          templateBlobKey('other', 'production', TEMPLATE_KEY, 'metadata.json'),
+          JSON.stringify(METADATA),
+        ],
+      ]);
+      const store = makeStore(blobs);
+      const listed = await store.list(TENANT);
+      assert.deepEqual(
+        listed.map((item) => item.key),
+        [TEMPLATE_KEY, otherKey].sort((a, b) => a.localeCompare(b)),
+      );
+      assert.equal(listed.find((item) => item.key === TEMPLATE_KEY)?.name, METADATA.name);
+    });
+
+    it('returns an empty list when the tenant has no templates', async () => {
+      const store = makeStore(new Map());
+      assert.deepEqual(await store.list(TENANT), []);
+    });
+  });
+
   describe('load — successful path', () => {
     it('returns a CompiledTemplate with correct html and metadata', async () => {
       const blobs: FakeBlobStore = new Map([
@@ -329,6 +390,27 @@ describe('BlobTemplateStore', () => {
         [
           templateBlobKey('acme', 'production', TEMPLATE_KEY, 'metadata.json'),
           JSON.stringify(nonStringVarMetadata),
+        ],
+      ]);
+
+      const store = makeStore(blobs);
+      await assert.rejects(
+        () => store.load(TENANT, TEMPLATE_KEY),
+        (err: unknown) => {
+          assert.ok(err instanceof TemplateStoreError);
+          assert.equal((err as TemplateStoreError).code, PostKitErrorCode.INVALID_TEMPLATE);
+          return true;
+        },
+      );
+    });
+
+    it('throws TemplateStoreError with INVALID_TEMPLATE when description is present but not a string', async () => {
+      const badDescription = { ...METADATA, description: 123 };
+      const blobs: FakeBlobStore = new Map([
+        [templateBlobKey('acme', 'production', TEMPLATE_KEY, 'template.html'), HTML],
+        [
+          templateBlobKey('acme', 'production', TEMPLATE_KEY, 'metadata.json'),
+          JSON.stringify(badDescription),
         ],
       ]);
 

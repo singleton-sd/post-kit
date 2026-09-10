@@ -61,7 +61,7 @@ function fakeResolver(tenant: TenantContext = TENANT): TenantResolver {
 }
 
 function fakeStore(): TemplateStore {
-  return { load: async () => COMPILED };
+  return { load: async () => COMPILED, list: async () => [] };
 }
 
 function fakeProvider(capture?: EmailSendRequest[]): EmailProvider {
