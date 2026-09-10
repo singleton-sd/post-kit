@@ -24,7 +24,7 @@ matching worktree with `pnpm worktree:add` under the parent workspace
 merge. Classic required-PR / required-status-check gates stay off so
 `release.yml` can push version bumps (see `SETUP.md` §1 — process still
 requires green CI for human merges; preferred end state is an org ruleset
-with Actions bypass).
+with GitHub Actions as a bypass actor for `release.yml` only).
 
 On **`main`**, `release.yml` bumps versions for changed public packages
 (conventional commits: `fix`→patch, `feat`→minor, `BREAKING CHANGE`→major),
