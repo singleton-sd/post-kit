@@ -1,4 +1,5 @@
 {
+  "app:api:publicBaseUrl": "https://ssd-postkit-api-prod-ae.azurewebsites.net",
   "app:email:origins": "*.poc.singletonsd.com,localhost:4321",
   "app:email:provider": "forward-email",
   "app:email:allowProductionSend": "true",
