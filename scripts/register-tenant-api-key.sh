@@ -12,6 +12,9 @@
 #
 # The new token is printed once to stdout (for the operator to copy into the
 # consumer secret store). It is never written to git.
+#
+# Concurrency: read-modify-write on a single Key Vault secret. Do not run this
+# script concurrently across operators or hosts — serialize registrations.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,6 +30,14 @@ TENANT_ID=""
 ENVIRONMENT=""
 TOKEN=""
 DRY_RUN=0
+RAW_FILE=""
+SHOW_ERR=""
+MAP_FILE=""
+
+cleanup() {
+  rm -f "${RAW_FILE:-}" "${SHOW_ERR:-}" "${MAP_FILE:-}"
+}
+trap cleanup EXIT
 
 usage() {
   cat <<'EOF'
@@ -47,6 +58,8 @@ Optional:
 
 Also accepted via env: AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP,
 AZURE_FUNCTION_APP_NAME, AZURE_KEY_VAULT_NAME, TENANT_KEY_MAP_SECRET_NAME.
+
+Do not run concurrent registrations; serialize operator runs (single secret RMW).
 EOF
 }
 
@@ -127,21 +140,24 @@ command -v python3 >/dev/null || {
 EXISTING_JSON=""
 if [[ "$DRY_RUN" -eq 0 ]]; then
   az account set --subscription "$SUBSCRIPTION_ID" >/dev/null
+  RAW_FILE="$(mktemp)"
   SHOW_ERR="$(mktemp)"
+  chmod 600 "$RAW_FILE" "$SHOW_ERR"
   if az keyvault secret show --vault-name "$VAULT_NAME" --name "$SECRET_NAME" --query value -o tsv \
-    >"/tmp/postkit-tenant-key-map.raw" 2>"$SHOW_ERR"; then
-    EXISTING_JSON="$(cat /tmp/postkit-tenant-key-map.raw)"
+    >"$RAW_FILE" 2>"$SHOW_ERR"; then
+    EXISTING_JSON="$(cat "$RAW_FILE")"
   else
     if grep -qiE 'SecretNotFound|was not found' "$SHOW_ERR"; then
       EXISTING_JSON=""
     else
       cat "$SHOW_ERR" >&2
-      rm -f "$SHOW_ERR" /tmp/postkit-tenant-key-map.raw
       echo "error: failed to read Key Vault secret $VAULT_NAME/$SECRET_NAME" >&2
       exit 1
     fi
   fi
-  rm -f "$SHOW_ERR" /tmp/postkit-tenant-key-map.raw
+  rm -f "$RAW_FILE" "$SHOW_ERR"
+  RAW_FILE=""
+  SHOW_ERR=""
 else
   echo "dry-run: skip reading existing secret from $VAULT_NAME/$SECRET_NAME" >&2
 fi
@@ -170,10 +186,7 @@ fi
 
 # Write map via a temp file so the value never appears in `ps` argv.
 MAP_FILE="$(mktemp)"
-cleanup() {
-  rm -f "$MAP_FILE"
-}
-trap cleanup EXIT
+chmod 600 "$MAP_FILE"
 printf '%s' "$MAP_JSON" >"$MAP_FILE"
 
 az keyvault secret set \

@@ -95,8 +95,13 @@ The script:
 4. Prints the new token **once** on stdout — copy it into the consumer’s secret
    store; never commit it
 
-Defaults match the dedicated PostKit subscription / RG / Function App / vault.
-Override with flags or `AZURE_*` env vars (`--help` for the list).
+Defaults match the dedicated PostKit subscription / RG / Function App / vault
+(`ssd-postkit-kv-prod-ae` — not the legacy shared vault). Override with flags
+or `AZURE_*` env vars (`--help` for the list).
+
+**Serialize registrations.** The script read-modify-writes one Key Vault
+secret. Do not run it concurrently across operators or hosts; run one
+registration at a time.
 
 ### Map shape
 
