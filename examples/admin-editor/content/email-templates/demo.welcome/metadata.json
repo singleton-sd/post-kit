@@ -1,0 +1,7 @@
+{
+  "key": "demo.welcome",
+  "name": "Welcome",
+  "subject": "Hello {{name}}",
+  "variables": ["name"],
+  "schemaVersion": "1"
+}

@@ -376,5 +376,6 @@ Deeper operational triage is being written under
 | Onboarding automation (token minting, tenant bootstrap CLI) | None. Every step above that touches configuration is manual. |
 
 `@singleton-sd/post-kit-client` and `@singleton-sd/post-kit-editor` are
-published on npmjs. Further editor epic work (if any) is tracked by
-[#5](https://github.com/singleton-sd/post-kit/issues/5).
+published on npmjs. Admin embedding (list/load/save + Send-test BFF) is
+demonstrated in [`examples/admin-editor`](../../examples/admin-editor/);
+onboarding epic: [#7](https://github.com/singleton-sd/post-kit/issues/7).
