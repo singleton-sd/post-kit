@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  DEFAULT_POC_SCOPES,
+  PostKitErrorCode,
   TEMPLATE_SCHEMA_VERSION,
   type CompiledTemplate,
+  type Principal,
   type TenantContext,
 } from '@singleton-sd/post-kit-types';
-import { PostKitErrorCode } from '@singleton-sd/post-kit-types';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createLogger } from '../telemetry';
@@ -18,6 +20,14 @@ import {
 import { createPostkitMcpServer, POSTKIT_MCP_TOOL_NAMES } from './create-server';
 
 const TENANT: TenantContext = { tenantId: 'acme', environment: 'production' };
+
+const PRINCIPAL: Principal = {
+  id: 'ak_test',
+  tenantId: TENANT.tenantId,
+  environment: TENANT.environment,
+  authType: 'api-key',
+  scopes: DEFAULT_POC_SCOPES,
+};
 
 const COMPILED: CompiledTemplate = {
   templateHtml: '<p>Hello {{name}}</p>',
@@ -64,13 +74,16 @@ function memoryStore(
   };
 }
 
-async function connectClient(store: TemplateStore = memoryStore()) {
+async function connectClient(
+  store: TemplateStore = memoryStore(),
+  principal: Principal = PRINCIPAL,
+) {
   const lines: string[] = [];
   const logger = createLogger('mcp-test', (line) => lines.push(line));
   const templates = new TemplateApplicationService({ templateStore: store });
   const server = createPostkitMcpServer({
     templates,
-    tenant: TENANT,
+    principal,
     logger,
   });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -89,6 +102,33 @@ describe('PostKit MCP tools', () => {
       assert.deepEqual(names, [...POSTKIT_MCP_TOOL_NAMES].sort());
       assert.ok(!names.includes('postkit.send_email'));
       assert.ok(!names.includes('send_email'));
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('rejects tools when the principal lacks the required scope', async () => {
+    const limited: Principal = {
+      ...PRINCIPAL,
+      scopes: ['templates:read'],
+    };
+    const { client, server } = await connectClient(memoryStore(), limited);
+    try {
+      const preview = await client.callTool({
+        name: 'postkit.preview_template',
+        arguments: { templateKey: 'marketing.welcome', variables: { name: 'Ada' } },
+      });
+      assert.equal(preview.isError, true);
+      const body = JSON.parse((preview.content as { text: string }[])[0]!.text) as {
+        code: string;
+        error: string;
+      };
+      assert.equal(body.code, PostKitErrorCode.UNAUTHORIZED);
+      assert.equal(body.error, 'The credential does not have the required permission.');
+
+      const listed = await client.callTool({ name: 'postkit.list_templates', arguments: {} });
+      assert.notEqual(listed.isError, true);
     } finally {
       await client.close();
       await server.close();

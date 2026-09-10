@@ -2,14 +2,20 @@ import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import {
   PostKitErrorCode,
+  type Principal,
   type TenantContext,
   type TenantEnvironment,
 } from '@singleton-sd/post-kit-types';
+import {
+  ApiKeyAuthenticator,
+  AuthError,
+  tenantContextFromPrincipal,
+  type Authenticator,
+} from '../auth';
 import { ensureAppConfiguration } from '../config/app-configuration';
 import { createLogger, resolveCorrelationId, type Logger } from '../telemetry';
-import { ApiKeyTenantResolver, type TenantKeyMap, type TenantResolver } from '../tenant';
+import type { TenantKeyMap } from '../tenant';
 import { BlobTemplateStore, TemplateApplicationService, type TemplateStore } from '../templates';
-import { TenantResolverError } from './auth';
 import { createPostkitMcpServer } from './create-server';
 import { azureHttpRequestToWebRequest, webResponseToAzureHttpResponse } from './http-bridge';
 
@@ -21,7 +27,7 @@ const MCP_CORS_HEADERS = {
 } as const;
 
 export interface McpHandlerDependencies {
-  tenantResolver: TenantResolver;
+  authenticator: Authenticator;
   templateStore: TemplateStore;
   resolveBranding?: (
     tenant: TenantContext,
@@ -87,8 +93,8 @@ function isTenantKeyMapEntry(
 
 export function createDefaultMcpDependencies(templateStore: TemplateStore): McpHandlerDependencies {
   return {
-    get tenantResolver(): TenantResolver {
-      return new ApiKeyTenantResolver(parseTenantKeyMap(process.env.TENANT_KEY_MAP));
+    get authenticator(): Authenticator {
+      return new ApiKeyAuthenticator(parseTenantKeyMap(process.env.TENANT_KEY_MAP));
     },
     templateStore,
     resolveBranding: async () => ({}),
@@ -179,11 +185,11 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
       );
     }
 
-    let tenant: TenantContext;
+    let principal: Principal;
     try {
-      tenant = await deps.tenantResolver.resolve(request);
+      principal = await deps.authenticator.authenticate(request);
     } catch (err) {
-      if (err instanceof TenantResolverError) {
+      if (err instanceof AuthError) {
         const status = err.code === PostKitErrorCode.UNAUTHENTICATED ? 401 : 403;
         logger.error('mcp.request.failed', {
           outcome: 'auth_error',
@@ -195,6 +201,8 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
       throw err;
     }
 
+    const tenant = tenantContextFromPrincipal(principal);
+
     const templates = new TemplateApplicationService({
       templateStore: deps.templateStore,
       resolveBranding: deps.resolveBranding,
@@ -202,7 +210,7 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
 
     const server = createPostkitMcpServer({
       templates,
-      tenant,
+      principal,
       logger,
     });
 

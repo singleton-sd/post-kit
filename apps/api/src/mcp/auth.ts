@@ -1,19 +1,17 @@
 import type { HttpRequest } from '@azure/functions';
-import type { TenantContext } from '@singleton-sd/post-kit-types';
-import type { TenantResolver } from '../tenant';
-import { TenantResolverError } from '../tenant';
+import type { Principal } from '@singleton-sd/post-kit-types';
+import type { Authenticator } from '../auth';
+import { AuthError } from '../auth';
 
 /**
- * Resolve the calling tenant from the Bearer API key on an MCP HTTP request.
- * Reuses the same ApiKeyTenantResolver / TENANT_KEY_MAP path as REST.
- *
- * Iteration 1 PoC auth — replaceable by the shared principal layer in #83.
+ * Resolve the calling principal from the Bearer API key on an MCP HTTP request.
+ * Same ApiKeyAuthenticator / TENANT_KEY_MAP path as REST send.
  */
-export async function resolveMcpTenant(
+export async function resolveMcpPrincipal(
   request: HttpRequest,
-  tenantResolver: TenantResolver,
-): Promise<TenantContext> {
-  return tenantResolver.resolve(request);
+  authenticator: Authenticator,
+): Promise<Principal> {
+  return authenticator.authenticate(request);
 }
 
-export { TenantResolverError };
+export { AuthError };

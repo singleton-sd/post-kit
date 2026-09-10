@@ -7,14 +7,16 @@ import type {
   EmailSendResult,
 } from '@singleton-sd/post-kit-email';
 import {
+  DEFAULT_POC_SCOPES,
   PostKitErrorCode,
   TEMPLATE_SCHEMA_VERSION,
   type CompiledTemplate,
+  type Principal,
   type TenantContext,
 } from '@singleton-sd/post-kit-types';
+import type { Authenticator } from '../auth';
 import { MemoryIdempotencyStore } from '../idempotency';
 import { resetSendRateLimiter } from '../contact-rate-limit';
-import type { TenantResolver } from '../tenant';
 import type { TemplateStore } from '../templates';
 import '../test/recipient-hash-env';
 import { createSendHandler } from './send';
@@ -56,8 +58,18 @@ function fakeContext(): InvocationContext {
   return { error: () => undefined } as unknown as InvocationContext;
 }
 
-function fakeResolver(tenant: TenantContext = TENANT): TenantResolver {
-  return { resolve: async () => tenant };
+function principalFor(tenant: TenantContext): Principal {
+  return {
+    id: `test:${tenant.tenantId}:${tenant.environment}`,
+    tenantId: tenant.tenantId,
+    environment: tenant.environment,
+    authType: 'api-key',
+    scopes: DEFAULT_POC_SCOPES,
+  };
+}
+
+function fakeAuthenticator(tenant: TenantContext = TENANT): Authenticator {
+  return { authenticate: async () => principalFor(tenant) };
 }
 
 function fakeStore(): TemplateStore {
@@ -97,7 +109,7 @@ describe('sendHandler idempotency', () => {
     resetSendRateLimiter();
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(),
       emailProvider: fakeProvider(sent),
       idempotencyStore: new MemoryIdempotencyStore(),
@@ -114,7 +126,7 @@ describe('sendHandler idempotency', () => {
     const sent: EmailSendRequest[] = [];
     const store = new MemoryIdempotencyStore();
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(),
       emailProvider: fakeProvider(sent),
       idempotencyStore: store,
@@ -167,7 +179,7 @@ describe('sendHandler idempotency', () => {
     });
 
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(),
       emailProvider: {
         name: 'development',
@@ -216,7 +228,7 @@ describe('sendHandler idempotency', () => {
     resetSendRateLimiter();
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(),
       emailProvider: fakeProvider(sent),
       idempotencyStore: {
@@ -252,14 +264,14 @@ describe('sendHandler idempotency', () => {
     const other: TenantContext = { tenantId: 'other', environment: 'development' };
 
     const handlerA = createSendHandler({
-      tenantResolver: fakeResolver(TENANT),
+      authenticator: fakeAuthenticator(TENANT),
       templateStore: fakeStore(),
       emailProvider: fakeProvider(sent),
       idempotencyStore: store,
       ...stubSender(),
     });
     const handlerB = createSendHandler({
-      tenantResolver: fakeResolver(other),
+      authenticator: fakeAuthenticator(other),
       templateStore: fakeStore(),
       emailProvider: fakeProvider(sent),
       idempotencyStore: store,
@@ -291,7 +303,7 @@ describe('sendHandler idempotency', () => {
     resetSendRateLimiter();
     let beginCalled = false;
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(),
       emailProvider: fakeProvider(),
       idempotencyStore: {

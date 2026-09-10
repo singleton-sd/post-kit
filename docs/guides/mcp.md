@@ -1,4 +1,4 @@
-# MCP (iteration 1)
+# MCP (iteration 2 Slice A)
 
 Stateless Model Context Protocol endpoint on the existing PostKit Azure
 Function App. MCP is an **adapter** over the same template application
@@ -8,12 +8,14 @@ services used by REST — it does not send email in this iteration.
 | --- | --- |
 | Route | `POST /mcp` |
 | Transport | MCP Streamable HTTP (JSON responses, no sessions) |
-| Auth | `Authorization: Bearer <token>` via `TENANT_KEY_MAP` (same PoC map as `POST /emails/send`) |
+| Auth | `Authorization: Bearer <token>` → shared `Principal` (same `TENANT_KEY_MAP` PoC as `POST /emails/send`) |
+| Scopes | Tools enforce `templates:read` / `templates:validate` / `templates:preview` centrally in `runTool` |
 | Tools | `postkit.list_templates`, `postkit.get_template`, `postkit.get_template_schema`, `postkit.validate_template`, `postkit.preview_template` |
 
 `send_email` is intentionally absent. Azure Function keys are **not** the
 PostKit authorization model — the Function route uses `authLevel: anonymous`
-and PostKit validates the Bearer token itself (replaceable in #83).
+and PostKit authenticates the Bearer token to a `Principal` with scopes
+(`apps/api/src/auth/`; hashed keys / revoke / expiry are Slice B of #83).
 
 ## Architecture
 
@@ -24,7 +26,8 @@ MCP client
    v
 apps/api Azure Function (functions/mcp.ts)
    |
-   +--> ApiKeyTenantResolver  (TENANT_KEY_MAP)
+   +--> ApiKeyAuthenticator  (TENANT_KEY_MAP → Principal + DEFAULT_POC_SCOPES)
+   +--> createPostkitMcpServer (requireScope per tool via MCP_TOOL_SCOPES)
    +--> TemplateApplicationService
            |
            +--> TemplateStore.list / load

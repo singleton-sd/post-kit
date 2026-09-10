@@ -8,7 +8,8 @@ import {
   type CompiledTemplate,
   type TenantContext,
 } from '@singleton-sd/post-kit-types';
-import { ApiKeyTenantResolver, type TenantKeyMap } from '../tenant';
+import { ApiKeyAuthenticator } from '../auth';
+import type { TenantKeyMap } from '../tenant';
 import type { ResolvedTenantEmailConfig } from '../tenant/tenant-email-config';
 import type { TemplateStore } from '../templates';
 import '../test/recipient-hash-env';
@@ -154,7 +155,7 @@ describe('sendHandler — cross-tenant isolation', () => {
     );
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
-      tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
+      authenticator: new ApiKeyAuthenticator(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(sent),
       ...stubTenantSender(),
@@ -180,7 +181,7 @@ describe('sendHandler — cross-tenant isolation', () => {
     );
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
-      tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
+      authenticator: new ApiKeyAuthenticator(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(sent),
       ...stubTenantSender(),
@@ -203,7 +204,7 @@ describe('sendHandler — cross-tenant isolation', () => {
       calls,
     );
     const handler = createSendHandler({
-      tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
+      authenticator: new ApiKeyAuthenticator(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -259,7 +260,7 @@ describe('sendHandler — tenant spoofing has no effect', () => {
         calls,
       );
       const handler = createSendHandler({
-        tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
+        authenticator: new ApiKeyAuthenticator(KEY_MAP),
         templateStore: store,
         emailProvider: fakeProvider(),
         ...stubTenantSender(),
@@ -281,7 +282,7 @@ describe('sendHandler — tenant spoofing has no effect', () => {
       calls,
     );
     const handler = createSendHandler({
-      tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
+      authenticator: new ApiKeyAuthenticator(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -311,7 +312,7 @@ describe('sendHandler — environment isolation', () => {
     );
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
-      tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
+      authenticator: new ApiKeyAuthenticator(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(sent),
       ...stubTenantSender(),
@@ -362,7 +363,7 @@ describe('sendHandler — unsafe template keys are rejected before storage acces
         calls,
       );
       const handler = createSendHandler({
-        tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
+        authenticator: new ApiKeyAuthenticator(KEY_MAP),
         templateStore: store,
         emailProvider: fakeProvider(),
         ...stubTenantSender(),
@@ -404,7 +405,7 @@ describe('sendHandler — hostile variable values cannot inject markup', () => {
       );
       const sent: EmailSendRequest[] = [];
       const handler = createSendHandler({
-        tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
+        authenticator: new ApiKeyAuthenticator(KEY_MAP),
         templateStore: store,
         emailProvider: fakeProvider(sent),
         ...stubTenantSender(),
@@ -444,7 +445,7 @@ describe('sendHandler — hostile variable values cannot inject markup', () => {
     );
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
-      tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
+      authenticator: new ApiKeyAuthenticator(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(sent),
       ...stubTenantSender(),
@@ -473,7 +474,7 @@ describe('sendHandler — malformed and oversized bodies produce stable typed er
       calls,
     );
     const handler = createSendHandler({
-      tenantResolver: new ApiKeyTenantResolver(KEY_MAP),
+      authenticator: new ApiKeyAuthenticator(KEY_MAP),
       templateStore: store,
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
