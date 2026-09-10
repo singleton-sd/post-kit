@@ -81,7 +81,8 @@ It is documentation only and is not installed in this repository's
 CI uses **Node 24**. Prefer upgrading actions over setting
 `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION`.
 
-Secrets live in **Key Vault** `ssd-global-kv-prod-ae`.
+Secrets live in **Key Vault** `ssd-postkit-kv-prod-ae` (preferred; see
+`SETUP.md` §5). Subscription ID is a GitHub Variable — do not invent a GUID.
 
 ## Root scripts
 

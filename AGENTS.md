@@ -239,10 +239,12 @@ Narrative overview: [`docs/architecture/overview.md`](docs/architecture/overview
   (first: `post-kit-email`; later client, editor, types, compiler, publisher)
 - Consumers call PostKit from trusted server-side code. Browser code must
   never contain long-lived PostKit credentials.
-- **Secrets:** Azure Key Vault only (`ssd-global-kv-prod-ae`)
+- **Secrets:** Azure Key Vault only (preferred `ssd-postkit-kv-prod-ae` —
+  see `SETUP.md`)
 - **CI/CD:** GitHub Actions **OIDC** → Azure → Key Vault (no deploy tokens
   or connection strings in GitHub Secrets)
-- **Cost + naming:** Function App Consumption (Y1); planned names in `SETUP.md`
+- **Cost + naming:** Function App Consumption (Y1); Free App Config; planned
+  names in `SETUP.md`
 
 ## Testing
 
@@ -260,18 +262,22 @@ tests — document the runner in the package and keep it consistent. Prefer
 
 ## Secrets + configuration (locked)
 
-**Subscription:** Singleton SD / `01c0bb8b-3770-4765-979a-cb13ae7e3dd2`
+**Subscription name:** `ssd-post-kit` (dedicated PostKit sub; **ID** TBD —
+human gate in `SETUP.md` / [#116](https://github.com/singleton-sd/post-kit/issues/116)).
+**Tenant:** `9a0e57d7-e58e-4e8b-814d-037cd7d9015c`.
+**Resource group:** `rg-postkit-prod-ae`.
 
 | Concern | Store |
 | --- | --- |
-| Secrets (tokens, connection strings, provider keys) | Key Vault `ssd-global-kv-prod-ae` |
-| Non-secret app settings | Function App settings / later App Configuration |
+| Secrets (tokens, connection strings, provider keys) | Key Vault `ssd-postkit-kv-prod-ae` (preferred) |
+| Non-secret app settings | App Configuration `ssd-postkit-appcs-prod-ae` (Free) |
 
 - **Local:** copy `.env.example` → `.env`. Never commit secrets.
 - **CI (GitHub Actions):** OIDC login using repo **Variables**
   `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` (IDs only).
   **Never** put tokens or `AZURE_CREDENTIALS` in GitHub Secrets.
-- Agents must not paste secrets into issues, PRs, or git.
+- Agents must not paste secrets into issues, PRs, or git. Do not invent a
+  subscription GUID.
 
 ## Public-repo safety
 

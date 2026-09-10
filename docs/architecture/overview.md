@@ -105,6 +105,12 @@ repositories and published by CI.
 
 ## Deployment
 
+Target subscription **name** `ssd-post-kit` (Entra tenant
+`9a0e57d7-e58e-4e8b-814d-037cd7d9015c`). Subscription **ID** is filled after
+a human creates the sub — see [`SETUP.md`](../../SETUP.md) §5 and
+[#116](https://github.com/singleton-sd/post-kit/issues/116). Do not invent a
+GUID. Resource group: `rg-postkit-prod-ae` (not legacy `rg-ssd-global`).
+
 | Component         | Host                                     | Notes                                                          |
 | ----------------- | ---------------------------------------- | -------------------------------------------------------------- |
 | API               | Azure Function App `ssd-postkit-api-prod-ae` | Plan `ssd-postkit-plan-prod-ae` (Y1 Consumption)            |
@@ -112,8 +118,8 @@ repositories and published by CI.
 | Template storage  | `TEMPLATE_STORAGE_ACCOUNT` / `TEMPLATE_STORAGE_CONTAINER` (default `templates`) | Read with `DefaultAzureCredential`         |
 | Send idempotency  | `IDEMPOTENCY_STORAGE_ACCOUNT` (falls back to template account) / container `idempotency` | Blob ledger; see [`send-idempotency.md`](./send-idempotency.md) |
 | Send timeout/retry | `SEND_PROVIDER_TIMEOUT_MS` / `SEND_MAX_ATTEMPTS` (idempotency-gated) | See [`send-timeout-retry.md`](./send-timeout-retry.md) |
-| App configuration | `ssd-postkit-appcs-prod-ae`              | Free SKU; non-secret settings + Key Vault references           |
-| Secrets           | Key Vault `ssd-global-kv-prod-ae`        | Resource group `rg-ssd-global`; IDs in [`SETUP.md`](../../SETUP.md) |
+| App configuration | `ssd-postkit-appcs-prod-ae`              | Free SKU (3/region/sub; 1k req/day; 10 MB); non-secret settings + Key Vault references |
+| Secrets           | Key Vault `ssd-postkit-kv-prod-ae` (preferred) | In `rg-postkit-prod-ae`; alternative: shared `ssd-global-kv-prod-ae` + cross-sub RBAC — [`SETUP.md`](../../SETUP.md) |
 | Packages          | npmjs public `@singleton-sd/post-kit-*`  | Trusted Publishing (OIDC) from `release.yml` — see [`SETUP.md`](../../SETUP.md) §6 |
 
 CI is `Lint / test / build` on every PR. Live email-domain branding

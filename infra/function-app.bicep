@@ -1,4 +1,5 @@
-// PostKit contact/send Azure Functions — Linux Consumption in rg-ssd-global.
+// PostKit contact/send Azure Functions — Linux Consumption in rg-postkit-prod-ae.
+// Target subscription name: ssd-post-kit (subscription ID via GitHub Variable — do not hardcode).
 // Secrets: FORWARD_EMAIL_TOKEN from Key Vault via App Configuration KV refs.
 // Non-secret settings: Azure App Configuration (Free) ssd-postkit-appcs-prod-ae
 // CAF: ssd-postkit-api-prod-ae
@@ -15,13 +16,13 @@ param storageAccountName string = 'ssdpostkitstprodae'
 @description('App Service plan name (Y1 Linux Consumption)')
 param planName string = 'ssd-postkit-plan-prod-ae'
 
-@description('Existing Key Vault name in this resource group')
-param keyVaultName string = 'ssd-global-kv-prod-ae'
+@description('Key Vault name — preferred dedicated vault in this RG (ssd-postkit-kv-prod-ae)')
+param keyVaultName string = 'ssd-postkit-kv-prod-ae'
 
 @description('CAF App Configuration store name')
 param appConfigName string = 'ssd-postkit-appcs-prod-ae'
 
-@description('App Configuration SKU — Free is available in this subscription')
+@description('App Configuration SKU — Free: 3 stores/region/subscription, 1000 req/day, 10 MB')
 @allowed(['Free', 'Developer', 'Standard'])
 param appConfigSku string = 'Free'
 
@@ -58,8 +59,20 @@ resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   }
 }
 
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
+  location: location
+  properties: {
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+    tenantId: tenant().tenantId
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 90
+    publicNetworkAccess: 'Enabled'
+  }
 }
 
 resource appConfig 'Microsoft.AppConfiguration/configurationStores@2024-05-01' = {

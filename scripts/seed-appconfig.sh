@@ -6,7 +6,7 @@ set -euo pipefail
 
 STORE="${APP_CONFIG_NAME:-ssd-postkit-appcs-prod-ae}"
 SEED="${1:-infra/appconfig-seed.json}"
-VAULT_URI="${KEY_VAULT_URI:-https://ssd-global-kv-prod-ae.vault.azure.net}"
+VAULT_URI="${KEY_VAULT_URI:-https://ssd-postkit-kv-prod-ae.vault.azure.net}"
 FORWARD_EMAIL_SECRET_NAME="${FORWARD_EMAIL_SECRET_NAME:-forwardemail-api-key}"
 RECIPIENT_HASH_SECRET_NAME="${RECIPIENT_HASH_SECRET_NAME:-recipient-hash-hmac-key}"
 
