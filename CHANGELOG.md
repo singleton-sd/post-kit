@@ -2,6 +2,9 @@
 
 ## 2026-09-10
 
+- **@singleton-sd/post-kit-editor** `0.5.0` → `0.6.0` (minor)
+## 2026-09-10
+
 - **@singleton-sd/post-kit-editor** `0.4.0` → `0.5.0` (minor)
 ## 2026-09-10
 
