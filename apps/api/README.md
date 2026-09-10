@@ -12,7 +12,7 @@ Local `func start` needs `az login`,
 and these Azure RBAC roles on your user:
 
 - **App Configuration Data Reader** on `ssd-postkit-appcs-prod-ae`
-- **Key Vault Secrets User** on `ssd-global-kv-prod-ae`
+- **Key Vault Secrets User** on `ssd-postkit-kv-prod-ae`
 
 `az login` only supplies a credential; without both roles the contact handler
 cannot load configuration. Do not put tenant profiles or tokens in

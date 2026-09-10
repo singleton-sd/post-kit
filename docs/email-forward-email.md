@@ -30,7 +30,7 @@ Trusted consumer / contact form
 | Runtime send (`POST /v1/emails`) | `ForwardEmailProvider` |
 | Domain / alias / verify | `ForwardEmailManagementClient` + `pnpm email:provision` |
 | DNS (MX / SPF / DKIM / DMARC / Return-Path) | AWS Route53; credentials from **pc-provision**, not this repo |
-| Secret storage | Azure Key Vault `ssd-global-kv-prod-ae` names **`forwardemail-api-key`**, **`recipient-hash-hmac-key`** |
+| Secret storage | Azure Key Vault `ssd-postkit-kv-prod-ae` names **`forwardemail-api-key`**, **`recipient-hash-hmac-key`** |
 | App configuration | Azure App Configuration `ssd-postkit-appcs-prod-ae` (Free) |
 | Runtime Function App | `apps/api` on `ssd-postkit-api-prod-ae`; loads env from App Config |
 | Branding validator | `pnpm validate:email-domain-branding` + scheduled CI |

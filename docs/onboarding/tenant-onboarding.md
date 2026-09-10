@@ -93,7 +93,7 @@ Rules that the code enforces or that you must uphold:
   `APP_CONFIGURATION_ENVIRONMENT_KEYS`
   ([`app-configuration.ts`](../../apps/api/src/config/app-configuration.ts)),
   so App Configuration does not populate it — there is no `app:…` key for the
-  map. In production, store the JSON in Key Vault (`ssd-global-kv-prod-ae`) and
+  map. In production, store the JSON in Key Vault (`ssd-postkit-kv-prod-ae`) and
   reference it from the Function App setting (a Key Vault reference), not as a
   plain-text value. **Where it never lives:** browser bundles, this repository,
   committed `.env` files, or GitHub Secrets as a raw token (CI authenticates to

@@ -130,13 +130,13 @@ npx skills add singleton-sd/ai-plattform-skills \
 
 ## 5. Azure (dedicated PostKit subscription)
 
-**Target (locked naming — subscription ID filled after human creates the sub):**
+**Target (locked):**
 
 | Item | Value |
 | --- | --- |
 | Entra tenant | `9a0e57d7-e58e-4e8b-814d-037cd7d9015c` (shared with platform-kit) |
-| Subscription **name** | `ssd-post-kit` |
-| Subscription **ID** | _TBD — paste GUID in [#116](https://github.com/singleton-sd/post-kit/issues/116); do not invent_ |
+| Subscription **display name** | `SSD Post Kit` (docs short name: `ssd-post-kit`) |
+| Subscription **ID** | `9b6fc2b1-064a-4eb2-81fe-0aa8c7c751b5` |
 | Resource group | `rg-postkit-prod-ae` (region: Australia East) |
 | Key Vault (preferred) | `ssd-postkit-kv-prod-ae` in the PostKit RG/sub |
 
@@ -146,7 +146,7 @@ legacy Singleton SD global RG (`rg-ssd-global` /
 `01c0bb8b-3770-4765-979a-cb13ae7e3dd2`). Those IDs remain documented only as
 historical context until cutover completes.
 
-### Planned resources (not created until subscription ID + OIDC Variables exist)
+### Resources (provisioned in `rg-postkit-prod-ae`)
 
 | Kind | Name | Notes |
 | --- | --- | --- |
@@ -170,25 +170,23 @@ Free tier (per [Microsoft docs](https://learn.microsoft.com/en-us/azure/azure-ap
 Upgrade to Developer/Standard only if request volume or store count requires it.
 Y1 Consumption Function Apps remain the cost default for the API.
 
-### Key Vault choice
+### Key Vault
 
-**Preferred:** create `ssd-postkit-kv-prod-ae` in `rg-postkit-prod-ae` (same
+**Production:** `ssd-postkit-kv-prod-ae` in `rg-postkit-prod-ae` (same
 subscription as the Function App). Bicep creates this vault with RBAC
-authorization enabled.
+authorization enabled. Secrets `forwardemail-api-key` and
+`recipient-hash-hmac-key` live here.
 
-**Alternative (legacy):** keep using `ssd-global-kv-prod-ae` on Singleton SD.
-That path is **ops-only** (cross-subscription RBAC + App Config Key Vault
-references) — do **not** pass the shared vault name into this template with
-`createKeyVault=true` (globally unique names; create would fail). Same-RG
-existing vaults use `createKeyVault=false` (see
-[`infra/README.md`](infra/README.md)). Prefer the dedicated vault unless a
-human explicitly chooses to share.
+**Legacy note:** an older shared vault `ssd-global-kv-prod-ae` on Singleton SD
+is no longer the PostKit production target. Do not pass that name into this
+template with `createKeyVault=true`. See [`infra/README.md`](infra/README.md)
+for same-RG `createKeyVault=false` only.
 
 ### Secrets + configuration (locked)
 
 | Layer | Store | Rule |
 | --- | --- | --- |
-| **Secrets** | Azure Key Vault `ssd-postkit-kv-prod-ae` (preferred) | Tokens, connection strings. Never in git or GitHub Actions secrets. |
+| **Secrets** | Azure Key Vault `ssd-postkit-kv-prod-ae` | Tokens, connection strings. Never in git or GitHub Actions secrets. |
 | **App configuration** | Azure App Configuration `ssd-postkit-appcs-prod-ae` | Non-secret settings, including branding keys, + **Key Vault references** for secret values. |
 | **CI/CD** | GitHub Actions **OIDC** → Azure | Workflows log in with federated creds, then at job runtime: `az appconfig kv show` / `az keyvault secret show`. Mask secret values; never print them. |
 
@@ -198,7 +196,7 @@ human explicitly chooses to share.
 | --- | --- | --- |
 | `AZURE_CLIENT_ID` | OIDC app registration **application (client) ID** — a UUID, **not** the display name | Resolve with `az ad app list --display-name ssd-pocpk-gha-oidc-dev --query [].appId -o tsv` (or a PostKit-dedicated app’s `appId`). `azure/login` `client-id` rejects names. |
 | `AZURE_TENANT_ID` | Entra tenant ID | `9a0e57d7-e58e-4e8b-814d-037cd7d9015c` |
-| `AZURE_SUBSCRIPTION_ID` | PostKit subscription ID | _TBD — from human after creating `ssd-post-kit`_ |
+| `AZURE_SUBSCRIPTION_ID` | PostKit subscription ID | `9b6fc2b1-064a-4eb2-81fe-0aa8c7c751b5` |
 
 **Do not** store connection strings, passwords, deploy tokens, or
 `AZURE_CREDENTIALS` in GitHub Secrets.
@@ -206,13 +204,14 @@ human explicitly chooses to share.
 ### Human checklist — subscription, OIDC FIC, GitHub Variables
 
 Agents cannot create Azure **billing** subscriptions. Complete these before
-Phase 2 provision/deploy ([#116](https://github.com/singleton-sd/post-kit/issues/116)):
+Phase 2 provision/deploy ([#120](https://github.com/singleton-sd/post-kit/issues/120)):
 
-1. [ ] **Create** Azure subscription named `ssd-post-kit` under tenant
+1. [x] **Create** Azure subscription (`SSD Post Kit` /
+      `9b6fc2b1-064a-4eb2-81fe-0aa8c7c751b5`) under tenant
       `9a0e57d7-e58e-4e8b-814d-037cd7d9015c` (Portal / EA / MCA as applicable).
-2. [ ] **Confirm billing** / offer allows Azure Functions (Y1 Consumption) and
+2. [x] **Confirm billing** / offer allows Azure Functions (Y1 Consumption) and
       App Configuration **Free**.
-3. [ ] **Grant access** on the new subscription: operators (Contributor or
+3. [x] **Grant access** on the new subscription: operators (Contributor or
       Owner as needed) and the GitHub OIDC service principal. Subscription
       **Contributor alone is not enough** for first deploy: `function-app.bicep`
       creates App Configuration and Key Vault **role assignments**, which need
@@ -223,34 +222,34 @@ Phase 2 provision/deploy ([#116](https://github.com/singleton-sd/post-kit/issues
       bicep skips the OIDC role resources. Data-plane roles (Key Vault Secrets
       User, App Configuration Data Owner/Reader) still come from bicep when
       that principal id is passed.
-4. [ ] **OIDC federated credentials** for repo `singleton-sd/post-kit` on the
+4. [x] **OIDC federated credentials** for repo `singleton-sd/post-kit` on the
       Entra app used by Actions (reuse `ssd-pocpk-gha-oidc-dev` or create a
       PostKit-dedicated app). Subjects must match the token `sub` claim, e.g.:
       - `repo:singleton-sd/post-kit:ref:refs/heads/main`
       - `repo:singleton-sd/post-kit:pull_request` (if PR deploys ever need Azure)
       - Plus any **ID-form** subjects GitHub emits
         (`repo:ORG@ORG_ID/REPO@REPO_ID:…`) — see `docs/pr-pipelines.md`.
-      Note: that app currently has FICs for `poc-plattform-kit` only; add
-      post-kit subjects explicitly.
-5. [ ] Set GitHub repo **Variables** (Settings → Secrets and variables →
+5. [x] Set GitHub repo **Variables** (Settings → Secrets and variables →
       Actions → Variables): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
-      `AZURE_SUBSCRIPTION_ID` (real PostKit sub GUID — never a placeholder).
-6. [ ] **Comment on [#116](https://github.com/singleton-sd/post-kit/issues/116)**
-      with the new subscription **GUID only** so agents can fill docs and
-      provision `rg-postkit-prod-ae`.
-7. [ ] After RG/resources exist: put secret **values** into Key Vault names
+      `AZURE_SUBSCRIPTION_ID` (`9b6fc2b1-064a-4eb2-81fe-0aa8c7c751b5`).
+6. [x] **Comment on [#120](https://github.com/singleton-sd/post-kit/issues/120)**
+      with the subscription **GUID** (Phase 2 tracker; #116 was Phase 1 docs).
+7. [x] After RG/resources exist: put secret **values** into Key Vault names
       `forwardemail-api-key` and `recipient-hash-hmac-key` (portal/CLI — never
       commit values). Branding keys `app:email:validation:*` are seeded on
       first Function deploy.
 
 ### Agent work after the subscription ID exists
 
-Tracked as Phase 2 of [#116](https://github.com/singleton-sd/post-kit/issues/116):
+Tracked as [#120](https://github.com/singleton-sd/post-kit/issues/120)
+(Phase 2; Phase 1 docs were #116 / #118):
 
-- Fill subscription GUID into docs (replace `_TBD_`)
-- Ensure `deploy-api.yml` targets `rg-postkit-prod-ae` (defaults already set)
-- Create RG if missing, run bicep / Deploy API workflow
-- Verify OIDC login, App Config seed, Function zip deploy
+- [x] Fill subscription GUID into docs
+- [x] Ensure `deploy-api.yml` targets `rg-postkit-prod-ae` (defaults already set)
+- [x] Create RG; run bicep / Deploy API workflow
+- [ ] Verify OIDC login, App Config seed, Function zip deploy
+- [x] Place Key Vault secret **values** (copied into `ssd-postkit-kv-prod-ae`;
+  PostKit copy of `recipient-hash-hmac-key` removed from legacy global vault)
 
 ## 6. npmjs (public packages)
 

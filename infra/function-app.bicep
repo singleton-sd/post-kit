@@ -1,5 +1,6 @@
 // PostKit contact/send Azure Functions — Linux Consumption in rg-postkit-prod-ae.
-// Target subscription name: ssd-post-kit (subscription ID via GitHub Variable — do not hardcode).
+// Target subscription: SSD Post Kit / 9b6fc2b1-064a-4eb2-81fe-0aa8c7c751b5
+// (GitHub Variable AZURE_SUBSCRIPTION_ID — do not hardcode alternate subs).
 // Secrets: FORWARD_EMAIL_TOKEN from Key Vault via App Configuration KV refs.
 // Non-secret settings: Azure App Configuration (Free) ssd-postkit-appcs-prod-ae
 // CAF: ssd-postkit-api-prod-ae

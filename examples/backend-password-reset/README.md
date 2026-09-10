@@ -22,7 +22,7 @@ Quick start guide: [`docs/guides/api-quickstart.md`](../../docs/guides/api-quick
 ## Server-side only
 
 `POSTKIT_API_KEY` is a long-lived credential. It comes from Azure Key Vault
-(`ssd-global-kv-prod-ae`) and must never appear in browser code, a client
+(`ssd-postkit-kv-prod-ae`) and must never appear in browser code, a client
 bundle, or a committed file. Browser UIs POST to your own server endpoint,
 which then calls PostKit.
 
@@ -60,7 +60,7 @@ const result = await sendPasswordReset(client, {
 | Env var | Meaning |
 | --- | --- |
 | `POSTKIT_URL` | Base URL of the PostKit API, e.g. `https://<function-app>.azurewebsites.net/api` |
-| `POSTKIT_API_KEY` | Tenant API key from Key Vault `ssd-global-kv-prod-ae` |
+| `POSTKIT_API_KEY` | Tenant API key from Key Vault `ssd-postkit-kv-prod-ae` |
 
 A real send also needs the template published to the tenant's storage under
 the key `auth.password-reset`, otherwise the API answers `404` /

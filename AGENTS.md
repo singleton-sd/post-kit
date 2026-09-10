@@ -268,8 +268,8 @@ tests — document the runner in the package and keep it consistent. Prefer
 
 ## Secrets + configuration (locked)
 
-**Subscription name:** `ssd-post-kit` (dedicated PostKit sub; **ID** TBD —
-human gate in `SETUP.md` / [#116](https://github.com/singleton-sd/post-kit/issues/116)).
+**Subscription:** `SSD Post Kit` / `ssd-post-kit`
+(`9b6fc2b1-064a-4eb2-81fe-0aa8c7c751b5`).
 **Tenant:** `9a0e57d7-e58e-4e8b-814d-037cd7d9015c`.
 **Resource group:** `rg-postkit-prod-ae`.
 
@@ -282,8 +282,7 @@ human gate in `SETUP.md` / [#116](https://github.com/singleton-sd/post-kit/issue
 - **CI (GitHub Actions):** OIDC login using repo **Variables**
   `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` (IDs only).
   **Never** put tokens or `AZURE_CREDENTIALS` in GitHub Secrets.
-- Agents must not paste secrets into issues, PRs, or git. Do not invent a
-  subscription GUID.
+- Agents must not paste secrets into issues, PRs, or git.
 
 ## Public-repo safety
 

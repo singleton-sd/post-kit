@@ -124,7 +124,7 @@ bundle*. The variable is baked into the deployed JavaScript and, for many
 setups, into build logs and preview deployments as well.
 
 Keep the key in unprefixed server-only configuration (`POSTKIT_API_KEY`),
-sourced only from Azure Key Vault (`ssd-global-kv-prod-ae`). A Function App
+sourced only from Azure Key Vault (`ssd-postkit-kv-prod-ae`). A Function App
 setting, if used, must be a Key Vault reference. Read it only in code that
 never reaches the browser. In frameworks with a server/client split, assert the
 module is server-only (e.g. a `server-only` import guard) so an accidental
