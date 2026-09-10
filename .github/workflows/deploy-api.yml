@@ -56,15 +56,8 @@ jobs:
       - name: Stage zip
         run: |
           set -euo pipefail
-          pnpm --filter @singleton-sd/post-kit-email run build
-          pnpm --filter @singleton-sd/post-kit-api run build
-          STAGE=$(mktemp -d)
-          pnpm --filter @singleton-sd/post-kit-api deploy --prod "$STAGE"
-          cp apps/api/host.json "$STAGE/"
-          test -f "$STAGE/dist/index.js"
-          test -d "$STAGE/node_modules/@singleton-sd/post-kit-email"
-          (cd "$STAGE" && zip -r "$GITHUB_WORKSPACE/post-kit-api.zip" .)
-
+          chmod +x scripts/stage-api-zip.sh
+          ./scripts/stage-api-zip.sh "$GITHUB_WORKSPACE/post-kit-api.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: post-kit-api-zip
