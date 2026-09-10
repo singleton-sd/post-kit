@@ -38,3 +38,12 @@ export {
   type TenantEnvironment,
   type TemplateVariables,
 } from './tenant';
+
+// Auth contracts (principal + scopes shared by REST and MCP)
+export {
+  DEFAULT_POC_SCOPES,
+  POSTKIT_SCOPES,
+  type AuthType,
+  type PostKitScope,
+  type Principal,
+} from './auth';

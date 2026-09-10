@@ -7,7 +7,7 @@ import {
   type TenantContext,
 } from '@singleton-sd/post-kit-types';
 import { PostKitErrorCode } from '@singleton-sd/post-kit-types';
-import { ApiKeyTenantResolver } from '../tenant';
+import { ApiKeyAuthenticator } from '../auth';
 import { TemplateStoreError, type TemplateStore } from '../templates';
 import { createMcpHandler, parseTenantKeyMap } from './handler';
 import { createLogger } from '../telemetry';
@@ -94,7 +94,7 @@ const context = {
 describe('createMcpHandler', () => {
   it('rejects missing Bearer credentials with 401', async () => {
     const handler = createMcpHandler({
-      tenantResolver: new ApiKeyTenantResolver({
+      authenticator: new ApiKeyAuthenticator({
         [TOKEN]: { tenantId: TENANT.tenantId, environment: TENANT.environment },
       }),
       templateStore: fakeStore(),
@@ -115,7 +115,7 @@ describe('createMcpHandler', () => {
 
   it('rejects unknown Bearer credentials with 403', async () => {
     const handler = createMcpHandler({
-      tenantResolver: new ApiKeyTenantResolver({
+      authenticator: new ApiKeyAuthenticator({
         [TOKEN]: { tenantId: TENANT.tenantId, environment: TENANT.environment },
       }),
       templateStore: fakeStore(),
@@ -135,7 +135,7 @@ describe('createMcpHandler', () => {
 
   it('returns 405 for GET (stateless JSON mode — no SSE standalone stream)', async () => {
     const handler = createMcpHandler({
-      tenantResolver: new ApiKeyTenantResolver({
+      authenticator: new ApiKeyAuthenticator({
         [TOKEN]: { tenantId: TENANT.tenantId, environment: TENANT.environment },
       }),
       templateStore: fakeStore(),
@@ -147,7 +147,7 @@ describe('createMcpHandler', () => {
 
   it('includes CORS headers on transport failure (500)', async () => {
     const handler = createMcpHandler({
-      tenantResolver: new ApiKeyTenantResolver({
+      authenticator: new ApiKeyAuthenticator({
         [TOKEN]: { tenantId: TENANT.tenantId, environment: TENANT.environment },
       }),
       templateStore: fakeStore(),
@@ -170,7 +170,7 @@ describe('createMcpHandler', () => {
 
   it('accepts initialize over POST with valid credentials', async () => {
     const handler = createMcpHandler({
-      tenantResolver: new ApiKeyTenantResolver({
+      authenticator: new ApiKeyAuthenticator({
         [TOKEN]: { tenantId: TENANT.tenantId, environment: TENANT.environment },
       }),
       templateStore: fakeStore(),
@@ -210,7 +210,7 @@ describe('createMcpHandler', () => {
   it('logs httpMethod (not mcpMethod) on request receipt', async () => {
     const lines: string[] = [];
     const handler = createMcpHandler({
-      tenantResolver: new ApiKeyTenantResolver({
+      authenticator: new ApiKeyAuthenticator({
         [TOKEN]: { tenantId: TENANT.tenantId, environment: TENANT.environment },
       }),
       templateStore: fakeStore(),
@@ -239,7 +239,7 @@ describe('createMcpHandler', () => {
       },
     };
     const handler = createMcpHandler({
-      tenantResolver: new ApiKeyTenantResolver({}),
+      authenticator: new ApiKeyAuthenticator({}),
       templateStore: store,
     });
     await handler(fakeRequest({ authorization: `Bearer ${TOKEN}`, body: {} }), context);

@@ -2,10 +2,17 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   PostKitErrorCode,
-  type TenantContext,
+  type Principal,
   type TemplateVariables,
 } from '@singleton-sd/post-kit-types';
 import { z } from 'zod';
+import {
+  AuthError,
+  requireScope,
+  scopeForMcpTool,
+  tenantContextFromPrincipal,
+  type McpScopedToolName,
+} from '../auth';
 import type { Logger } from '../telemetry';
 import { TemplateStoreError, type TemplateApplicationService } from '../templates';
 
@@ -16,7 +23,7 @@ export const POSTKIT_MCP_TOOL_NAMES = [
   'postkit.get_template_schema',
   'postkit.validate_template',
   'postkit.preview_template',
-] as const;
+] as const satisfies readonly McpScopedToolName[];
 
 export type PostkitMcpToolName = (typeof POSTKIT_MCP_TOOL_NAMES)[number];
 
@@ -35,7 +42,8 @@ const variablesField = z.record(z.string());
 
 export interface CreatePostkitMcpServerOptions {
   templates: TemplateApplicationService;
-  tenant: TenantContext;
+  /** Authenticated principal — tenant identity and scopes come from here only. */
+  principal: Principal;
   logger: Logger;
   /** Optional clock for duration measurement in tests. */
   now?: () => number;
@@ -49,6 +57,9 @@ function toolTextResult(payload: unknown, isError = false): CallToolResult {
 }
 
 function mapStoreError(err: unknown): { code: PostKitErrorCode | string; error: string } {
+  if (err instanceof AuthError) {
+    return { code: err.code, error: err.message };
+  }
   if (err instanceof TemplateStoreError) {
     return { code: err.code, error: err.message };
   }
@@ -74,10 +85,12 @@ function rejectUnsafeKey(templateKey: string): CallToolResult | undefined {
 
 /**
  * Build a fresh MCP server for one HTTP request (stateless).
- * Tools close over the authenticated tenant — never accept tenantId from tool args.
+ * Tools close over the authenticated principal — never accept tenantId from tool args.
+ * Scope checks run centrally in runTool via {@link scopeForMcpTool}.
  */
 export function createPostkitMcpServer(options: CreatePostkitMcpServerOptions): McpServer {
-  const { templates, tenant, logger } = options;
+  const { templates, principal, logger } = options;
+  const tenant = tenantContextFromPrincipal(principal);
   const now = options.now ?? (() => Date.now());
 
   const server = new McpServer({
@@ -112,6 +125,9 @@ export function createPostkitMcpServer(options: CreatePostkitMcpServerOptions): 
   ): Promise<T> => {
     const startMs = now();
     try {
+      // Scope check inside try so AuthError emits mcp.tool.failed / auth_error
+      // (outer tool handlers catch and return MCP error results without failing transport).
+      requireScope(principal, scopeForMcpTool(tool));
       const result = await work();
       logger.info('mcp.tool.completed', {
         mcpMethod: 'tools/call',
@@ -131,7 +147,7 @@ export function createPostkitMcpServer(options: CreatePostkitMcpServerOptions): 
         tenantId: tenant.tenantId,
         environment: tenant.environment,
         templateKey,
-        outcome: 'failed',
+        outcome: err instanceof AuthError ? 'auth_error' : 'failed',
         errorCode: mapped.code,
         durationMs: now() - startMs,
       });
@@ -209,52 +225,23 @@ export function createPostkitMcpServer(options: CreatePostkitMcpServerOptions): 
     async (args: { templateKey: string; variables: TemplateVariables }) => {
       const unsafe = rejectUnsafeKey(args.templateKey);
       if (unsafe) return unsafe;
-      const startMs = now();
       try {
-        const result = await templates.validateTemplate(tenant, args.templateKey, args.variables);
+        const result = await runTool('postkit.validate_template', args.templateKey, () =>
+          templates.validateTemplate(tenant, args.templateKey, args.variables),
+        );
         if (!result.ok) {
-          logger.info('mcp.tool.completed', {
-            mcpMethod: 'tools/call',
-            mcpTool: 'postkit.validate_template',
-            tenantId: tenant.tenantId,
-            environment: tenant.environment,
-            templateKey: args.templateKey,
-            outcome: 'validation_error',
-            errorCode: result.code,
-            durationMs: now() - startMs,
-          });
           return toolTextResult(
             { ok: false, code: result.code, error: result.error, missing: result.missing },
             true,
           );
         }
-        logger.info('mcp.tool.completed', {
-          mcpMethod: 'tools/call',
-          mcpTool: 'postkit.validate_template',
-          tenantId: tenant.tenantId,
-          environment: tenant.environment,
-          templateKey: args.templateKey,
-          outcome: 'success',
-          durationMs: now() - startMs,
-        });
         return toolTextResult({
           ok: true,
           templateKey: result.templateKey,
           variables: result.variables,
         });
       } catch (err) {
-        const mapped = mapStoreError(err);
-        logger.error('mcp.tool.failed', {
-          mcpMethod: 'tools/call',
-          mcpTool: 'postkit.validate_template',
-          tenantId: tenant.tenantId,
-          environment: tenant.environment,
-          templateKey: args.templateKey,
-          outcome: 'failed',
-          errorCode: mapped.code,
-          durationMs: now() - startMs,
-        });
-        return toolTextResult(mapped, true);
+        return toolTextResult(mapStoreError(err), true);
       }
     },
   );

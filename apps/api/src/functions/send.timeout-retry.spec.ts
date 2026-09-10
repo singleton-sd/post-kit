@@ -8,11 +8,14 @@ import {
   type EmailSendResult,
 } from '@singleton-sd/post-kit-email';
 import {
+  DEFAULT_POC_SCOPES,
   PostKitErrorCode,
   TEMPLATE_SCHEMA_VERSION,
   type CompiledTemplate,
+  type Principal,
   type TenantContext,
 } from '@singleton-sd/post-kit-types';
+import type { Authenticator } from '../auth';
 import { MemoryIdempotencyStore } from '../idempotency';
 import { resetSendRateLimiter } from '../contact-rate-limit';
 import {
@@ -21,7 +24,6 @@ import {
   type SendDeliveryPolicy,
 } from '../send-delivery';
 import { createLogger } from '../telemetry';
-import type { TenantResolver } from '../tenant';
 import type { TemplateStore } from '../templates';
 import '../test/recipient-hash-env';
 import { createSendHandler } from './send';
@@ -63,8 +65,16 @@ function fakeContext(): InvocationContext {
   return { error: () => undefined } as unknown as InvocationContext;
 }
 
-function fakeResolver(): TenantResolver {
-  return { resolve: async () => TENANT };
+function fakeAuthenticator(): Authenticator {
+  return {
+    authenticate: async () => ({
+      id: 'test:inkads:development',
+      tenantId: TENANT.tenantId,
+      environment: TENANT.environment,
+      authType: 'api-key',
+      scopes: DEFAULT_POC_SCOPES,
+    }),
+  };
 }
 
 function fakeStore(): TemplateStore {
@@ -122,7 +132,7 @@ describe('sendHandler timeout / retry / classification', () => {
     };
 
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(),
       emailProvider: provider,
       deliveryPolicy: fastPolicy({ providerTimeoutMs: 40, maxAttempts: 1 }),
@@ -158,7 +168,7 @@ describe('sendHandler timeout / retry / classification', () => {
     };
 
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(),
       emailProvider: provider,
       deliveryPolicy: fastPolicy({ maxAttempts: 3 }),
@@ -194,7 +204,7 @@ describe('sendHandler timeout / retry / classification', () => {
     const store = new MemoryIdempotencyStore({ ttlMs: 60_000 });
 
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(),
       emailProvider: provider,
       idempotencyStore: store,
@@ -234,7 +244,7 @@ describe('sendHandler timeout / retry / classification', () => {
     const lines: string[] = [];
 
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(),
       emailProvider: provider,
       idempotencyStore: store,
@@ -281,7 +291,7 @@ describe('sendHandler timeout / retry / classification', () => {
     const store = new MemoryIdempotencyStore({ ttlMs: 60_000 });
 
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(),
       emailProvider: provider,
       idempotencyStore: store,

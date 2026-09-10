@@ -7,4 +7,4 @@ export {
 } from './handler';
 export type { McpHandlerDependencies } from './handler';
 export { azureHttpRequestToWebRequest, webResponseToAzureHttpResponse } from './http-bridge';
-export { resolveMcpTenant, TenantResolverError } from './auth';
+export { resolveMcpPrincipal, AuthError } from './auth';

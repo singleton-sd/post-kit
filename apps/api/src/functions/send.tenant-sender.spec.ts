@@ -3,11 +3,13 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import type { HttpRequest, InvocationContext } from '@azure/functions';
 import type { EmailProvider, EmailSendRequest } from '@singleton-sd/post-kit-email';
 import {
+  DEFAULT_POC_SCOPES,
   PostKitErrorCode,
   TEMPLATE_SCHEMA_VERSION,
   type CompiledTemplate,
   type TenantContext,
 } from '@singleton-sd/post-kit-types';
+import type { Authenticator } from '../auth';
 import { clearTenantEmailConfigCache } from '../tenant';
 import { createLogger } from '../telemetry';
 import '../test/recipient-hash-env';
@@ -98,7 +100,15 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
 
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
-      tenantResolver: { resolve: async () => TENANT },
+      authenticator: {
+        authenticate: async () => ({
+          id: 'test:inkads:production',
+          tenantId: TENANT.tenantId,
+          environment: TENANT.environment,
+          authType: 'api-key' as const,
+          scopes: DEFAULT_POC_SCOPES,
+        }),
+      },
       templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: fakeProvider(sent),
     });
@@ -131,7 +141,15 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
 
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
-      tenantResolver: { resolve: async () => TENANT },
+      authenticator: {
+        authenticate: async () => ({
+          id: 'test:inkads:production',
+          tenantId: TENANT.tenantId,
+          environment: TENANT.environment,
+          authType: 'api-key' as const,
+          scopes: DEFAULT_POC_SCOPES,
+        }),
+      },
       templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: fakeProvider(sent),
     });
@@ -162,7 +180,15 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
     });
 
     const handler = createSendHandler({
-      tenantResolver: { resolve: async () => TENANT },
+      authenticator: {
+        authenticate: async () => ({
+          id: 'test:inkads:production',
+          tenantId: TENANT.tenantId,
+          environment: TENANT.environment,
+          authType: 'api-key' as const,
+          scopes: DEFAULT_POC_SCOPES,
+        }),
+      },
       templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: fakeProvider(),
     });
@@ -200,7 +226,15 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
 
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
-      tenantResolver: { resolve: async () => TENANT },
+      authenticator: {
+        authenticate: async () => ({
+          id: 'test:inkads:production',
+          tenantId: TENANT.tenantId,
+          environment: TENANT.environment,
+          authType: 'api-key' as const,
+          scopes: DEFAULT_POC_SCOPES,
+        }),
+      },
       templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: fakeProvider(sent),
     });
@@ -236,7 +270,15 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
 
     const lines: string[] = [];
     const handler = createSendHandler({
-      tenantResolver: { resolve: async () => TENANT },
+      authenticator: {
+        authenticate: async () => ({
+          id: 'test:inkads:production',
+          tenantId: TENANT.tenantId,
+          environment: TENANT.environment,
+          authType: 'api-key' as const,
+          scopes: DEFAULT_POC_SCOPES,
+        }),
+      },
       templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: {
         name: 'development',
@@ -281,7 +323,15 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
     });
 
     const handler = createSendHandler({
-      tenantResolver: { resolve: async () => TENANT },
+      authenticator: {
+        authenticate: async () => ({
+          id: 'test:inkads:production',
+          tenantId: TENANT.tenantId,
+          environment: TENANT.environment,
+          authType: 'api-key' as const,
+          scopes: DEFAULT_POC_SCOPES,
+        }),
+      },
       templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: fakeProvider(),
     });

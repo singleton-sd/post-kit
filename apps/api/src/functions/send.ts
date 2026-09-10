@@ -14,6 +14,13 @@ import {
   type TenantEnvironment,
   type TemplateVariables,
 } from '@singleton-sd/post-kit-types';
+import {
+  ApiKeyAuthenticator,
+  AuthError,
+  requireScope,
+  tenantContextFromPrincipal,
+  type Authenticator,
+} from '../auth';
 import { ensureAppConfiguration } from '../config/app-configuration';
 import { getSendRateLimiter, sendRateLimitKey } from '../contact-rate-limit';
 import {
@@ -33,13 +40,10 @@ import {
 import { getSendSizeLimits, validateRequestBodySize, validateVariablesSize } from '../send-limits';
 import { createLogger, hashRecipient, resolveCorrelationId, type Logger } from '../telemetry';
 import {
-  ApiKeyTenantResolver,
-  TenantResolverError,
   resolveTenantEmailConfig,
   TenantEmailConfigError,
   type ResolvedTenantEmailConfig,
   type TenantKeyMap,
-  type TenantResolver,
 } from '../tenant';
 import {
   BlobTemplateStore,
@@ -53,7 +57,7 @@ const BASIC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SAFE_TEMPLATE_KEY = /^[a-zA-Z0-9._-]+$/;
 
 export interface SendHandlerDependencies {
-  tenantResolver: TenantResolver;
+  authenticator: Authenticator;
   templateStore: TemplateStore;
   /** Prefer injecting a factory so App Configuration can populate env first. */
   createEmailProvider?: (options?: {
@@ -104,8 +108,8 @@ export function createDefaultSendDependencies(
 ): SendHandlerDependencies {
   return {
     // Re-read env after App Configuration in the handler via factories.
-    get tenantResolver(): TenantResolver {
-      return new ApiKeyTenantResolver(parseTenantKeyMap(process.env.TENANT_KEY_MAP));
+    get authenticator(): Authenticator {
+      return new ApiKeyAuthenticator(parseTenantKeyMap(process.env.TENANT_KEY_MAP));
     },
     templateStore,
     createEmailProvider: (options) =>
@@ -205,7 +209,9 @@ export function createSendHandler(deps: SendHandlerDependencies) {
     }
 
     try {
-      const tenant = await deps.tenantResolver.resolve(request);
+      const principal = await deps.authenticator.authenticate(request);
+      requireScope(principal, 'email:send');
+      const tenant = tenantContextFromPrincipal(principal);
       tenantId = tenant.tenantId;
       environment = tenant.environment;
 
@@ -510,7 +516,7 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         });
       }
 
-      if (error instanceof TenantResolverError) {
+      if (error instanceof AuthError) {
         const status =
           error.code === PostKitErrorCode.UNAUTHENTICATED
             ? 401

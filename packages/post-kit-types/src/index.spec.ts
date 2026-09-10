@@ -12,10 +12,15 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  DEFAULT_POC_SCOPES,
+  POSTKIT_SCOPES,
   PostKitErrorCode,
   TEMPLATE_SCHEMA_VERSION,
+  type AuthType,
   type CompiledTemplate,
   type PostKitErrorResponse,
+  type PostKitScope,
+  type Principal,
   type SendRequest,
   type SendResponse,
   type TenantBranding,
@@ -139,6 +144,25 @@ const _vars = {
   resetUrl: 'https://example.com/reset/abc',
 } satisfies TemplateVariables;
 
+// AuthType
+const _authApiKey: AuthType = 'api-key';
+const _authEntra: AuthType = 'entra';
+
+// PostKitScope — each semantic permission
+const _scopeRead: PostKitScope = 'templates:read';
+const _scopeValidate: PostKitScope = 'templates:validate';
+const _scopePreview: PostKitScope = 'templates:preview';
+const _scopeSend: PostKitScope = 'email:send';
+
+// Principal
+const _principal = {
+  id: 'ak_abc123',
+  tenantId: 'inkads',
+  environment: 'production',
+  authType: 'api-key',
+  scopes: DEFAULT_POC_SCOPES,
+} satisfies Principal;
+
 // Suppress unused-variable warnings — values are referenced to confirm types compile
 void [
   _metadata,
@@ -158,6 +182,13 @@ void [
   _brandingFull,
   _brandingEmpty,
   _vars,
+  _authApiKey,
+  _authEntra,
+  _scopeRead,
+  _scopeValidate,
+  _scopePreview,
+  _scopeSend,
+  _principal,
 ];
 
 // ---------------------------------------------------------------------------
@@ -199,5 +230,18 @@ describe('TenantEnvironment values', () => {
     const envs: TenantEnvironment[] = ['development', 'staging', 'production'];
     const unique = new Set(envs);
     assert.equal(unique.size, 3);
+  });
+});
+
+describe('PostKit scopes', () => {
+  it('POSTKIT_SCOPES lists the four semantic permissions', () => {
+    assert.deepEqual(
+      [...POSTKIT_SCOPES],
+      ['templates:read', 'templates:validate', 'templates:preview', 'email:send'],
+    );
+  });
+
+  it('DEFAULT_POC_SCOPES grants the full set for legacy map entries', () => {
+    assert.deepEqual([...DEFAULT_POC_SCOPES], [...POSTKIT_SCOPES]);
   });
 });
