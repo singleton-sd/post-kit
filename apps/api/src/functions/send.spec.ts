@@ -7,12 +7,14 @@ import type {
   EmailSendResult,
 } from '@singleton-sd/post-kit-email';
 import {
+  DEFAULT_POC_SCOPES,
   PostKitErrorCode,
   TEMPLATE_SCHEMA_VERSION,
   type CompiledTemplate,
+  type Principal,
   type TenantContext,
 } from '@singleton-sd/post-kit-types';
-import { TenantResolverError, type TenantResolver } from '../tenant';
+import { AuthError, type Authenticator } from '../auth';
 import type { ResolvedTenantEmailConfig } from '../tenant/tenant-email-config';
 import { TemplateStoreError, type TemplateStore } from '../templates';
 import { resetSendRateLimiter } from '../contact-rate-limit';
@@ -58,13 +60,30 @@ function fakeContext(): InvocationContext {
   return { error: () => undefined } as unknown as InvocationContext;
 }
 
-function fakeResolver(ok = true): TenantResolver {
+function principalFor(
+  tenant: TenantContext = TENANT,
+  scopes: Principal['scopes'] = DEFAULT_POC_SCOPES,
+): Principal {
   return {
-    resolve: async () => {
-      if (!ok) {
-        throw new TenantResolverError('missing', PostKitErrorCode.UNAUTHENTICATED);
+    id: `test:${tenant.tenantId}:${tenant.environment}`,
+    tenantId: tenant.tenantId,
+    environment: tenant.environment,
+    authType: 'api-key',
+    scopes: [...scopes],
+  };
+}
+
+function fakeAuthenticator(
+  ok: boolean | TenantContext = true,
+  scopes: Principal['scopes'] = DEFAULT_POC_SCOPES,
+): Authenticator {
+  return {
+    authenticate: async () => {
+      if (ok === false) {
+        throw new AuthError('missing', PostKitErrorCode.UNAUTHENTICATED);
       }
-      return TENANT;
+      const tenant = ok === true ? TENANT : ok;
+      return principalFor(tenant, scopes);
     },
   };
 }
@@ -105,7 +124,7 @@ describe('sendHandler', () => {
   it('sends a template email and returns SendResponse', async () => {
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(sent),
       ...stubTenantSender(),
@@ -132,7 +151,7 @@ describe('sendHandler', () => {
   it('HTML-escapes variables in the body', async () => {
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(sent),
       ...stubTenantSender(),
@@ -155,7 +174,7 @@ describe('sendHandler', () => {
 
   it('returns 401 UNAUTHENTICATED', async () => {
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(false),
+      authenticator: fakeAuthenticator(false),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -168,9 +187,9 @@ describe('sendHandler', () => {
 
   it('returns 403 UNAUTHORIZED', async () => {
     const handler = createSendHandler({
-      tenantResolver: {
-        resolve: async () => {
-          throw new TenantResolverError('unknown', PostKitErrorCode.UNAUTHORIZED);
+      authenticator: {
+        authenticate: async () => {
+          throw new AuthError('unknown', PostKitErrorCode.UNAUTHORIZED);
         },
       },
       templateStore: fakeStore(COMPILED),
@@ -182,9 +201,25 @@ describe('sendHandler', () => {
     assert.equal((response.jsonBody as { code: string }).code, PostKitErrorCode.UNAUTHORIZED);
   });
 
+  it('returns 403 UNAUTHORIZED when email:send scope is missing', async () => {
+    const handler = createSendHandler({
+      authenticator: fakeAuthenticator(true, ['templates:read']),
+      templateStore: fakeStore(COMPILED),
+      emailProvider: fakeProvider(),
+      ...stubTenantSender(),
+    });
+    const response = await handler(fakeRequest({ json: validBody() }), fakeContext());
+    assert.equal(response.status, 403);
+    assert.equal((response.jsonBody as { code: string }).code, PostKitErrorCode.UNAUTHORIZED);
+    assert.equal(
+      (response.jsonBody as { error: string }).error,
+      'The credential does not have the required permission.',
+    );
+  });
+
   it('returns 404 TEMPLATE_NOT_FOUND', async () => {
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(
         new TemplateStoreError('missing', PostKitErrorCode.TEMPLATE_NOT_FOUND),
       ),
@@ -198,7 +233,7 @@ describe('sendHandler', () => {
 
   it('returns 400 INVALID_TEMPLATE from store', async () => {
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(new TemplateStoreError('bad', PostKitErrorCode.INVALID_TEMPLATE)),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -210,7 +245,7 @@ describe('sendHandler', () => {
 
   it('returns 400 MISSING_VARIABLES', async () => {
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -227,7 +262,7 @@ describe('sendHandler', () => {
 
   it('returns 400 INVALID_RECIPIENT', async () => {
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -245,7 +280,7 @@ describe('sendHandler', () => {
   it('rejects unsafe template keys before loading the store', async () => {
     let loaded = false;
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: {
         load: async () => {
           loaded = true;
@@ -280,7 +315,7 @@ describe('sendHandler', () => {
       manifest: { ...COMPILED.manifest, variables: ['companyName'] },
     };
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(withBrandingVar),
       emailProvider: fakeProvider(sent),
       resolveBranding: async () => ({ companyName: 'InkAds' }),
@@ -306,7 +341,7 @@ describe('sendHandler', () => {
   it('emits the full structured log contract on success', async () => {
     const lines: string[] = [];
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -343,7 +378,7 @@ describe('sendHandler', () => {
   it('emits the full structured log contract on validation failure', async () => {
     const lines: string[] = [];
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -376,7 +411,7 @@ describe('sendHandler', () => {
   it('emits templateKey and recipientHash when variables validation fails after template and recipient succeed', async () => {
     const lines: string[] = [];
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -404,7 +439,7 @@ describe('sendHandler', () => {
     const { EmailProviderError } = await import('@singleton-sd/post-kit-email');
     const lines: string[] = [];
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: {
         name: 'development',
@@ -439,7 +474,7 @@ describe('sendHandler', () => {
     resetSendRateLimiter();
     process.env.SEND_RATE_LIMIT_PER_MIN = '1';
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -460,17 +495,17 @@ describe('sendHandler', () => {
   it('isolates rate limits per tenant', async () => {
     resetSendRateLimiter();
     process.env.SEND_RATE_LIMIT_PER_MIN = '1';
-    const tenantB: TenantResolver = {
-      resolve: async () => ({ tenantId: 'other', environment: 'development' }),
+    const tenantB: Authenticator = {
+      authenticate: async () => principalFor({ tenantId: 'other', environment: 'development' }),
     };
     const handlerA = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
     });
     const handlerB = createSendHandler({
-      tenantResolver: tenantB,
+      authenticator: tenantB,
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -488,7 +523,7 @@ describe('sendHandler', () => {
     process.env.SEND_MAX_BODY_BYTES = '50';
     let loaded = false;
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: {
         load: async () => {
           loaded = true;
@@ -523,7 +558,7 @@ describe('sendHandler', () => {
     resetSendSizeLimitsCache();
     process.env.SEND_MAX_VARIABLE_VALUE_BYTES = '10';
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -549,7 +584,7 @@ describe('sendHandler', () => {
 
   it('returns 400 when request.text() fails instead of treating it as an empty body', async () => {
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -572,7 +607,7 @@ describe('sendHandler', () => {
   it('returns PROVIDER_FAILURE when the provider throws', async () => {
     const { EmailProviderError } = await import('@singleton-sd/post-kit-email');
     const handler = createSendHandler({
-      tenantResolver: fakeResolver(),
+      authenticator: fakeAuthenticator(),
       templateStore: fakeStore(COMPILED),
       emailProvider: {
         name: 'development',
