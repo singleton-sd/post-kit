@@ -1,5 +1,5 @@
 # PostKit Function App — Linux Consumption in rg-postkit-prod-ae.
-# Target subscription name: ssd-post-kit (ID via vars.AZURE_SUBSCRIPTION_ID — TBD until #116 human gate).
+# Target subscription: SSD Post Kit / 9b6fc2b1-064a-4eb2-81fe-0aa8c7c751b5 (via vars.AZURE_SUBSCRIPTION_ID).
 # Secrets: NEVER in GitHub Secrets. OIDC → Key Vault `forwardemail-api-key`.
 # Required Variables: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
 # If OIDC Variables are missing, the deploy job is skipped (workflow succeeds).

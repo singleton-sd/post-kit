@@ -101,11 +101,11 @@ repositories and published by CI.
 
 ## Deployment
 
-Target subscription **name** `ssd-post-kit` (Entra tenant
-`9a0e57d7-e58e-4e8b-814d-037cd7d9015c`). Subscription **ID** is filled after
-a human creates the sub — see [`SETUP.md`](../../SETUP.md) §5 and
-[#116](https://github.com/singleton-sd/post-kit/issues/116). Do not invent a
-GUID. Resource group: `rg-postkit-prod-ae` (not legacy `rg-ssd-global`).
+Target subscription **display name** `SSD Post Kit` (docs short name
+`ssd-post-kit`), ID `9b6fc2b1-064a-4eb2-81fe-0aa8c7c751b5`, Entra tenant
+`9a0e57d7-e58e-4e8b-814d-037cd7d9015c`. See [`SETUP.md`](../../SETUP.md) §5
+and [#120](https://github.com/singleton-sd/post-kit/issues/120). Resource
+group: `rg-postkit-prod-ae` (not legacy `rg-ssd-global`).
 
 | Component         | Host                                     | Notes                                                          |
 | ----------------- | ---------------------------------------- | -------------------------------------------------------------- |

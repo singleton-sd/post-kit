@@ -2,11 +2,12 @@
 
 Bicep for the PostKit Function App, App Configuration store, and Key Vault in
 **`rg-postkit-prod-ae`** on the dedicated PostKit subscription
-(**name** `ssd-post-kit`; **subscription ID** TBD — see
-[`SETUP.md`](../SETUP.md) §5 and [#116](https://github.com/singleton-sd/post-kit/issues/116)).
+(**display name** `SSD Post Kit`; docs short name `ssd-post-kit`;
+**ID** `9b6fc2b1-064a-4eb2-81fe-0aa8c7c751b5` — see [`SETUP.md`](../SETUP.md)
+§5 and [#120](https://github.com/singleton-sd/post-kit/issues/120)).
 
-Do **not** invent a subscription GUID. Until a human pastes the ID on #116 and
-sets GitHub Variable `AZURE_SUBSCRIPTION_ID`, deploy workflows skip Azure steps.
+GitHub Variables `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID`
+must be set for Deploy API to run Azure steps.
 
 | Resource | Name | SKU |
 | --- | --- | --- |
