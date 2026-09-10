@@ -104,6 +104,7 @@ function tenantScopedStore(
         }
         return compiledFor(html);
       },
+      list: async () => [],
     },
   };
 }

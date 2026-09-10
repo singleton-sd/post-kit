@@ -88,7 +88,7 @@ export interface LogEntry {
   tenantId?: string;
   environment?: string;
   templateKey?: string;
-  outcome?: 'sent' | 'failed' | 'validation_error' | 'auth_error';
+  outcome?: 'sent' | 'failed' | 'validation_error' | 'auth_error' | 'success';
   durationMs?: number;
   providerMessageId?: string;
   providerRequestId?: string;
@@ -100,6 +100,12 @@ export interface LogEntry {
   attempt?: number;
   recipientHash?: string;
   errorCode?: PostKitErrorCode | string;
+  /** HTTP verb for the inbound request (e.g. `POST`). Distinct from `mcpMethod`. */
+  httpMethod?: string;
+  /** MCP JSON-RPC method (e.g. `tools/call`, `tools/list`). */
+  mcpMethod?: string;
+  /** MCP tool name when method is `tools/call`. */
+  mcpTool?: string;
   // NOTE: never log recipient addresses, variable values, or tokens
 }
 
@@ -117,6 +123,9 @@ const LOG_ENTRY_KEYS: ReadonlyArray<keyof Omit<LogEntry, 'correlationId'>> = [
   'attempt',
   'recipientHash',
   'errorCode',
+  'httpMethod',
+  'mcpMethod',
+  'mcpTool',
 ];
 
 /** Minimal logger interface exposed to callers. */

@@ -99,7 +99,7 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
       tenantResolver: { resolve: async () => TENANT },
-      templateStore: { load: async () => COMPILED },
+      templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: fakeProvider(sent),
     });
 
@@ -132,7 +132,7 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
       tenantResolver: { resolve: async () => TENANT },
-      templateStore: { load: async () => COMPILED },
+      templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: fakeProvider(sent),
     });
 
@@ -163,7 +163,7 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
 
     const handler = createSendHandler({
       tenantResolver: { resolve: async () => TENANT },
-      templateStore: { load: async () => COMPILED },
+      templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: fakeProvider(),
     });
 
@@ -201,7 +201,7 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
     const sent: EmailSendRequest[] = [];
     const handler = createSendHandler({
       tenantResolver: { resolve: async () => TENANT },
-      templateStore: { load: async () => COMPILED },
+      templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: fakeProvider(sent),
     });
 
@@ -237,7 +237,7 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
     const lines: string[] = [];
     const handler = createSendHandler({
       tenantResolver: { resolve: async () => TENANT },
-      templateStore: { load: async () => COMPILED },
+      templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: {
         name: 'development',
         isConfigured: () => true,
@@ -282,7 +282,7 @@ describe('sendHandler — tenant-scoped sender configuration', () => {
 
     const handler = createSendHandler({
       tenantResolver: { resolve: async () => TENANT },
-      templateStore: { load: async () => COMPILED },
+      templateStore: { load: async () => COMPILED, list: async () => [] },
       emailProvider: fakeProvider(),
     });
 

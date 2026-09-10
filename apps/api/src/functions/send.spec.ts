@@ -75,6 +75,7 @@ function fakeStore(result: CompiledTemplate | TemplateStoreError): TemplateStore
       if (result instanceof TemplateStoreError) throw result;
       return result;
     },
+    list: async () => [],
   };
 }
 
@@ -250,6 +251,7 @@ describe('sendHandler', () => {
           loaded = true;
           return COMPILED;
         },
+        list: async () => [],
       },
       emailProvider: fakeProvider(),
       ...stubTenantSender(),
@@ -492,6 +494,7 @@ describe('sendHandler', () => {
           loaded = true;
           return COMPILED;
         },
+        list: async () => [],
       },
       emailProvider: fakeProvider(),
       ...stubTenantSender(),

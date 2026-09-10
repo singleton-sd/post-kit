@@ -1,5 +1,4 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
-import Handlebars from 'handlebars';
 import {
   createEmailProvider,
   EmailProviderError,
@@ -42,7 +41,12 @@ import {
   type TenantKeyMap,
   type TenantResolver,
 } from '../tenant';
-import { BlobTemplateStore, TemplateStoreError, type TemplateStore } from '../templates';
+import {
+  BlobTemplateStore,
+  TemplateStoreError,
+  validateAndRenderTemplate,
+  type TemplateStore,
+} from '../templates';
 
 const BASIC_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Same allowlist as BlobTemplateStore — reject path traversal before load. */
@@ -297,27 +301,15 @@ export function createSendHandler(deps: SendHandlerDependencies) {
         throw err;
       }
 
-      const resolvedBranding = deps.resolveBranding ? await deps.resolveBranding(tenant) : {};
-      const variables: TemplateVariables = {
-        ...resolvedBranding,
+      const resolvedBranding = {
+        ...(deps.resolveBranding ? await deps.resolveBranding(tenant) : {}),
         ...(deps.branding ?? {}),
-        ...sendRequest.variables,
       };
-
-      const missing = compiled.metadata.variables.filter(
-        (name) => !Object.prototype.hasOwnProperty.call(variables, name),
-      );
-      if (missing.length > 0) {
-        return errorResponse(
-          400,
-          PostKitErrorCode.MISSING_VARIABLES,
-          `Missing required variables: ${missing.join(', ')}`,
-          'validation_error',
-        );
+      const rendered = validateAndRenderTemplate(compiled, resolvedBranding, sendRequest.variables);
+      if (!rendered.ok) {
+        return errorResponse(400, rendered.code, rendered.error, 'validation_error');
       }
-
-      const subject = Handlebars.compile(compiled.metadata.subject, { noEscape: false })(variables);
-      const html = Handlebars.compile(compiled.templateHtml, { noEscape: false })(variables);
+      const { subject, html } = rendered.rendered;
 
       const resolveTenantEmailConfigFn =
         deps.resolveTenantEmailConfig ?? ((tenant) => resolveTenantEmailConfig(tenant));
@@ -807,6 +799,7 @@ function parseSendRequest(
 const productionHandler = createSendHandler(
   createDefaultSendDependencies({
     load: async (tenant, key) => (await BlobTemplateStore.fromEnv()).load(tenant, key),
+    list: async (tenant) => (await BlobTemplateStore.fromEnv()).list(tenant),
   }),
 );
 
