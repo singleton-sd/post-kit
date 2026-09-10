@@ -21,7 +21,10 @@ Branch naming is `<type>/<issue-number>-<kebab-title>` (e.g.
 matching worktree with `pnpm worktree:add` under the parent workspace
 `worktrees/` folder (see `AGENTS.md`). Humans only merge product PRs to
 `main`. Solo-repo: do **not** require approving reviews; keep CI green before
-merge (see `SETUP.md` — Release bot may push version bumps without a PR).
+merge. Classic required-PR / required-status-check gates stay off so
+`release.yml` can push version bumps (see `SETUP.md` §1 — process still
+requires green CI for human merges; preferred end state is an org ruleset
+with Actions bypass).
 
 On **`main`**, `release.yml` bumps versions for changed public packages
 (conventional commits: `fix`→patch, `feat`→minor, `BREAKING CHANGE`→major),
