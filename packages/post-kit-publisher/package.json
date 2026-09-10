@@ -5,7 +5,8 @@
   "description": "Compile and publish PostKit email templates to Azure Blob Storage",
   "license": "MIT",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -20,12 +21,19 @@
   },
   "files": [
     "dist",
-    "LICENSE"
+    "LICENSE",
+    "README.md",
+    "!dist/**/*.spec.js",
+    "!dist/**/*.spec.js.map",
+    "!dist/**/*.spec.d.ts",
+    "!dist/**/*.spec.d.ts.map",
+    "!dist/fixtures/**"
   ],
   "scripts": {
     "build": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.json",
     "lint": "echo \"lint:publisher — covered by root eslint on staged files\"",
-    "test": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.spec.json && node --import tsx --test \"src/**/*.spec.ts\""
+    "test": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.spec.json && node --import tsx --test \"src/**/*.spec.ts\"",
+    "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
     "@types/node": "^20.17.9",
@@ -40,5 +48,9 @@
     "@azure/storage-blob": "^12.33.0",
     "@singleton-sd/post-kit-compiler": "workspace:*",
     "@singleton-sd/post-kit-types": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/singleton-sd/post-kit.git"
   }
 }

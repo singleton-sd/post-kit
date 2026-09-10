@@ -5,7 +5,8 @@
   "description": "Provider-agnostic transactional email (Forward Email) for PostKit",
   "license": "MIT",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,14 +22,21 @@
   "files": [
     "dist",
     "config",
-    "LICENSE"
+    "LICENSE",
+    "README.md",
+    "!dist/**/*.spec.js",
+    "!dist/**/*.spec.js.map",
+    "!dist/**/*.spec.d.ts",
+    "!dist/**/*.spec.d.ts.map",
+    "!dist/fixtures/**"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "echo \"lint:email — covered by root eslint on staged files\"",
     "test": "node --import tsx --test \"src/**/*.spec.ts\"",
     "provision": "node --import tsx src/bin/provision.ts",
-    "validate:domain-branding": "node --import tsx src/provisioning/email-domain-branding-validator.cli.ts"
+    "validate:domain-branding": "node --import tsx src/provisioning/email-domain-branding-validator.cli.ts",
+    "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
     "@types/node": "^20.17.9",
@@ -40,5 +48,9 @@
   },
   "dependencies": {
     "undici": "^7.10.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/singleton-sd/post-kit.git"
   }
 }

@@ -5,7 +5,7 @@
 | Workflow | Triggers | Checks |
 | --- | --- | --- |
 | `ci.yml` | every pull request; every push to `main` | prettier check, eslint, worktree-path tests, PR automation tests, recursive package test/build |
-| `release.yml` | push to **`main`** (skipped for `chore: Release` commits) | Path-aware bumps; commit + tags + GitHub Releases for `@singleton-sd/post-kit-*` packages (npm publish still disabled) |
+| `release.yml` | push to **`main`** / `workflow_dispatch` (skipped for `chore: Release` commits) | Path-aware bumps; OIDC `npm publish` (Trusted Publishing); commit + tags + GitHub Releases for `@singleton-sd/post-kit-*` |
 | `validate-email-domain-branding.yml` | daily 06:00 UTC; `workflow_dispatch`; pushes to `main` under `packages/post-kit-email/**`, this workflow file, root `package.json`, `pnpm-lock.yaml`, or `infra/appconfig-seed.json` | Live SPF/DKIM/DMARC/BIMI check. Reads `app:email:validation:*` from App Configuration with `--auth-mode login`. Skips (success) when Azure repository Variables are missing, the store is missing, or `app:email:validation:domain` is unset. Failed OIDC federation fails the job. Not required on PRs. |
 | `deploy-api.yml` | `main` path changes under `apps/api/**`, `packages/post-kit-email/**`, `infra/function-app.bicep`, `infra/appconfig-seed.json`, `.github/workflows/deploy-api.yml`; also `workflow_dispatch` | OIDC → bicep + App Config seed-if-absent + zip deploy; skips Azure if `AZURE_*` Variables are missing |
 
@@ -19,16 +19,19 @@ Branch naming is `<type>/<issue-number>-<kebab-title>` (e.g.
 `feat/1-bootstrap-monorepo`) per section 6 of
 [`docs/github-source-of-truth.md`](./github-source-of-truth.md). Create the
 matching worktree with `pnpm worktree:add` under the parent workspace
-`worktrees/` folder (see `AGENTS.md`). Humans only merge to `main`. Solo-repo:
-require CI checks, **not** approving reviews (see `SETUP.md`).
+`worktrees/` folder (see `AGENTS.md`). Humans only merge product PRs to
+`main`. Solo-repo: do **not** require approving reviews; keep CI green before
+merge (see `SETUP.md` — Release bot may push version bumps without a PR).
 
 On **`main`**, `release.yml` bumps versions for changed public packages
 (conventional commits: `fix`→patch, `feat`→minor, `BREAKING CHANGE`→major),
-pushes one annotated git tag per package, then creates a matching **GitHub
-Release** per tag (`scripts/github-releases.mjs`). npm publish remains
-disabled until a later issue enables it. With an empty workspace (no
-`@singleton-sd/post-kit-*` packages yet) it logs `Nothing to release` and
-exits 0.
+publishes them to npmjs via **Trusted Publishing (OIDC)** (`id-token: write`;
+no `NPM_TOKEN`), commits `chore: Release…` on `main`, pushes one annotated
+git tag per package, then creates a matching **GitHub Release** per tag
+(`scripts/github-releases.mjs`). That direct push is intentional: branch
+protection must allow the Release workflow to update `main` (see `SETUP.md`
+§1). With an empty workspace (no `@singleton-sd/post-kit-*` packages yet) it
+logs `Nothing to release` and exits 0.
 
 ### Backfill existing tags (one-shot)
 

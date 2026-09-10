@@ -15,12 +15,20 @@ require approving reviews.
 **Protect `main`:**
 
 1. Open the repo → **Settings** → **Rules** → **Rulesets** (or classic **Branches**).
-2. Require a pull request before merging; **require status checks** (`Lint / test / build`) to pass.
+2. Block force pushes and deletions on `main`.
 3. Do not require approving reviews (blocks the same human/AI identity that authored the PR).
-4. Block force pushes and deletions; disallow direct pushes to `main`.
-5. **Human merge only** — agents never merge or review other agents' work.
-   Connected review bots leave PR comments; the human validates the test plan
-   and merges.
+4. **Human merge only** for product PRs — agents never merge or review other
+   agents' work. Connected review bots leave PR comments; the human validates
+   the test plan and merges after CI is green.
+5. **Release exception:** `release.yml` must push `chore: Release…` commits
+   (version bumps + tags) directly to `main` via `GITHUB_TOKEN`. Classic
+   required-PR / required-status-check rules reject that push (`GH006`).
+   Repo-level rulesets also cannot list the GitHub Actions integration as a
+   bypass actor unless configured at the **organization** ruleset layer
+   (`admin:org`). Until an org ruleset grants Actions bypass for PR +
+   `Lint / test / build`, keep those two requirements **off** on classic
+   branch protection so Release can succeed. Process still applies: humans
+   open PRs, wait for CI, then merge — agents never push to `main`.
 
 ### Branch naming (agents + optional GitHub rules)
 
@@ -163,7 +171,46 @@ Publishable workspace packages use the `@singleton-sd/post-kit-*` scope and
 `"private": false`. The workspace root stays `"private": true` (the monorepo
 is not published).
 
-- [ ] npmjs org access for `@singleton-sd`
-- [ ] Trusted publishing / OIDC for GitHub Actions when the first package ships
+Auth model: **Trusted Publishing (OIDC)** from GitHub Actions — same pattern as
+[`engineering/publish-npm-library`](https://github.com/singleton-sd/ai-plattform-skills)
+and the live reference
+[`poc-inkads-epaper-renderer`](https://github.com/singleton-sd/poc-inkads-epaper-renderer).
+Do **not** add `NPM_TOKEN` / `NODE_AUTH_TOKEN` or Key Vault publish secrets.
 
-Do not publish from this bootstrap PR — there are no packages yet.
+### Trusted Publisher form (every `@singleton-sd/post-kit-*` package)
+
+On each package → **Settings → Trusted publisher → GitHub Actions**:
+
+| Field | Value |
+| --- | --- |
+| Organization / user | `singleton-sd` |
+| Repository | `post-kit` (name only) |
+| Workflow filename | `release.yml` (filename only) |
+| Environment | empty |
+| Allowed action | **`npm publish`** |
+
+Packages: `types`, `email`, `compiler`, `client`, `publisher`, `editor`.
+
+### Checklist
+
+- [x] npmjs org access for `@singleton-sd`
+- [x] Per-package Trusted Publisher configured (form above)
+- [x] First versions bootstrapped interactively from clean `main`
+      (`pnpm --filter <pkg> build` then `pnpm --filter <pkg> publish --access public`)
+- [ ] After the first successful **OIDC CI** publish: Publishing access →
+      **Require 2FA and disallow tokens**
+
+### Verify a published version
+
+Prefer the version document or a pack (package-root `npm view` can 404 briefly
+after first publish even when the version exists):
+
+```bash
+curl -sS "https://registry.npmjs.org/@singleton-sd%2fpost-kit-types/0.3.0" | head
+npm pack @singleton-sd/post-kit-types@0.3.0
+```
+
+`release.yml` uses pnpm 11 + npm 11.x, refuses auth-bearing `.npmrc` files (no
+`registry-url` on `setup-node`), and runs `pnpm release:ci`, which publishes
+changed packages **before** pushing tags. `publishConfig.provenance: true` is
+for CI OIDC only — local interactive publish may need it omitted temporarily.
