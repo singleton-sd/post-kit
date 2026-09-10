@@ -55,6 +55,25 @@ describe('SaveSendBar', () => {
     assert.match(html, /disabled/);
   });
 
+  it('disables Save when validationBlocked with an accessible reason', () => {
+    const html = renderToStaticMarkup(
+      <SaveSendBar
+        saveFeedback={{ status: 'idle' }}
+        sendFeedback={{ status: 'idle' }}
+        busy={false}
+        validationBlocked={true}
+        validationBlockedReason="Fix validation errors before saving or sending a test."
+        showSendTest={true}
+        onSave={() => undefined}
+        onSendTest={() => undefined}
+      />,
+    );
+    assert.match(html, /Fix validation errors before saving/);
+    assert.match(html, new RegExp(`data-testid="${p}save-blocked-reason"`));
+    assert.match(html, new RegExp(`data-testid="${p}save"[^>]*disabled`));
+    assert.match(html, new RegExp(`data-testid="${p}send-test-submit"[^>]*disabled`));
+  });
+
   it('surfaces save failure with alert role', () => {
     const html = renderToStaticMarkup(
       <SaveSendBar

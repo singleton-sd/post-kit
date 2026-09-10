@@ -88,6 +88,22 @@ trusted server (typically `@singleton-sd/post-kit-client` server-side).
 Optional `onDirtyChange` fires when working state diverges from the seeded
 `template` prop and resets after a successful save.
 
+## Validation and accessibility
+
+`validateTemplate(files)` (also exported) checks required metadata, key charset,
+undeclared / unused variables, preview coverage, and optional `render-failed`
+from the preview pane (passed through so the compiler is not invoked twice).
+Error-severity issues disable Save and Send-test; warnings never block.
+
+Optional props:
+
+- `onValidationChange` — current `ValidationIssue[]` whenever it changes
+- `loading` — non-interactive loading shell while the host fetches files
+- `loadError` — non-interactive error shell with the host’s message
+
+Inline field errors use `aria-describedby`. The validation summary is an
+`aria-live` region; each entry focuses the responsible control.
+
 ## Preview data (synthetic only)
 
 `preview.json` is edited in the preview-data panel and used to render the

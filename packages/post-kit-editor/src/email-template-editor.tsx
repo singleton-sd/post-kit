@@ -3,10 +3,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmailBuilderCanvas } from './canvas/EmailBuilderCanvas';
+import { EditorErrorBoundary } from './EditorErrorBoundary';
+import { EditorLoadErrorState, EditorLoadingState } from './editor-shell-states';
 import { InsertionTargetProvider } from './insertion-target';
 import { MetadataPanel } from './metadata/MetadataPanel';
 import { PreviewDataEditor } from './preview/PreviewDataEditor';
 import { PreviewPane } from './preview/PreviewPane';
+import type { PreviewRenderResult } from './preview/render-template-preview';
 import { isWorkingDirty } from './save-send/dirty';
 import { SaveSendBar } from './save-send/SaveSendBar';
 import {
@@ -19,6 +22,8 @@ import {
 } from './save-send/types';
 import type { EmailBuilderDocument, TemplateSourceFiles, TemplateVariable } from './types';
 import type { TemplatePreviewData, TemplateSourceMetadata } from '@singleton-sd/post-kit-types';
+import { ValidationSummary } from './validation/ValidationSummary';
+import { hasValidationErrors, validateTemplate, type ValidationIssue } from './validation/validate';
 import { VariableCatalogue } from './variables/VariableCatalogue';
 import {
   withDocument,
@@ -60,37 +65,78 @@ export interface EmailTemplateEditorProps {
   ) => Promise<SendTestResult | void> | SendTestResult | void;
   /** Notify the host when dirty state changes (navigation guards). */
   onDirtyChange?: (dirty: boolean) => void;
+  /** Notify the host whenever validation issues change. */
+  onValidationChange?: (issues: ValidationIssue[]) => void;
   /**
    * Called with the rendered preview HTML whenever a preview render succeeds.
    * Optional — consumers can offer “open preview in a new tab” without recompiling.
    */
   onPreviewRendered?: (html: string) => void;
+  /**
+   * When true, render a non-interactive loading shell (consumer still fetching
+   * template files).
+   */
+  loading?: boolean;
+  /** When set, render a non-interactive error shell instead of the editor. */
+  loadError?: string;
   className?: string;
 }
 
 /**
  * Email template editor with metadata panel, variable catalogue, canvas,
- * preview-data editor, rendered preview pane, and Save / Send-test controls.
+ * preview-data editor, rendered preview pane, validation, and Save / Send-test.
  *
  * Holds the working `TemplateSourceFiles` in local state, seeded from the
  * `template` prop. Persistence and test sending are consumer-supplied callbacks.
  */
-export function EmailTemplateEditor({
+export function EmailTemplateEditor(props: EmailTemplateEditorProps): JSX.Element {
+  const rootClassName = [`${EDITOR_CLASS_PREFIX}root`, props.className].filter(Boolean).join(' ');
+
+  if (props.loading) {
+    return (
+      <div className={rootClassName} data-testid={`${EDITOR_CLASS_PREFIX}root`}>
+        <EditorLoadingState />
+      </div>
+    );
+  }
+
+  if (props.loadError) {
+    return (
+      <div className={rootClassName} data-testid={`${EDITOR_CLASS_PREFIX}root`}>
+        <EditorLoadErrorState message={props.loadError} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={rootClassName} data-testid={`${EDITOR_CLASS_PREFIX}root`}>
+      <EditorErrorBoundary>
+        <EmailTemplateEditorInner {...props} />
+      </EditorErrorBoundary>
+    </div>
+  );
+}
+
+function EmailTemplateEditorInner({
   template,
   availableVariables,
   onSave,
   onSendTest,
   onDirtyChange,
+  onValidationChange,
   onPreviewRendered,
-  className,
 }: EmailTemplateEditorProps): JSX.Element {
   const [workingFiles, setWorkingFiles] = useState<TemplateSourceFiles>(template);
   const [seedFiles, setSeedFiles] = useState<TemplateSourceFiles>(template);
   const [saveFeedback, setSaveFeedback] = useState<ActionFeedback>({ status: 'idle' });
   const [sendFeedback, setSendFeedback] = useState<ActionFeedback>({ status: 'idle' });
+  const [previewResult, setPreviewResult] = useState<PreviewRenderResult | null>(null);
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
+  const onValidationChangeRef = useRef(onValidationChange);
+  onValidationChangeRef.current = onValidationChange;
   const lastDirtyRef = useRef<boolean | null>(null);
+  const lastIssuesKeyRef = useRef<string | null>(null);
   /** Bumped when `template` content changes; ignores stale in-flight save/send. */
   const templateGenerationRef = useRef(0);
   const seedFilesRef = useRef(seedFiles);
@@ -104,6 +150,7 @@ export function EmailTemplateEditor({
     templateGenerationRef.current += 1;
     setSaveFeedback({ status: 'idle' });
     setSendFeedback({ status: 'idle' });
+    setPreviewResult(null);
     setWorkingFiles(template);
     setSeedFiles(template);
   }, [template]);
@@ -116,6 +163,27 @@ export function EmailTemplateEditor({
     lastDirtyRef.current = dirty;
     onDirtyChangeRef.current?.(dirty);
   }, [seedFiles, workingFiles]);
+
+  const issues = validateTemplate(workingFiles, {
+    renderError: previewResult && !previewResult.ok ? previewResult.error : null,
+  });
+
+  useEffect(() => {
+    const key = JSON.stringify(issues);
+    if (lastIssuesKeyRef.current === key) {
+      return;
+    }
+    lastIssuesKeyRef.current = key;
+    onValidationChangeRef.current?.(issues);
+  }, [issues]);
+
+  const previewPending = previewResult === null;
+  const validationBlocked = hasValidationErrors(issues) || previewPending;
+  const validationBlockedReason = previewPending
+    ? 'Wait for the preview to finish before saving or sending a test.'
+    : 'Fix validation errors before saving or sending a test.';
+  const metadataIssues = issues.filter((i) => i.field === 'metadata' || i.field === 'subject');
+  const previewDataIssues = issues.filter((i) => i.field === 'previewData');
 
   const handleDocumentChange = useCallback((document: EmailBuilderDocument) => {
     setWorkingFiles((current) => withDocument(current, document));
@@ -136,7 +204,7 @@ export function EmailTemplateEditor({
   const busy = saveFeedback.status === 'pending' || sendFeedback.status === 'pending';
 
   const handleSave = useCallback(() => {
-    if (busy) {
+    if (busy || validationBlocked) {
       return;
     }
     let payload: ReturnType<typeof buildSavePayload>;
@@ -166,11 +234,11 @@ export function EmailTemplateEditor({
         });
       }
     })();
-  }, [busy, onSave, workingFiles]);
+  }, [busy, onSave, validationBlocked, workingFiles]);
 
   const handleSendTest = useCallback(
     (recipient: string) => {
-      if (busy || !onSendTest) {
+      if (busy || validationBlocked || !onSendTest) {
         return;
       }
       let payload: ReturnType<typeof buildSavePayload>;
@@ -202,52 +270,54 @@ export function EmailTemplateEditor({
         }
       })();
     },
-    [busy, onSendTest, workingFiles],
+    [busy, onSendTest, validationBlocked, workingFiles],
   );
 
-  const rootClassName = [`${EDITOR_CLASS_PREFIX}root`, className].filter(Boolean).join(' ');
-
   return (
-    <div className={rootClassName} data-testid={`${EDITOR_CLASS_PREFIX}root`}>
-      <InsertionTargetProvider>
-        <div
-          className={`${EDITOR_CLASS_PREFIX}layout`}
-          data-testid={`${EDITOR_CLASS_PREFIX}layout`}
-        >
-          <aside className={`${EDITOR_CLASS_PREFIX}sidebar`}>
-            <SaveSendBar
-              saveFeedback={saveFeedback}
-              sendFeedback={sendFeedback}
-              busy={busy}
-              showSendTest={typeof onSendTest === 'function'}
-              onSave={handleSave}
-              onSendTest={handleSendTest}
-            />
-            <MetadataPanel
-              metadata={workingFiles.metadata}
-              previewData={workingFiles.previewData}
-              onChange={handleMetadataChange}
-            />
-            <VariableCatalogue
-              availableVariables={availableVariables}
-              metadataVariables={workingFiles.metadata.variables}
-              onMetadataVariablesChange={handleMetadataVariablesChange}
-            />
-            <PreviewDataEditor
-              declaredVariables={workingFiles.metadata.variables}
-              previewData={workingFiles.previewData}
-              onChange={handlePreviewDataChange}
-            />
-          </aside>
-          <div className={`${EDITOR_CLASS_PREFIX}main`}>
-            <EmailBuilderCanvas
-              document={workingFiles.templateJson}
-              onChange={handleDocumentChange}
-            />
-            <PreviewPane files={workingFiles} onPreviewRendered={onPreviewRendered} />
-          </div>
+    <InsertionTargetProvider>
+      <div className={`${EDITOR_CLASS_PREFIX}layout`} data-testid={`${EDITOR_CLASS_PREFIX}layout`}>
+        <aside className={`${EDITOR_CLASS_PREFIX}sidebar`} aria-label="Template settings">
+          <SaveSendBar
+            saveFeedback={saveFeedback}
+            sendFeedback={sendFeedback}
+            busy={busy}
+            validationBlocked={validationBlocked}
+            validationBlockedReason={validationBlockedReason}
+            showSendTest={typeof onSendTest === 'function'}
+            onSave={handleSave}
+            onSendTest={handleSendTest}
+          />
+          <ValidationSummary issues={issues} />
+          <MetadataPanel
+            metadata={workingFiles.metadata}
+            previewData={workingFiles.previewData}
+            onChange={handleMetadataChange}
+            issues={metadataIssues}
+          />
+          <VariableCatalogue
+            availableVariables={availableVariables}
+            metadataVariables={workingFiles.metadata.variables}
+            onMetadataVariablesChange={handleMetadataVariablesChange}
+          />
+          <PreviewDataEditor
+            declaredVariables={workingFiles.metadata.variables}
+            previewData={workingFiles.previewData}
+            onChange={handlePreviewDataChange}
+            issues={previewDataIssues}
+          />
+        </aside>
+        <div className={`${EDITOR_CLASS_PREFIX}main`} aria-label="Template canvas and preview">
+          <EmailBuilderCanvas
+            document={workingFiles.templateJson}
+            onChange={handleDocumentChange}
+          />
+          <PreviewPane
+            files={workingFiles}
+            onPreviewRendered={onPreviewRendered}
+            onPreviewResultChange={setPreviewResult}
+          />
         </div>
-      </InsertionTargetProvider>
-    </div>
+      </div>
+    </InsertionTargetProvider>
   );
 }

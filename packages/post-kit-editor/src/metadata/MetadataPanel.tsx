@@ -3,6 +3,7 @@ import type { TemplatePreviewData, TemplateSourceMetadata } from '@singleton-sd/
 
 import { EDITOR_CLASS_PREFIX } from '../email-template-editor';
 import { useRegisterInsertionTarget } from '../insertion-target';
+import { inlineIssueId, type ValidationIssue } from '../validation/validate';
 import { insertAtCursor } from './insert-at-cursor';
 import { previewSubject } from './subject-preview';
 import { isAcceptableTemplateKeyInput, templateKeyInputError } from './template-key';
@@ -11,6 +12,8 @@ export interface MetadataPanelProps {
   metadata: TemplateSourceMetadata;
   previewData: TemplatePreviewData;
   onChange: (metadata: TemplateSourceMetadata) => void;
+  /** Validation issues that belong to metadata / subject fields. */
+  issues?: readonly ValidationIssue[];
 }
 
 /**
@@ -21,9 +24,24 @@ export function MetadataPanel({
   metadata,
   previewData,
   onChange,
+  issues = [],
 }: MetadataPanelProps): JSX.Element {
   const [keyError, setKeyError] = useState<string | null>(null);
   const subjectRef = useRef<HTMLInputElement | null>(null);
+
+  const keyIssues = issues.filter(
+    (i) => i.field === 'metadata' && (i.code === 'missing-key' || i.code === 'invalid-key'),
+  );
+  const nameIssues = issues.filter((i) => i.field === 'metadata' && i.code === 'missing-name');
+  const subjectIssues = issues.filter((i) => i.field === 'subject');
+  const keyDescribedBy = [
+    keyError ? `${EDITOR_CLASS_PREFIX}meta-key-error` : null,
+    ...keyIssues.map((i) => inlineIssueId(i.code)),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const nameDescribedBy = nameIssues.map((i) => inlineIssueId(i.code)).join(' ');
+  const subjectDescribedBy = subjectIssues.map((i) => inlineIssueId(i.code, i.variable)).join(' ');
 
   const patch = useCallback(
     (partial: Partial<TemplateSourceMetadata>) => {
@@ -89,12 +107,30 @@ export function MetadataPanel({
           autoComplete="off"
           spellCheck={false}
           data-testid={`${p}meta-key`}
+          aria-invalid={keyError !== null || keyIssues.length > 0}
+          aria-describedby={keyDescribedBy || undefined}
         />
         {keyError ? (
-          <p className={`${p}metadata-error`} data-testid={`${p}meta-key-error`} role="status">
+          <p
+            id={`${p}meta-key-error`}
+            className={`${p}metadata-error`}
+            data-testid={`${p}meta-key-error`}
+            role="status"
+          >
             {keyError}
           </p>
         ) : null}
+        {keyIssues.map((issue) => (
+          <p
+            key={issue.code}
+            id={inlineIssueId(issue.code)}
+            className={`${p}metadata-error`}
+            data-testid={`${p}meta-key-validation`}
+            role="status"
+          >
+            <span aria-hidden="true">!</span> {issue.message}
+          </p>
+        ))}
       </div>
 
       <div className={`${p}metadata-field`}>
@@ -108,7 +144,20 @@ export function MetadataPanel({
           value={metadata.name}
           onChange={(event) => patch({ name: event.target.value })}
           data-testid={`${p}meta-name`}
+          aria-invalid={nameIssues.length > 0}
+          aria-describedby={nameDescribedBy || undefined}
         />
+        {nameIssues.map((issue) => (
+          <p
+            key={issue.code}
+            id={inlineIssueId(issue.code)}
+            className={`${p}metadata-error`}
+            data-testid={`${p}meta-name-validation`}
+            role="status"
+          >
+            <span aria-hidden="true">!</span> {issue.message}
+          </p>
+        ))}
       </div>
 
       <div className={`${p}metadata-field`}>
@@ -147,7 +196,20 @@ export function MetadataPanel({
           onFocus={subjectFocus.onFocus}
           onBlur={subjectFocus.onBlur}
           data-testid={`${p}meta-subject`}
+          aria-invalid={subjectIssues.length > 0}
+          aria-describedby={subjectDescribedBy || undefined}
         />
+        {subjectIssues.map((issue) => (
+          <p
+            key={`${issue.code}:${issue.variable ?? ''}`}
+            id={inlineIssueId(issue.code, issue.variable)}
+            className={`${p}metadata-error`}
+            data-testid={`${p}meta-subject-validation`}
+            role="status"
+          >
+            <span aria-hidden="true">!</span> {issue.message}
+          </p>
+        ))}
         <p className={`${p}metadata-subject-preview`} data-testid={`${p}meta-subject-preview`}>
           Preview: {subjectPreview}
         </p>

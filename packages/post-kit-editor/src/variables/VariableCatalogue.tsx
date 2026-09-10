@@ -98,7 +98,13 @@ export function VariableCatalogue({
     'Focus the subject field (or another editable target) before inserting a variable.';
 
   return (
-    <section className={`${p}variables`} data-testid={`${p}variables`}>
+    <section
+      id={`${p}variables`}
+      className={`${p}variables`}
+      data-testid={`${p}variables`}
+      tabIndex={-1}
+      aria-label="Available variables"
+    >
       <h2 className={`${p}variables-heading`}>Available variables</h2>
 
       {/* Hidden fallback for clipboard-unavailable environments */}

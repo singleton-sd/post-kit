@@ -17,6 +17,11 @@ export interface PreviewPaneProps {
    * Consumers can use this for “open in new tab” without re-compiling.
    */
   onPreviewRendered?: (html: string) => void;
+  /**
+   * Notifies the parent when preview render succeeds or fails so validation
+   * can surface `render-failed` without compiling twice.
+   */
+  onPreviewResultChange?: (result: PreviewRenderResult | null) => void;
   /** Debounce window for re-renders (ms). Defaults to {@link PREVIEW_DEBOUNCE_MS}. */
   debounceMs?: number;
 }
@@ -32,6 +37,7 @@ export interface PreviewPaneProps {
 export function PreviewPane({
   files,
   onPreviewRendered,
+  onPreviewResultChange,
   debounceMs = PREVIEW_DEBOUNCE_MS,
 }: PreviewPaneProps): JSX.Element {
   const p = EDITOR_CLASS_PREFIX;
@@ -39,10 +45,15 @@ export function PreviewPane({
   const [pending, setPending] = useState(true);
   const onPreviewRenderedRef = useRef(onPreviewRendered);
   onPreviewRenderedRef.current = onPreviewRendered;
+  const onPreviewResultChangeRef = useRef(onPreviewResultChange);
+  onPreviewResultChangeRef.current = onPreviewResultChange;
   const requestIdRef = useRef(0);
 
   useEffect(() => {
     setPending(true);
+    // Invalidate parent gating immediately so a prior successful preview cannot
+    // unblock Save/Send-test while a newer debounced render is still pending.
+    onPreviewResultChangeRef.current?.(null);
     const requestId = ++requestIdRef.current;
     const timer = setTimeout(() => {
       void (async () => {
@@ -53,6 +64,7 @@ export function PreviewPane({
         }
         setResult(next);
         setPending(false);
+        onPreviewResultChangeRef.current?.(next);
         if (next.ok) {
           onPreviewRenderedRef.current?.(next.html);
         }
