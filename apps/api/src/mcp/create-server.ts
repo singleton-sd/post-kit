@@ -124,8 +124,10 @@ export function createPostkitMcpServer(options: CreatePostkitMcpServerOptions): 
     work: () => Promise<T>,
   ): Promise<T> => {
     const startMs = now();
-    requireScope(principal, scopeForMcpTool(tool));
     try {
+      // Scope check inside try so AuthError emits mcp.tool.failed / auth_error
+      // (outer tool handlers catch and return MCP error results without failing transport).
+      requireScope(principal, scopeForMcpTool(tool));
       const result = await work();
       logger.info('mcp.tool.completed', {
         mcpMethod: 'tools/call',

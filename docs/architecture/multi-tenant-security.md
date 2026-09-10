@@ -160,8 +160,10 @@ State these plainly; do not assume any of them exist.
   send and MCP `runTool`. Credentials still come from plaintext
   `TENANT_KEY_MAP` with default PoC scopes for every map entry. Revocation
   still means editing `TENANT_KEY_MAP`. Hashed storage, expiry, and per-key
-  revoke land in Slice B — there is no per-token audit trail beyond
-  `tenantId` / opaque principal id in the logs.
+  revoke land in Slice B. Slice A auditing is **tenant-level only**: REST and
+  MCP structured logs record `tenantId` and `environment`, not `principal.id`,
+  so operators cannot distinguish credentials that share the same tenant and
+  environment.
 - **No per-tenant scoping of the sender identity.** `EMAIL_FROM_ADDRESS` and
   `EMAIL_FROM_NAME` are process-wide, so all tenants on a deployment share the
   configured from address.

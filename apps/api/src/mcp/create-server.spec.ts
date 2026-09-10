@@ -113,7 +113,7 @@ describe('PostKit MCP tools', () => {
       ...PRINCIPAL,
       scopes: ['templates:read'],
     };
-    const { client, server } = await connectClient(memoryStore(), limited);
+    const { client, server, lines } = await connectClient(memoryStore(), limited);
     try {
       const preview = await client.callTool({
         name: 'postkit.preview_template',
@@ -126,6 +126,16 @@ describe('PostKit MCP tools', () => {
       };
       assert.equal(body.code, PostKitErrorCode.UNAUTHORIZED);
       assert.equal(body.error, 'The credential does not have the required permission.');
+
+      const authFailed = lines
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .find(
+          (entry) =>
+            entry.msg === 'mcp.tool.failed' && entry.mcpTool === 'postkit.preview_template',
+        );
+      assert.ok(authFailed, 'expected mcp.tool.failed log for authorization denial');
+      assert.equal(authFailed.outcome, 'auth_error');
+      assert.equal(authFailed.errorCode, PostKitErrorCode.UNAUTHORIZED);
 
       const listed = await client.callTool({ name: 'postkit.list_templates', arguments: {} });
       assert.notEqual(listed.isError, true);
