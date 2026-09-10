@@ -1,4 +1,5 @@
-// PostKit contact/send Azure Functions — Linux Consumption in rg-ssd-global.
+// PostKit contact/send Azure Functions — Linux Consumption in rg-postkit-prod-ae.
+// Target subscription name: ssd-post-kit (subscription ID via GitHub Variable — do not hardcode).
 // Secrets: FORWARD_EMAIL_TOKEN from Key Vault via App Configuration KV refs.
 // Non-secret settings: Azure App Configuration (Free) ssd-postkit-appcs-prod-ae
 // CAF: ssd-postkit-api-prod-ae
@@ -15,13 +16,16 @@ param storageAccountName string = 'ssdpostkitstprodae'
 @description('App Service plan name (Y1 Linux Consumption)')
 param planName string = 'ssd-postkit-plan-prod-ae'
 
-@description('Existing Key Vault name in this resource group')
-param keyVaultName string = 'ssd-global-kv-prod-ae'
+@description('Key Vault name — preferred dedicated vault in this RG (ssd-postkit-kv-prod-ae)')
+param keyVaultName string = 'ssd-postkit-kv-prod-ae'
+
+@description('Create keyVaultName in this RG. Set false to reference an existing vault in this same RG. Never pass a name that already exists elsewhere with create=true (KV names are globally unique). Cross-subscription shared vaults are out of scope for this template — grant RBAC and App Config KV refs manually.')
+param createKeyVault bool = true
 
 @description('CAF App Configuration store name')
 param appConfigName string = 'ssd-postkit-appcs-prod-ae'
 
-@description('App Configuration SKU — Free is available in this subscription')
+@description('App Configuration SKU — Free: 3 stores/region/subscription, 1000 req/day, 10 MB')
 @allowed(['Free', 'Developer', 'Standard'])
 param appConfigSku string = 'Free'
 
@@ -58,7 +62,23 @@ resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   }
 }
 
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+resource keyVaultNew 'Microsoft.KeyVault/vaults@2023-07-01' = if (createKeyVault) {
+  name: keyVaultName
+  location: location
+  properties: {
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+    tenantId: tenant().tenantId
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 90
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource keyVaultExisting 'Microsoft.KeyVault/vaults@2023-07-01' existing = if (!createKeyVault) {
   name: keyVaultName
 }
 
@@ -132,9 +152,9 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
-resource kvFunctionSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, functionApp.id, roleKeyVaultSecretsUser)
-  scope: keyVault
+resource kvFunctionSecretsUserNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (createKeyVault) {
+  name: guid(keyVaultNew.id, functionApp.id, roleKeyVaultSecretsUser)
+  scope: keyVaultNew
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser)
     principalId: functionApp.identity.principalId
@@ -142,9 +162,29 @@ resource kvFunctionSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-
   }
 }
 
-resource kvAppConfigSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, appConfig.id, roleKeyVaultSecretsUser)
-  scope: keyVault
+resource kvFunctionSecretsUserExisting 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!createKeyVault) {
+  name: guid(keyVaultExisting.id, functionApp.id, roleKeyVaultSecretsUser)
+  scope: keyVaultExisting
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser)
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource kvAppConfigSecretsUserNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (createKeyVault) {
+  name: guid(keyVaultNew.id, appConfig.id, roleKeyVaultSecretsUser)
+  scope: keyVaultNew
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser)
+    principalId: appConfig.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource kvAppConfigSecretsUserExisting 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!createKeyVault) {
+  name: guid(keyVaultExisting.id, appConfig.id, roleKeyVaultSecretsUser)
+  scope: keyVaultExisting
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser)
     principalId: appConfig.identity.principalId
@@ -172,9 +212,19 @@ resource appConfigOidcOwner 'Microsoft.Authorization/roleAssignments@2022-04-01'
   }
 }
 
-resource kvOidcSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(githubOidcPrincipalId)) {
-  name: guid(keyVault.id, githubOidcPrincipalId, roleKeyVaultSecretsUser)
-  scope: keyVault
+resource kvOidcSecretsUserNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (createKeyVault && !empty(githubOidcPrincipalId)) {
+  name: guid(keyVaultNew.id, githubOidcPrincipalId, roleKeyVaultSecretsUser)
+  scope: keyVaultNew
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser)
+    principalId: githubOidcPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource kvOidcSecretsUserExisting 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!createKeyVault && !empty(githubOidcPrincipalId)) {
+  name: guid(keyVaultExisting.id, githubOidcPrincipalId, roleKeyVaultSecretsUser)
+  scope: keyVaultExisting
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleKeyVaultSecretsUser)
     principalId: githubOidcPrincipalId
@@ -188,3 +238,5 @@ output functionAppPrincipalId string = functionApp.identity.principalId
 output baseUrl string = 'https://${functionApp.properties.defaultHostName}'
 output appConfigName string = appConfig.name
 output appConfigEndpoint string = appConfig.properties.endpoint
+output keyVaultName string = keyVaultName
+output createKeyVault bool = createKeyVault

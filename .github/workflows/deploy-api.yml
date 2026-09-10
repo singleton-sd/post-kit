@@ -1,4 +1,5 @@
-# PostKit Function App — Linux Consumption in rg-ssd-global.
+# PostKit Function App — Linux Consumption in rg-postkit-prod-ae.
+# Target subscription name: ssd-post-kit (ID via vars.AZURE_SUBSCRIPTION_ID — TBD until #116 human gate).
 # Secrets: NEVER in GitHub Secrets. OIDC → Key Vault `forwardemail-api-key`.
 # Required Variables: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
 # If OIDC Variables are missing, the deploy job is skipped (workflow succeeds).
@@ -21,10 +22,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AZURE_RESOURCE_GROUP: rg-ssd-global
+  AZURE_RESOURCE_GROUP: rg-postkit-prod-ae
+  AZURE_LOCATION: australiaeast
   AZURE_FUNCTIONAPP_NAME: ssd-postkit-api-prod-ae
-  AZURE_KEY_VAULT_NAME: ssd-global-kv-prod-ae
+  AZURE_KEY_VAULT_NAME: ssd-postkit-kv-prod-ae
   APP_CONFIG_NAME: ssd-postkit-appcs-prod-ae
+  KEY_VAULT_URI: https://ssd-postkit-kv-prod-ae.vault.azure.net
 
 jobs:
   build:
@@ -89,6 +92,14 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure resource group
+        run: |
+          set -euo pipefail
+          az group create \
+            --name "$AZURE_RESOURCE_GROUP" \
+            --location "$AZURE_LOCATION" \
+            --output none
 
       - name: Deploy Function App infra
         run: |
