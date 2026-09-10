@@ -25,9 +25,9 @@ require approving reviews.
    required-PR / required-status-check rules reject that push (`GH006`).
    Repo-level rulesets also cannot list the GitHub Actions integration as a
    bypass actor unless configured at the **organization** ruleset layer
-   (`admin:org`). Until an org ruleset grants Actions bypass for PR +
-   `Lint / test / build`, keep those two requirements **off** on classic
-   branch protection so Release can succeed.
+   (`admin:org`). Until an org ruleset requires PR + `Lint / test / build` for
+   humans and lists **GitHub Actions** as a bypass actor for `release.yml`
+   only, keep those two classic requirements **off** so Release can succeed.
 
    **Process vs GitHub enforcement:** Product changes still land only via
    human-merged PRs after `Lint / test / build` is green — agents never push
