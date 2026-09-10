@@ -122,8 +122,9 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
       request.headers.get('x-correlation-id') ?? undefined,
     );
     const logger: Logger = (deps.createLogger ?? createLogger)(correlationId);
-    const headers = {
+    const headers: Record<string, string> = {
       'X-Correlation-Id': correlationId,
+      ...MCP_CORS_HEADERS,
     };
 
     logger.info('mcp.request.received', {
@@ -156,7 +157,6 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
         status: 204,
         headers: {
           ...headers,
-          ...MCP_CORS_HEADERS,
           'Access-Control-Allow-Methods': 'POST, OPTIONS',
           'Access-Control-Allow-Headers':
             'Content-Type, Authorization, X-Correlation-Id, mcp-session-id, mcp-protocol-version, Last-Event-ID',
@@ -219,7 +219,6 @@ export function createMcpHandler(deps: McpHandlerDependencies) {
 
       const responseHeaders = {
         ...headers,
-        ...MCP_CORS_HEADERS,
         ...(azureResponse.headers ?? {}),
       };
 

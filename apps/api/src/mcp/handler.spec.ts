@@ -45,6 +45,8 @@ function fakeRequest(options: {
   method?: string;
   authorization?: string | null;
   body?: unknown;
+  /** When set, `arrayBuffer()` rejects (forces MCP transport failure after auth). */
+  arrayBufferError?: Error;
 }): HttpRequest {
   const headers = new Map<string, string>();
   if (options.authorization !== null && options.authorization !== undefined) {
@@ -74,7 +76,12 @@ function fakeRequest(options: {
       },
     },
     text: async () => bodyText,
-    arrayBuffer: async () => Buffer.from(bodyText, 'utf8'),
+    arrayBuffer: async () => {
+      if (options.arrayBufferError) {
+        throw options.arrayBufferError;
+      }
+      return Buffer.from(bodyText, 'utf8');
+    },
     json: async () => (bodyText ? JSON.parse(bodyText) : null),
   } as unknown as HttpRequest;
 }
@@ -99,6 +106,11 @@ describe('createMcpHandler', () => {
     );
     assert.equal(response.status, 401);
     assert.equal((response.jsonBody as { code: string }).code, PostKitErrorCode.UNAUTHENTICATED);
+    assert.equal(response.headers?.['Access-Control-Allow-Origin'], '*');
+    assert.equal(
+      response.headers?.['Access-Control-Expose-Headers'],
+      'X-Correlation-Id, mcp-session-id, mcp-protocol-version',
+    );
   });
 
   it('rejects unknown Bearer credentials with 403', async () => {
@@ -118,6 +130,7 @@ describe('createMcpHandler', () => {
     );
     assert.equal(response.status, 403);
     assert.equal((response.jsonBody as { code: string }).code, PostKitErrorCode.UNAUTHORIZED);
+    assert.equal(response.headers?.['Access-Control-Allow-Origin'], '*');
   });
 
   it('returns 405 for GET (stateless JSON mode — no SSE standalone stream)', async () => {
@@ -129,6 +142,30 @@ describe('createMcpHandler', () => {
     });
     const response = await handler(fakeRequest({ method: 'GET' }), context);
     assert.equal(response.status, 405);
+    assert.equal(response.headers?.['Access-Control-Allow-Origin'], '*');
+  });
+
+  it('includes CORS headers on transport failure (500)', async () => {
+    const handler = createMcpHandler({
+      tenantResolver: new ApiKeyTenantResolver({
+        [TOKEN]: { tenantId: TENANT.tenantId, environment: TENANT.environment },
+      }),
+      templateStore: fakeStore(),
+    });
+
+    const response = await handler(
+      fakeRequest({
+        body: { jsonrpc: '2.0', method: 'initialize', id: 1 },
+        arrayBufferError: new Error('simulated transport failure'),
+      }),
+      context,
+    );
+    assert.equal(response.status, 500);
+    assert.equal(response.headers?.['Access-Control-Allow-Origin'], '*');
+    assert.equal(
+      response.headers?.['Access-Control-Expose-Headers'],
+      'X-Correlation-Id, mcp-session-id, mcp-protocol-version',
+    );
   });
 
   it('accepts initialize over POST with valid credentials', async () => {
