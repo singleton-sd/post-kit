@@ -177,7 +177,11 @@ function EmailTemplateEditorInner({
     onValidationChangeRef.current?.(issues);
   }, [issues]);
 
-  const validationBlocked = hasValidationErrors(issues);
+  const previewPending = previewResult === null;
+  const validationBlocked = hasValidationErrors(issues) || previewPending;
+  const validationBlockedReason = previewPending
+    ? 'Wait for the preview to finish before saving or sending a test.'
+    : 'Fix validation errors before saving or sending a test.';
   const metadataIssues = issues.filter((i) => i.field === 'metadata' || i.field === 'subject');
   const previewDataIssues = issues.filter((i) => i.field === 'previewData');
 
@@ -278,7 +282,7 @@ function EmailTemplateEditorInner({
             sendFeedback={sendFeedback}
             busy={busy}
             validationBlocked={validationBlocked}
-            validationBlockedReason="Fix validation errors before saving or sending a test."
+            validationBlockedReason={validationBlockedReason}
             showSendTest={typeof onSendTest === 'function'}
             onSave={handleSave}
             onSendTest={handleSendTest}

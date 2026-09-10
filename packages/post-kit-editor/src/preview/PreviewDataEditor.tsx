@@ -2,7 +2,7 @@ import React, { useCallback, useId, useState } from 'react';
 import type { TemplatePreviewData } from '@singleton-sd/post-kit-types';
 
 import { EDITOR_CLASS_PREFIX } from '../email-template-editor';
-import { inlineIssueId, type ValidationIssue } from '../validation/validate';
+import { domIdSegment, inlineIssueId, type ValidationIssue } from '../validation/validate';
 import { addPreviewKey, buildPreviewRows, removePreviewKey, setPreviewValue } from './preview-rows';
 
 export interface PreviewDataEditorProps {
@@ -80,6 +80,7 @@ export function PreviewDataEditor({
         {rows.map((row) => {
           const rowIssues = issuesForKey(row.key);
           const describedBy = rowIssues.map((i) => inlineIssueId(i.code, i.variable)).join(' ');
+          const inputId = `${p}preview-${domIdSegment(row.key)}`;
           return (
             <li
               key={row.key}
@@ -88,7 +89,7 @@ export function PreviewDataEditor({
               data-extra={row.extra ? 'true' : 'false'}
               data-key={row.key}
             >
-              <label className={`${p}preview-data-key`} htmlFor={`${p}preview-${row.key}`}>
+              <label className={`${p}preview-data-key`} htmlFor={inputId}>
                 {row.key}
                 {row.extra ? (
                   <span
@@ -100,7 +101,7 @@ export function PreviewDataEditor({
                 ) : null}
               </label>
               <input
-                id={`${p}preview-${row.key}`}
+                id={inputId}
                 className={`${p}preview-data-value`}
                 type="text"
                 value={row.value}

@@ -163,7 +163,7 @@ export function hasValidationErrors(issues: readonly ValidationIssue[]): boolean
 
 /**
  * DOM id of the control that owns an issue (matches MetadataPanel /
- * PreviewDataEditor / canvas ids).
+ * PreviewDataEditor / canvas / variables ids).
  */
 export function focusTargetIdForIssue(issue: ValidationIssue): string {
   const p = 'pk-editor-';
@@ -175,20 +175,31 @@ export function focusTargetIdForIssue(issue: ValidationIssue): string {
       if (issue.code === 'missing-name') {
         return `${p}meta-name`;
       }
+      if (issue.code === 'unused-variable') {
+        return `${p}variables`;
+      }
       return `${p}meta-key`;
     case 'subject':
       return `${p}meta-subject`;
     case 'document':
       return `${p}canvas`;
     case 'previewData':
-      return issue.variable ? `${p}preview-${issue.variable}` : `${p}preview-data`;
+      return issue.variable ? `${p}preview-${domIdSegment(issue.variable)}` : `${p}preview-data`;
     default:
       return `${p}root`;
   }
 }
 
+/**
+ * Encode a variable/key name into a single DOM id token (no whitespace) so
+ * `aria-describedby` lists stay valid.
+ */
+export function domIdSegment(value: string): string {
+  return encodeURIComponent(value).replace(/%/g, '_');
+}
+
 /** Element id for an inline issue description (aria-describedby). */
 export function inlineIssueId(code: string, variable?: string): string {
-  const suffix = variable ? `${code}-${variable}` : code;
+  const suffix = variable ? `${code}-${domIdSegment(variable)}` : code;
   return `pk-editor-issue-${suffix}`;
 }

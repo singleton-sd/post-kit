@@ -8,7 +8,12 @@ import {
   extractPlaceholdersFromDocument,
   extractPlaceholdersFromText,
 } from './extract-placeholders';
-import { hasValidationErrors, validateTemplate } from './validate';
+import {
+  hasValidationErrors,
+  focusTargetIdForIssue,
+  inlineIssueId,
+  validateTemplate,
+} from './validate';
 
 const base: TemplateSourceFiles = {
   templateJson: {
@@ -142,5 +147,31 @@ describe('validateTemplate', () => {
     };
     const issues = validateTemplate(files);
     assert.equal(hasValidationErrors(issues), false);
+  });
+
+  it('maps unused-variable focus to the variables catalogue', () => {
+    const target = focusTargetIdForIssue({
+      severity: 'warning',
+      code: 'unused-variable',
+      message: 'unused',
+      field: 'metadata',
+      variable: 'name',
+    });
+    assert.equal(target, 'pk-editor-variables');
+  });
+
+  it('encodes whitespace variable names in aria/focus ids', () => {
+    const issueId = inlineIssueId('extra-preview-value', 'first name');
+    assert.equal(issueId.includes(' '), false);
+    assert.match(issueId, /first/);
+    const focus = focusTargetIdForIssue({
+      severity: 'warning',
+      code: 'extra-preview-value',
+      message: 'extra',
+      field: 'previewData',
+      variable: 'first name',
+    });
+    assert.equal(focus.includes(' '), false);
+    assert.equal(focus, `pk-editor-preview-${encodeURIComponent('first name').replace(/%/g, '_')}`);
   });
 });

@@ -23,6 +23,7 @@ export function EmailBuilderCanvas({
         id={`${EDITOR_CLASS_PREFIX}canvas`}
         className={`${EDITOR_CLASS_PREFIX}canvas`}
         data-testid={`${EDITOR_CLASS_PREFIX}canvas`}
+        role="region"
         tabIndex={-1}
         aria-label="Email document canvas"
       >
@@ -37,6 +38,7 @@ export function EmailBuilderCanvas({
         id={`${EDITOR_CLASS_PREFIX}canvas`}
         className={`${EDITOR_CLASS_PREFIX}canvas`}
         data-testid={`${EDITOR_CLASS_PREFIX}canvas`}
+        role="region"
         tabIndex={-1}
         aria-label="Email document canvas"
       >

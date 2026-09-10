@@ -51,6 +51,9 @@ export function PreviewPane({
 
   useEffect(() => {
     setPending(true);
+    // Invalidate parent gating immediately so a prior successful preview cannot
+    // unblock Save/Send-test while a newer debounced render is still pending.
+    onPreviewResultChangeRef.current?.(null);
     const requestId = ++requestIdRef.current;
     const timer = setTimeout(() => {
       void (async () => {

@@ -136,9 +136,15 @@ describe('EmailTemplateEditor', () => {
     assert.match(html, new RegExp(`data-testid="${EDITOR_CLASS_PREFIX}validation"`));
     assert.match(html, /aria-live="polite"/);
     assert.match(html, /missing-name/);
-    assert.match(html, /Fix validation errors before saving/);
+    // Preview has not settled on SSR, so gating may cite preview OR validation.
     assert.match(html, new RegExp(`data-testid="${EDITOR_CLASS_PREFIX}save"[^>]*disabled`));
     assert.match(html, /aria-describedby/);
+  });
+
+  it('blocks Save while preview is still pending after mount', () => {
+    const html = renderToStaticMarkup(<EmailTemplateEditor {...baseProps} />);
+    assert.match(html, /Wait for the preview to finish/);
+    assert.match(html, new RegExp(`data-testid="${EDITOR_CLASS_PREFIX}save"[^>]*disabled`));
   });
 });
 

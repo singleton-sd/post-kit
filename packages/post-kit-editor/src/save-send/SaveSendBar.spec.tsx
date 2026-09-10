@@ -70,7 +70,8 @@ describe('SaveSendBar', () => {
     );
     assert.match(html, /Fix validation errors before saving/);
     assert.match(html, new RegExp(`data-testid="${p}save-blocked-reason"`));
-    assert.match(html, /disabled/);
+    assert.match(html, new RegExp(`data-testid="${p}save"[^>]*disabled`));
+    assert.match(html, new RegExp(`data-testid="${p}send-test-submit"[^>]*disabled`));
   });
 
   it('surfaces save failure with alert role', () => {
