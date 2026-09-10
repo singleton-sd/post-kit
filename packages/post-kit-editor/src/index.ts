@@ -10,3 +10,4 @@ export {
 } from './email-template-editor';
 export { EmailBuilderCanvas, type EmailBuilderCanvasProps } from './canvas/EmailBuilderCanvas';
 export { loadTemplateSource, serializeTemplateSource, TemplateSourceError } from './serialization';
+export type { SerializedTemplateSource, SaveResult, SendTestResult } from './save-send/types';
