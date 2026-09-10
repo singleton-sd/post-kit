@@ -4,7 +4,8 @@ Where the tenant and environment boundaries actually sit, what enforces them,
 and what PostKit does not enforce yet.
 
 Implemented in
-[`apps/api/src/tenant/api-key-tenant-resolver.ts`](../../apps/api/src/tenant/api-key-tenant-resolver.ts),
+[`apps/api/src/auth/`](../../apps/api/src/auth/) (`ApiKeyAuthenticator`,
+hashed registry parse),
 [`apps/api/src/templates/blob-template-store.ts`](../../apps/api/src/templates/blob-template-store.ts),
 [`apps/api/src/functions/send.ts`](../../apps/api/src/functions/send.ts), and
 [`packages/post-kit-publisher/src/path-safety.ts`](../../packages/post-kit-publisher/src/path-safety.ts).
@@ -17,18 +18,38 @@ A caller sends:
 Authorization: Bearer <token>
 ```
 
-`ApiKeyTenantResolver` looks the token up in a `TenantKeyMap` and returns a
-`TenantContext` of `{ tenantId, environment }`. The map is injected at
-construction — in production it is parsed from the `TENANT_KEY_MAP`
-environment variable as JSON (an unparseable value yields an empty map, so
-every request then fails closed with `403 UNAUTHORIZED`).
+`ApiKeyAuthenticator` resolves a shared `Principal` (tenant, environment,
+scopes, opaque `id`). New registrations store only a SHA-256 hex digest of the
+token in Key Vault secret `tenant-key-map` / env `TENANT_KEY_MAP` (schema v2).
+Legacy plaintext map entries remain dual-readable under `legacyPlaintext` (or
+as a pure legacy document) until operators re-register. An unparseable value
+yields an empty registry, so every request then fails closed with
+`403 UNAUTHORIZED`.
 
-Shape, with placeholder values only:
+Schema v2 shape (placeholder values only — never commit real tokens or hashes
+from production):
 
 ```json
 {
-  "<token-for-acme-production>": { "tenantId": "acme", "environment": "production" },
-  "<token-for-acme-development>": { "tenantId": "acme", "environment": "development" }
+  "schemaVersion": 2,
+  "keys": {
+    "ak_<truncated-sha256>": {
+      "keyHash": "<sha256-hex of utf8 token>",
+      "tenantId": "acme",
+      "environment": "development",
+      "scopes": [
+        "templates:read",
+        "templates:validate",
+        "templates:preview",
+        "email:send"
+      ],
+      "revokedAt": null,
+      "expiresAt": null
+    }
+  },
+  "legacyPlaintext": {
+    "<legacy-token>": { "tenantId": "acme", "environment": "production" }
+  }
 }
 ```
 
@@ -38,23 +59,39 @@ Consequences that follow directly from this design:
   is no way for a caller to select a tenant or an environment per request. A
   tenant that needs `development` and `production` access needs two tokens.
 - **`tenantId` is never accepted from the request body.** `SendRequest` has no
-  tenant field, and the handler only ever uses the resolver's output.
-- Resolver failures are distinguished: a missing `Authorization` header, a
+  tenant field, and the handler only ever uses the authenticator's output.
+- Auth failures are distinguished: a missing `Authorization` header, a
   non-Bearer scheme, or an empty token give `401 UNAUTHENTICATED`; a
-  syntactically fine token that is not in the map gives `403 UNAUTHORIZED`.
+  syntactically fine token that is unknown, revoked, or expired gives
+  `403 UNAUTHORIZED`.
 - The Bearer scheme is matched case-insensitively (`bearer` is accepted) with
   one or more spaces before the credential.
-- Token lookup uses `Object.prototype.hasOwnProperty`, so prototype-chain
-  names such as `toString` or `__proto__` cannot be used as valid tokens.
+- Hashed lookup compares digests with constant-time equality. Legacy plaintext
+  lookup uses `Object.prototype.hasOwnProperty`, so prototype-chain names such
+  as `toString` or `__proto__` cannot be used as valid tokens.
 - The token value is never included in an error message or a log entry. Logs
-  carry only the declared `LogEntry` fields — `correlationId`, `tenantId`,
-  `environment`, `templateKey`, `outcome`, `durationMs`, `providerMessageId`,
-  `failureCategory`, `recipientHash`, and `errorCode`. Recipient addresses and
-  variable values are never logged.
+  carry only the declared `LogEntry` fields — including opaque `principalId`
+  (`ak_…`) alongside `tenantId` / `environment` so operators can distinguish
+  credentials that share a tenant slice. Recipient addresses and variable
+  values are never logged.
 
 The Azure Functions binding uses `authLevel: 'anonymous'`. That is
 deliberate: PostKit performs its own authentication, and no Functions host key
 is involved in tenant identity.
+
+### Cutover: dropping plaintext
+
+1. Register (or re-register) each consumer with
+   `./scripts/register-tenant-api-key.sh` so the digest lands under `keys`.
+   Re-registering a legacy token moves it out of `legacyPlaintext`.
+2. Confirm consumers use the shown-once plaintext from registration (or the
+   existing legacy token until re-issued).
+3. When `legacyPlaintext` is empty, remove the property from the Key Vault
+   secret. Pure legacy documents without `schemaVersion` still authenticate
+   until migrated; prefer converting on the next registration.
+
+Revoke a hashed key by setting `revokedAt` to an ISO-8601 timestamp (or delete
+the record). Optional `expiresAt` rejects the credential after that instant.
 
 ## Environment separation is a storage-path boundary
 
@@ -75,15 +112,14 @@ On the publish side, `post-kit-publisher` asserts the environment is one of
 the three known values before building any path, so a typo cannot create a
 fourth pseudo-environment directory.
 
-The read side does not have that assertion. `parseTenantKeyMap()` in the send
-handler casts the parsed `TENANT_KEY_MAP` JSON to `TenantKeyMap` without
-validating it, and `BlobTemplateStore.load()` interpolates `tenantId` and
-`environment` into the path without re-checking them (only `templateKey` is
-re-validated). A malformed map entry — a `tenantId` containing `/` or `..`, or
-an `environment` outside the three known values — would therefore produce an
-unintended blob prefix. `TENANT_KEY_MAP` is trusted operator configuration, not
-caller input, so this is a configuration-integrity concern rather than a
-request-level bypass; see **What is not enforced yet**.
+The read side does not have that assertion. Registry parse validates
+environments on hashed and legacy entries, but `BlobTemplateStore.load()`
+still interpolates `tenantId` into the path without re-checking path-safety
+characters (only `templateKey` is re-validated). A malformed map entry — a
+`tenantId` containing `/` or `..` — would therefore produce an unintended blob
+prefix. `TENANT_KEY_MAP` is trusted operator configuration, not caller input,
+so this is a configuration-integrity concern rather than a request-level
+bypass; see **What is not enforced yet**.
 
 Note the scope of the boundary: it isolates **template content**. Provider
 credentials, the from-address, and the storage account are process-level
@@ -154,16 +190,10 @@ State these plainly; do not assume any of them exist.
 - **No signed webhooks and no delivery-event callbacks.** PostKit returns a
   synchronous `sent` status only; there is no bounce, complaint, or delivery
   notification surface.
-- **No token expiry, rotation, or revocation mechanism (Slice B of #83).**
-  Slice A introduces a shared `Principal` + scopes (`templates:read`,
-  `templates:validate`, `templates:preview`, `email:send`) enforced by REST
-  send and MCP `runTool`. Credentials still come from plaintext
-  `TENANT_KEY_MAP` with default PoC scopes for every map entry. Revocation
-  still means editing `TENANT_KEY_MAP`. Hashed storage, expiry, and per-key
-  revoke land in Slice B. Slice A auditing is **tenant-level only**: REST and
-  MCP structured logs record `tenantId` and `environment`, not `principal.id`,
-  so operators cannot distinguish credentials that share the same tenant and
-  environment.
+- **Hashed API keys with revoke/expiry (Slice B of #83 / #132) are in place**
+  for new registrations. Operators still manage revoke/expiry by editing the
+  Key Vault registry (no admin UI). Legacy plaintext dual-read remains until
+  cutover (see above). Entra ID for humans is still later (#84–#87).
 - **No per-tenant scoping of the sender identity.** `EMAIL_FROM_ADDRESS` and
   `EMAIL_FROM_NAME` are process-wide, so all tenants on a deployment share the
   configured from address.
@@ -178,11 +208,10 @@ State these plainly; do not assume any of them exist.
   retry of the same key after those can still double-deliver at the provider.
   See [`send-idempotency.md`](./send-idempotency.md) and
   [`send-timeout-retry.md`](./send-timeout-retry.md).
-- **No validation of `TENANT_KEY_MAP` contents.** The JSON is cast to
-  `TenantKeyMap` and its `tenantId` / `environment` values reach the blob path
-  unchecked, so an operator typo can silently point a credential at an
-  unintended prefix instead of failing loudly. Tracked in
-  [#59](https://github.com/singleton-sd/post-kit/issues/59).
+- **Limited validation of `TENANT_KEY_MAP` contents.** Schema v2 and legacy
+  parse validate `environment` / `scopes` / `keyHash` shape, but `tenantId`
+  path-safety characters are not re-checked before blob interpolation. Tracked
+  in [#59](https://github.com/singleton-sd/post-kit/issues/59).
 
 Hardening in these areas — additional providers, observability, reliability,
 and security controls — is tracked by

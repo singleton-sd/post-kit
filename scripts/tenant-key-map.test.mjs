@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 
 import {
   generateTenantApiToken,
+  hashApiKey,
   isTenantEnvironment,
-  parseTenantKeyMapJson,
+  parseTenantKeyRegistryJson,
+  principalIdFromApiKey,
+  serializeTenantKeyRegistry,
   tenantKeyMapKeyVaultReference,
-  upsertTenantKeyMapEntry,
+  upsertHashedKeyRecord,
 } from './tenant-key-map.mjs';
 
 describe('isTenantEnvironment', () => {
@@ -31,55 +35,127 @@ describe('generateTenantApiToken', () => {
   });
 });
 
-describe('parseTenantKeyMapJson', () => {
-  it('returns empty object for blank input', () => {
-    assert.deepEqual(parseTenantKeyMapJson(''), {});
-    assert.deepEqual(parseTenantKeyMapJson(undefined), {});
+describe('hashApiKey / principalIdFromApiKey', () => {
+  it('matches API truncated principal id and never equals the raw token', () => {
+    const token = 'tk_dev_test_fixture_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const hash = hashApiKey(token);
+    assert.equal(hash, createHash('sha256').update(token, 'utf8').digest('hex'));
+    assert.equal(principalIdFromApiKey(token), `ak_${hash.slice(0, 16)}`);
+    assert.notEqual(principalIdFromApiKey(token), token);
+  });
+});
+
+describe('parseTenantKeyRegistryJson', () => {
+  it('returns empty v2 registry for blank input', () => {
+    assert.deepEqual(parseTenantKeyRegistryJson(''), {
+      schemaVersion: 2,
+      keys: {},
+    });
+    assert.deepEqual(parseTenantKeyRegistryJson(undefined), {
+      schemaVersion: 2,
+      keys: {},
+    });
   });
 
-  it('parses a valid map', () => {
-    const map = parseTenantKeyMapJson(
+  it('migrates a pure legacy plaintext map under legacyPlaintext', () => {
+    const registry = parseTenantKeyRegistryJson(
       JSON.stringify({
         tk_live_abc1234567890xyz: { tenantId: 'inkads', environment: 'production' },
       }),
     );
-    assert.equal(map['tk_live_abc1234567890xyz']?.tenantId, 'inkads');
+    assert.equal(registry.schemaVersion, 2);
+    assert.deepEqual(registry.keys, {});
+    assert.equal(registry.legacyPlaintext?.['tk_live_abc1234567890xyz']?.tenantId, 'inkads');
+  });
+
+  it('parses an existing v2 document', () => {
+    const token = 'tk_dev_test_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const id = principalIdFromApiKey(token);
+    const registry = parseTenantKeyRegistryJson(
+      JSON.stringify({
+        schemaVersion: 2,
+        keys: {
+          [id]: {
+            keyHash: hashApiKey(token),
+            tenantId: 'acme',
+            environment: 'development',
+            scopes: ['email:send'],
+            revokedAt: null,
+            expiresAt: null,
+          },
+        },
+      }),
+    );
+    assert.equal(registry.keys[id]?.tenantId, 'acme');
+    assert.ok(!JSON.stringify(registry).includes(token));
   });
 
   it('rejects invalid JSON and shapes', () => {
-    assert.throws(() => parseTenantKeyMapJson('{'), /not valid JSON/);
-    assert.throws(() => parseTenantKeyMapJson('[]'), /JSON object/);
+    assert.throws(() => parseTenantKeyRegistryJson('{'), /not valid JSON/);
+    assert.throws(() => parseTenantKeyRegistryJson('[]'), /JSON object/);
     assert.throws(
-      () => parseTenantKeyMapJson(JSON.stringify({ tk: { tenantId: 'a' } })),
+      () => parseTenantKeyRegistryJson(JSON.stringify({ tk: { tenantId: 'a' } })),
       /invalid/,
     );
   });
 });
 
-describe('upsertTenantKeyMapEntry', () => {
-  it('preserves existing entries when adding', () => {
-    const existing = {
-      tk_dev_aaaaaaaaaaaaaaaa: { tenantId: 'acme', environment: 'development' },
-    };
-    const { map, replaced } = upsertTenantKeyMapEntry(
+describe('upsertHashedKeyRecord', () => {
+  it('writes only hashes and preserves other keys + legacyPlaintext', () => {
+    const legacyToken = 'tk_dev_aaaaaaaaaaaaaaaa';
+    const existing = parseTenantKeyRegistryJson(
+      JSON.stringify({
+        [legacyToken]: { tenantId: 'acme', environment: 'development' },
+      }),
+    );
+    const newToken = 'tk_live_bbbbbbbbbbbbbbbb';
+    const { registry, principalId, replaced } = upsertHashedKeyRecord(
       existing,
-      'tk_live_bbbbbbbbbbbbbbbb',
+      newToken,
       'inkads',
       'production',
     );
     assert.equal(replaced, false);
-    assert.equal(Object.keys(map).length, 2);
-    assert.equal(map['tk_dev_aaaaaaaaaaaaaaaa']?.tenantId, 'acme');
-    assert.equal(map['tk_live_bbbbbbbbbbbbbbbb']?.environment, 'production');
-    assert.equal(Object.keys(existing).length, 1);
+    assert.equal(principalId, principalIdFromApiKey(newToken));
+    assert.equal(registry.keys[principalId]?.keyHash, hashApiKey(newToken));
+    assert.equal(registry.keys[principalId]?.tenantId, 'inkads');
+    assert.ok(!JSON.stringify(registry.keys).includes(newToken));
+    assert.equal(registry.legacyPlaintext?.[legacyToken]?.tenantId, 'acme');
+    assert.equal(Object.keys(existing.keys).length, 0);
   });
 
-  it('marks replaced when the token already exists', () => {
-    const token = 'tk_live_cccccccccccccccc';
-    const existing = { [token]: { tenantId: 'old', environment: 'production' } };
-    const { map, replaced } = upsertTenantKeyMapEntry(existing, token, 'new', 'production');
-    assert.equal(replaced, true);
-    assert.equal(map[token]?.tenantId, 'new');
+  it('moves a legacy token into keys when re-registered and drops legacyPlaintext entry', () => {
+    const token = 'tk_dev_cccccccccccccccc';
+    const existing = parseTenantKeyRegistryJson(
+      JSON.stringify({
+        [token]: { tenantId: 'old', environment: 'development' },
+      }),
+    );
+    const { registry, replaced } = upsertHashedKeyRecord(existing, token, 'new', 'development');
+    assert.equal(replaced, false);
+    assert.equal(registry.keys[principalIdFromApiKey(token)]?.tenantId, 'new');
+    assert.equal(registry.legacyPlaintext, undefined);
+    assert.ok(!JSON.stringify(registry).includes(`"${token}"`));
+  });
+
+  it('marks replaced when the same principal id already exists in keys', () => {
+    const token = 'tk_live_dddddddddddddddd';
+    const first = upsertHashedKeyRecord(
+      { schemaVersion: 2, keys: {} },
+      token,
+      'acme',
+      'production',
+    );
+    const second = upsertHashedKeyRecord(first.registry, token, 'acme', 'production');
+    assert.equal(second.replaced, true);
+    assert.equal(Object.keys(second.registry.keys).length, 1);
+  });
+});
+
+describe('serializeTenantKeyRegistry', () => {
+  it('omits empty legacyPlaintext', () => {
+    const json = serializeTenantKeyRegistry({ schemaVersion: 2, keys: {} });
+    assert.deepEqual(JSON.parse(json), { schemaVersion: 2, keys: {} });
   });
 });
 

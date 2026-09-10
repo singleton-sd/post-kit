@@ -248,11 +248,11 @@ describe('createMcpHandler', () => {
 });
 
 describe('parseTenantKeyMap', () => {
-  it('returns empty map and logs sanitized error for invalid JSON', () => {
+  it('returns empty registry and logs sanitized error for invalid JSON', () => {
     const lines: string[] = [];
     const log = createLogger('cfg', (line) => lines.push(line));
     const map = parseTenantKeyMap('{not-json', log);
-    assert.deepEqual(map, {});
+    assert.deepEqual(map, { keys: {}, legacyPlaintext: {} });
     assert.equal(lines.length, 1);
     const entry = JSON.parse(lines[0]!) as { msg: string; errorCode: string };
     assert.equal(entry.msg, 'tenant_key_map.invalid');
@@ -260,28 +260,31 @@ describe('parseTenantKeyMap', () => {
     assert.ok(!lines[0]!.includes('not-json'));
   });
 
-  it('returns empty map for null JSON and invalid entry shapes', () => {
+  it('returns empty registry for null JSON and invalid entry shapes', () => {
     const lines: string[] = [];
     const log = createLogger('cfg', (line) => lines.push(line));
-    assert.deepEqual(parseTenantKeyMap('null', log), {});
+    assert.deepEqual(parseTenantKeyMap('null', log), { keys: {}, legacyPlaintext: {} });
     assert.deepEqual(
       parseTenantKeyMap(
         JSON.stringify({ tk: { tenantId: 'acme', environment: 'not-an-env' } }),
         log,
       ),
-      {},
+      { keys: {}, legacyPlaintext: {} },
     );
     assert.ok(lines.every((line) => !line.includes('tk_') && !line.includes('acme')));
   });
 
-  it('accepts a well-formed map', () => {
+  it('accepts a well-formed legacy plaintext map', () => {
     const map = parseTenantKeyMap(
       JSON.stringify({
         tk_ok: { tenantId: 'acme', environment: 'development' },
       }),
     );
     assert.deepEqual(map, {
-      tk_ok: { tenantId: 'acme', environment: 'development' },
+      keys: {},
+      legacyPlaintext: {
+        tk_ok: { tenantId: 'acme', environment: 'development' },
+      },
     });
   });
 });

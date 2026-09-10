@@ -363,6 +363,7 @@ describe('sendHandler', () => {
     assert.equal(completed.correlationId, 'corr-log-success');
     assert.equal(completed.tenantId, 'inkads');
     assert.equal(completed.environment, 'development');
+    assert.equal(completed.principalId, 'test:inkads:development');
     assert.equal(completed.templateKey, 'marketing.contact-us');
     assert.equal(completed.outcome, 'sent');
     assert.equal(typeof completed.durationMs, 'number');

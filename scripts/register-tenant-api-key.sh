@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Register (or rotate) a PostKit consumer API key in TENANT_KEY_MAP.
+# Register (or rotate) a PostKit consumer API key in TENANT_KEY_MAP (schema v2).
 #
-# Generates a random Bearer token, merges it into the Key Vault secret
-# `tenant-key-map`, and ensures the Function App setting TENANT_KEY_MAP is a
-# Key Vault reference (not plain text / App Configuration).
+# Generates a high-entropy Bearer token, stores only its SHA-256 digest (plus
+# metadata) in the Key Vault secret `tenant-key-map`, and ensures the Function
+# App setting TENANT_KEY_MAP is a Key Vault reference (not plain text / App
+# Configuration). Plaintext is printed once to stdout and never persisted.
 #
 # Usage:
 #   ./scripts/register-tenant-api-key.sh --tenant-id inkads --environment production
@@ -11,7 +12,7 @@
 #   ./scripts/register-tenant-api-key.sh --tenant-id inkads --environment production --token 'tk_live_...'
 #
 # The new token is printed once to stdout (for the operator to copy into the
-# consumer secret store). It is never written to git.
+# consumer secret store). It is never written to git or Key Vault plaintext.
 #
 # Concurrency: read-modify-write on a single Key Vault secret. Do not run this
 # script concurrently across operators or hosts — serialize registrations.
@@ -41,7 +42,7 @@ trap cleanup EXIT
 
 usage() {
   cat <<'EOF'
-Register a PostKit tenant API key in Key Vault TENANT_KEY_MAP.
+Register a PostKit tenant API key in Key Vault TENANT_KEY_MAP (hashed schema v2).
 
 Required:
   --tenant-id <id>              Tenant id (e.g. inkads)
@@ -171,14 +172,15 @@ MERGE_OUT="$(printf '%s' "$EXISTING_JSON" | node "$HELPER" "${MERGE_ARGS[@]}")"
 NEW_TOKEN="$(printf '%s' "$MERGE_OUT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
 MAP_JSON="$(printf '%s' "$MERGE_OUT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["mapJson"])')"
 REPLACED="$(printf '%s' "$MERGE_OUT" | python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["replaced"] else "false")')"
+PRINCIPAL_ID="$(printf '%s' "$MERGE_OUT" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("principalId",""))')"
 KV_REF="$(node "$HELPER" kv-ref --vault "$VAULT_NAME" --secret "$SECRET_NAME")"
 
-echo "tenantId=$TENANT_ID environment=$ENVIRONMENT replaced=$REPLACED" >&2
+echo "tenantId=$TENANT_ID environment=$ENVIRONMENT replaced=$REPLACED principalId=$PRINCIPAL_ID" >&2
 echo "vault=$VAULT_NAME secret=$SECRET_NAME" >&2
 echo "functionApp=$FUNCTION_APP resourceGroup=$RESOURCE_GROUP" >&2
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "dry-run: would set Key Vault secret $SECRET_NAME (map entry count not printed)" >&2
+  echo "dry-run: would set Key Vault secret $SECRET_NAME (hashed schema v2; plaintext not stored)" >&2
   echo "dry-run: would set Function App setting TENANT_KEY_MAP=$KV_REF" >&2
   echo "$NEW_TOKEN"
   exit 0
@@ -201,8 +203,8 @@ az functionapp config appsettings set \
   --settings "TENANT_KEY_MAP=$KV_REF" \
   --output none
 
-echo "Stored map in Key Vault and wired Function App Key Vault reference." >&2
-echo "Copy the token below into the consumer secret store (shown once):" >&2
+echo "Stored hashed registry in Key Vault and wired Function App Key Vault reference." >&2
+echo "Copy the token below into the consumer secret store (shown once; not stored in KV):" >&2
 echo "$NEW_TOKEN"
 
 # Unset locals that held JSON (best-effort; bash cannot guarantee scrubbing).
