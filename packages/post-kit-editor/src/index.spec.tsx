@@ -100,10 +100,17 @@ describe('EmailTemplateEditor', () => {
     assert.match(html, /\{\{resetUrl\}\}/);
   });
 
-  it('does not render save or send-test chrome yet', () => {
+  it('renders Save chrome and hides Send-test without onSendTest', () => {
     const html = renderToStaticMarkup(<EmailTemplateEditor {...baseProps} />);
-    assert.doesNotMatch(html, /send test/i);
-    assert.doesNotMatch(html, /data-testid="[^"]*save/);
+    assert.match(html, new RegExp(`data-testid="${EDITOR_CLASS_PREFIX}save"`));
+    assert.doesNotMatch(html, new RegExp(`data-testid="${EDITOR_CLASS_PREFIX}send-test"`));
+  });
+
+  it('renders Send-test chrome when onSendTest is provided', () => {
+    const html = renderToStaticMarkup(
+      <EmailTemplateEditor {...baseProps} onSendTest={async () => undefined} />,
+    );
+    assert.match(html, new RegExp(`data-testid="${EDITOR_CLASS_PREFIX}send-test"`));
   });
 });
 

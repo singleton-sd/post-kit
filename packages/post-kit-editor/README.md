@@ -2,11 +2,9 @@
 
 React admin editor component for [PostKit](../../README.md) email templates. It
 edits the three Git-backed source files (`template.json`, `metadata.json`,
-`preview.json`) **in memory**. Persistence is not wired yet: `onSave` /
-`onSendTest` props are part of the public contract for later issues, but this
-package does not invoke them — working edits are discarded when the component
-unmounts unless the host implements those callbacks (save/send-test UI lands in
-a follow-up issue).
+`preview.json`) **in memory**, with Save and optional Send-test controls that
+call **consumer-supplied** callbacks. The package never writes to disk, Git, or
+the network, and never accepts API keys or other credentials as props.
 
 ## Installation
 
@@ -23,18 +21,49 @@ pnpm add react@^18.3.1 react-dom@^18.3.1
 ## Usage
 
 ```tsx
-import { EmailTemplateEditor, type TemplateSourceFiles } from '@singleton-sd/post-kit-editor';
+import {
+  EmailTemplateEditor,
+  type TemplateSourceFiles,
+  type SerializedTemplateSource,
+} from '@singleton-sd/post-kit-editor';
 
 export function TemplateAdminPage({ template }: { template: TemplateSourceFiles }) {
   return (
     <EmailTemplateEditor
       template={template}
       availableVariables={[{ name: 'name', description: 'Recipient display name' }]}
-      onSave={async (files) => {
-        await fetch('/api/templates', { method: 'PUT', body: JSON.stringify(files) });
+      onSave={async (serialized, files) => {
+        // Commit serialized.templateJson / metadataJson / previewJson to the
+        // consumer repository (e.g. via the app's own server endpoint).
+        const res = await fetch('/api/templates', {
+          method: 'PUT',
+          body: JSON.stringify({ serialized, key: files.metadata.key }),
+        });
+        // fetch() resolves for HTTP 4xx/5xx — return failure so the editor
+        // keeps dirty state and does not treat the rejection as success.
+        if (!res.ok) {
+          return { ok: false, message: 'Save failed.' };
+        }
+      }}
+      onSendTest={async (serialized, _files, recipient) => {
+        // Browser → your trusted server only. The server uses
+        // @singleton-sd/post-kit-client with POSTKIT_API_KEY from Azure Key
+        // Vault `ssd-global-kv-prod-ae` (production). Local `.env` is for
+        // development only — never embed a long-lived PostKit API key in
+        // browser code.
+        const res = await fetch('/api/templates/send-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ serialized, recipient }),
+        });
+        if (!res.ok) {
+          return { ok: false, message: 'Test send failed.' };
+        }
+      }}
+      onDirtyChange={(dirty) => {
+        // Optional: guard in-app navigation while dirty.
       }}
       onPreviewRendered={(html) => {
-        // Optional: host can offer “open preview in new tab”
         console.log('preview bytes', html.length);
       }}
       className="tenant-theme"
@@ -45,10 +74,19 @@ export function TemplateAdminPage({ template }: { template: TemplateSourceFiles 
 
 ## Persistence is consumer-supplied
 
-The editor never writes to disk, Git, or a network endpoint. The `onSave` and
-`onSendTest` props exist so consumers can rely on a stable contract, but **this
-release does not call them** — there is no Save / Send-Test control yet. Edits
-live only in React state (`workingFiles`) until a later issue adds that UI.
+Save serializes the working state with `serializeTemplateSource()` and passes
+both the `SerializedTemplateSource` strings and the structured
+`TemplateSourceFiles` to `onSave`. The editor shows pending / success / failure
+feedback and re-enables the control in every outcome. Rejected promises become
+failure messages (no unhandled rejections).
+
+Send-test chrome appears **only** when `onSendTest` is provided. The editor
+validates a non-empty, plausible recipient address, then invokes the callback
+with the same serialized payload. Test delivery must go through the consumer's
+trusted server (typically `@singleton-sd/post-kit-client` server-side).
+
+Optional `onDirtyChange` fires when working state diverges from the seeded
+`template` prop and resets after a successful save.
 
 ## Preview data (synthetic only)
 
@@ -93,7 +131,7 @@ const html = renderToStaticMarkup(<EmailTemplateEditor template={template} onSav
 ```
 
 Specs live next to the code as `src/**/*.spec.tsx`. Behaviour that needs
-interaction is factored into pure functions (preview rows, `renderTemplatePreview`)
+interaction is factored into pure functions (preview rows, save/send helpers)
 that can be tested without a DOM.
 
 ## Development
