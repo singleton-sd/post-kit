@@ -110,19 +110,23 @@ describe('createLogger', () => {
     assert.doesNotThrow(() => logger.error('smoke'));
   });
 
-  it('includes failureCategory and recipientHash in the contract', () => {
+  it('includes failureCategory, failureClass, and recipientHash in the contract', () => {
     const lines: string[] = [];
     const logger = createLogger('corr-fc', (line) => lines.push(line));
 
     logger.error('send.request.failed', {
       outcome: 'failed',
       failureCategory: 'permanent',
+      failureClass: 'permanent',
+      attempt: 1,
       recipientHash: `${'a'.repeat(8)}.${'b'.repeat(16)}`,
       durationMs: 10,
     });
 
     const entry = JSON.parse(lines[0]!);
     assert.equal(entry.failureCategory, 'permanent');
+    assert.equal(entry.failureClass, 'permanent');
+    assert.equal(entry.attempt, 1);
     assert.equal(entry.recipientHash, `${'a'.repeat(8)}.${'b'.repeat(16)}`);
   });
 

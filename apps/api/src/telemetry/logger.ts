@@ -92,7 +92,12 @@ export interface LogEntry {
   durationMs?: number;
   providerMessageId?: string;
   providerRequestId?: string;
+  /** Provider/kind category (e.g. `permanent`, `timeout`, `rate_limit`). */
   failureCategory?: string;
+  /** Send-path classification: transient vs permanent (see send-timeout-retry). */
+  failureClass?: 'transient' | 'permanent';
+  /** Provider attempts used for this invocation (1 without idempotent retry). */
+  attempt?: number;
   recipientHash?: string;
   errorCode?: PostKitErrorCode | string;
   // NOTE: never log recipient addresses, variable values, or tokens
@@ -108,6 +113,8 @@ const LOG_ENTRY_KEYS: ReadonlyArray<keyof Omit<LogEntry, 'correlationId'>> = [
   'providerMessageId',
   'providerRequestId',
   'failureCategory',
+  'failureClass',
+  'attempt',
   'recipientHash',
   'errorCode',
 ];
