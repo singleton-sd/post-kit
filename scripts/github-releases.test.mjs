@@ -21,10 +21,14 @@ test('formatReleaseTitle uses name@version', () => {
   assert.equal(formatReleaseTitle(sample), '@singleton-sd/post-kit-publisher@0.2.0');
 });
 
-test('formatReleaseNotes includes bump and install line', () => {
+test('formatReleaseNotes includes bump, npmjs link, and install line', () => {
   const notes = formatReleaseNotes(sample);
   assert.match(notes, /0\.1\.0.*→.*0\.2\.0.*minor/);
   assert.match(notes, /CHANGELOG\.md/);
+  assert.match(
+    notes,
+    /\[`@singleton-sd\/post-kit-publisher@0\.2\.0`\]\(https:\/\/www\.npmjs\.com\/package\/@singleton-sd\/post-kit-publisher\/v\/0\.2\.0\)/,
+  );
   assert.match(notes, /pnpm add @singleton-sd\/post-kit-publisher@0\.2\.0/);
 });
 

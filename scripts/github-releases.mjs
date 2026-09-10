@@ -28,11 +28,14 @@ export function formatReleaseNotes(release) {
     release.version === release.next
       ? `## ${release.name} \`${release.next}\``
       : `## ${release.name} \`${release.version}\` → \`${release.next}\` (${release.increment})`;
+  const npmUrl = `https://www.npmjs.com/package/${release.name}/v/${release.next}`;
 
   return [
     bumpLine,
     '',
     'See [CHANGELOG.md](https://github.com/singleton-sd/post-kit/blob/main/CHANGELOG.md) for monorepo release notes.',
+    '',
+    `📦 [\`${release.name}@${release.next}\`](${npmUrl})`,
     '',
     `Install: \`pnpm add ${release.name}@${release.next}\``,
   ].join('\n');
