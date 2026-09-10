@@ -5,7 +5,8 @@
   "description": "Shared TypeScript contracts for the PostKit platform",
   "license": "MIT",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -17,12 +18,19 @@
   },
   "files": [
     "dist",
-    "LICENSE"
+    "LICENSE",
+    "README.md",
+    "!dist/**/*.spec.js",
+    "!dist/**/*.spec.js.map",
+    "!dist/**/*.spec.d.ts",
+    "!dist/**/*.spec.d.ts.map",
+    "!dist/fixtures/**"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "echo \"lint:types — covered by root eslint on staged files\"",
-    "test": "tsc -p tsconfig.spec.json && node --import tsx --test \"src/**/*.spec.ts\""
+    "test": "tsc -p tsconfig.spec.json && node --import tsx --test \"src/**/*.spec.ts\"",
+    "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
     "@types/node": "^20.17.9",
@@ -31,5 +39,9 @@
   },
   "engines": {
     "node": ">=20.18.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/singleton-sd/post-kit.git"
   }
 }

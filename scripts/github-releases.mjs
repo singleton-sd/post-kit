@@ -1,8 +1,8 @@
 /**
  * Create GitHub Releases for package version tags.
  *
- * Used by `scripts/release-changed.mjs` after tags are pushed. npm publish
- * remains disabled — this only creates GitHub Release entries.
+ * Used by `scripts/release-changed.mjs` after tags are pushed. Packages are
+ * also published to npmjs via Trusted Publishing in the same release job.
  */
 import { execFileSync } from 'node:child_process';
 
@@ -34,7 +34,7 @@ export function formatReleaseNotes(release) {
     '',
     'See [CHANGELOG.md](https://github.com/singleton-sd/post-kit/blob/main/CHANGELOG.md) for monorepo release notes.',
     '',
-    'npm publish is not enabled yet for this package scope.',
+    `Install: \`pnpm add ${release.name}@${release.next}\``,
   ].join('\n');
 }
 

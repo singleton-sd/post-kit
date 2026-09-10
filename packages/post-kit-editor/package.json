@@ -5,7 +5,8 @@
   "description": "React admin editor component for PostKit email templates",
   "license": "MIT",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -17,12 +18,19 @@
   },
   "files": [
     "dist",
-    "LICENSE"
+    "LICENSE",
+    "README.md",
+    "!dist/**/*.spec.js",
+    "!dist/**/*.spec.js.map",
+    "!dist/**/*.spec.d.ts",
+    "!dist/**/*.spec.d.ts.map",
+    "!dist/fixtures/**"
   ],
   "scripts": {
     "build": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.json",
     "lint": "echo \"lint:editor — covered by root eslint on staged files\"",
-    "test": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.spec.json && node --import tsx --test \"src/**/*.spec.ts\" \"src/**/*.spec.tsx\""
+    "test": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.spec.json && node --import tsx --test \"src/**/*.spec.ts\" \"src/**/*.spec.tsx\"",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@singleton-sd/post-kit-compiler": "workspace:*",
@@ -56,5 +64,9 @@
   },
   "engines": {
     "node": ">=20.18.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/singleton-sd/post-kit.git"
   }
 }

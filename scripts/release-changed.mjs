@@ -4,15 +4,17 @@
  *
  * Bumps each workspace package whose name starts with `@singleton-sd/post-kit-`
  * that has releasable conventional commits since its last `@scope/name@version`
- * tag (reachable from HEAD), then creates one git commit + per-package tags
- * and matching GitHub Releases (npm publish stays disabled).
+ * tag (reachable from HEAD), then creates one git commit, publishes to npmjs
+ * via Trusted Publishing (OIDC), pushes tags, and creates GitHub Releases.
  *
  * Push order is commit-then-tags (never `--follow-tags`): a non-fast-forward
- * race must not publish tags without the release commit on main.
+ * race must not publish tags without the release commit on main. npm publish
+ * runs after the local commit and before `git push` so an auth failure does
+ * not leave tags on origin/main.
  *
  * Usage:
  *   node scripts/release-changed.mjs           # dry-run
- *   node scripts/release-changed.mjs --ci      # bump, commit, tag, push, GitHub Releases
+ *   node scripts/release-changed.mjs --ci      # bump, commit, npm publish, push, GitHub Releases
  */
 import { execFileSync, execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -20,6 +22,7 @@ import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import semver from 'semver';
 import { createGitHubReleases } from './github-releases.mjs';
+import { publishNpmReleases } from './publish-npm.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CI = process.argv.includes('--ci');
@@ -394,7 +397,7 @@ function main() {
   }
 
   if (!CI) {
-    console.log('\nRe-run with --ci to bump, commit, tag, and push.');
+    console.log('\nRe-run with --ci to bump, commit, npm publish, tag, and push.');
     return;
   }
 
@@ -415,6 +418,10 @@ function main() {
   run('git', ['commit', '-m', message], {
     env: { ...process.env, HUSKY: '0' },
   });
+
+  // Publish before pushing so OIDC/auth failure does not leave tags on main.
+  publishNpmReleases(releases);
+  console.log('npm publish completed for released packages.');
 
   // Commit first, then tag. Tagging before a rebase-on-push-failure leaves
   // tags pointing at a rewritten commit SHA.

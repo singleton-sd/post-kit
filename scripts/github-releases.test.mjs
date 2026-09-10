@@ -21,11 +21,11 @@ test('formatReleaseTitle uses name@version', () => {
   assert.equal(formatReleaseTitle(sample), '@singleton-sd/post-kit-publisher@0.2.0');
 });
 
-test('formatReleaseNotes includes bump and npm-disabled note', () => {
+test('formatReleaseNotes includes bump and install line', () => {
   const notes = formatReleaseNotes(sample);
   assert.match(notes, /0\.1\.0.*→.*0\.2\.0.*minor/);
   assert.match(notes, /CHANGELOG\.md/);
-  assert.match(notes, /npm publish is not enabled/);
+  assert.match(notes, /pnpm add @singleton-sd\/post-kit-publisher@0\.2\.0/);
 });
 
 test('isReleaseNotFoundError recognizes gh not-found output', () => {

@@ -78,12 +78,12 @@ State these plainly rather than assuming them:
   package does not exist in this repository. It is referenced only as a
   future consumer in `post-kit-types` doc comments. Tracked by
   [#5](https://github.com/singleton-sd/post-kit/issues/5).
-- **npm publication** — `packages/*` are marked `"private": false`, but
-  `.github/workflows/release.yml` only bumps versions, commits, tags, and
-  creates GitHub releases. Nothing runs `npm publish`, so no
-  `@singleton-sd/post-kit-*` package is installable from the public registry
-  yet. Tracked by
-  [#4](https://github.com/singleton-sd/post-kit/issues/4).
+- **npm publication** — `packages/*` are `"private": false` and
+  `release.yml` publishes changed `@singleton-sd/post-kit-*` packages to
+  npmjs via **Trusted Publishing (OIDC)** (no `NPM_TOKEN`). First-time
+  registry bootstrap and per-package Trusted Publisher config are human
+  gates in [`SETUP.md`](../../SETUP.md) §6 / [#105](https://github.com/singleton-sd/post-kit/issues/105).
+  Epic: [#4](https://github.com/singleton-sd/post-kit/issues/4).
 - **Additional delivery providers, per-tenant send rate limiting, recipient
   allowlisting, and signed webhooks** — not implemented; see
   [`multi-tenant-security.md`](./multi-tenant-security.md) and
@@ -114,7 +114,7 @@ repositories and published by CI.
 | Send timeout/retry | `SEND_PROVIDER_TIMEOUT_MS` / `SEND_MAX_ATTEMPTS` (idempotency-gated) | See [`send-timeout-retry.md`](./send-timeout-retry.md) |
 | App configuration | `ssd-postkit-appcs-prod-ae`              | Free SKU; non-secret settings + Key Vault references           |
 | Secrets           | Key Vault `ssd-global-kv-prod-ae`        | Resource group `rg-ssd-global`; IDs in [`SETUP.md`](../../SETUP.md) |
-| Packages          | npmjs public `@singleton-sd/post-kit-*`  | Not published yet — see **Not yet implemented**                |
+| Packages          | npmjs public `@singleton-sd/post-kit-*`  | Trusted Publishing (OIDC) from `release.yml` — see [`SETUP.md`](../../SETUP.md) §6 |
 
 CI is `Lint / test / build` on every PR. Live email-domain branding
 validation is a separate scheduled workflow (not required on PRs); see
