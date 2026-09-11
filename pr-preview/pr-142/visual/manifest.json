@@ -1,0 +1,45 @@
+{
+  "baseLabel": "committed:visual-baselines",
+  "baselinesDir": "/home/runner/work/post-kit/post-kit/packages/post-kit-editor/visual-baselines",
+  "summary": {
+    "total": 3,
+    "unchanged": 3,
+    "changed": 0,
+    "new": 0,
+    "changedStories": [],
+    "newStories": [],
+    "hasDiffs": false
+  },
+  "stories": [
+    {
+      "story": "admin-email-builder-overview--full-admin",
+      "viewport": "desktop",
+      "prFile": "pr/admin-email-builder-overview-full-admin-desktop.png",
+      "baseFile": "base/admin-email-builder-overview-full-admin-desktop.png",
+      "diffFile": null,
+      "mismatched": 0,
+      "storyUrl": "/iframe.html?id=admin-email-builder-overview--full-admin&viewMode=story",
+      "status": "unchanged"
+    },
+    {
+      "story": "admin-email-builder-blocks-text--default",
+      "viewport": "desktop",
+      "prFile": "pr/admin-email-builder-blocks-text-default-desktop.png",
+      "baseFile": "base/admin-email-builder-blocks-text-default-desktop.png",
+      "diffFile": null,
+      "mismatched": 0,
+      "storyUrl": "/iframe.html?id=admin-email-builder-blocks-text--default&viewMode=story",
+      "status": "unchanged"
+    },
+    {
+      "story": "admin-email-builder-templates--welcome-editor",
+      "viewport": "desktop",
+      "prFile": "pr/admin-email-builder-templates-welcome-editor-desktop.png",
+      "baseFile": "base/admin-email-builder-templates-welcome-editor-desktop.png",
+      "diffFile": null,
+      "mismatched": 0,
+      "storyUrl": "/iframe.html?id=admin-email-builder-templates--welcome-editor&viewMode=story",
+      "status": "unchanged"
+    }
+  ]
+}
