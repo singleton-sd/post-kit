@@ -212,7 +212,11 @@ pnpm --filter @singleton-sd/post-kit-editor storybook
 
 Opens on http://localhost:6006. Stories live under `stories/` with config in
 `.storybook/`. Both are outside the published `files` / `dist` surface (along
-with `examples/`). There is no Chromatic / screenshot CI in v1.
+with `examples/`). Prefer **Admin / EmailTemplateAdmin** for full-page review;
+`EmailTemplateEditor` stories use Storybook-only layout CSS so the PostKit
+sidebar sits beside the canvas (the published package still ships class names
+without a required stylesheet). There is no Chromatic / screenshot CI in the
+package itself — see the Playwright `visual-review` gate when present.
 
 Most stories use the public API (`EmailTemplateEditor`, `EmailBuilderCanvas`).
 Isolated panel stories import private modules from `src/` and document that
