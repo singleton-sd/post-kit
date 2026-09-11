@@ -5,7 +5,16 @@
  * expose these operations behind trusted admin APIs (then open a PR / write
  * to `content/email-templates/<dir>/`).
  */
-import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import {
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  renameSync,
+  rmSync,
+  mkdtempSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import {
   loadTemplateSource,
@@ -33,11 +42,24 @@ export interface TemplateStore {
   ): SaveResult;
 }
 
+export interface FsTemplateStoreOptions {
+  /** Injectable for tests (e.g. fail a later write). Defaults to `fs.writeFileSync`. */
+  writeFileSync?: typeof writeFileSync;
+}
+
 /**
  * Create a store rooted at `templatesRoot` (absolute or relative to cwd).
  * Default layout: `<root>/<directory>/{template,metadata,preview}.json`.
+ *
+ * `save` stages all three files in a temp directory, then swaps that directory
+ * into place so a mid-write failure cannot leave a mixed old/new triple.
  */
-export function createFsTemplateStore(templatesRoot: string): TemplateStore {
+export function createFsTemplateStore(
+  templatesRoot: string,
+  options: FsTemplateStoreOptions = {},
+): TemplateStore {
+  const writeFile = options.writeFileSync ?? writeFileSync;
+
   return {
     list(): TemplateListItem[] {
       if (!existsSync(templatesRoot)) {
@@ -48,6 +70,7 @@ export function createFsTemplateStore(templatesRoot: string): TemplateStore {
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
         const dir = entry.name;
+        if (dir.startsWith('.')) continue;
         try {
           const files = loadDirectory(templatesRoot, dir);
           items.push({
@@ -68,7 +91,15 @@ export function createFsTemplateStore(templatesRoot: string): TemplateStore {
     },
 
     save(directory, serialized, files): SaveResult {
-      assertSafeDirectory(directory);
+      try {
+        assertSafeDirectory(directory);
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : 'Invalid template directory name.',
+        };
+      }
+
       if (files.metadata.key.length === 0) {
         return { ok: false, message: 'metadata.key is required.' };
       }
@@ -91,20 +122,52 @@ export function createFsTemplateStore(templatesRoot: string): TemplateStore {
         return { ok: false, message: 'Serialized key does not match files.metadata.key.' };
       }
 
+      mkdirSync(templatesRoot, { recursive: true });
       const dirPath = join(templatesRoot, directory);
-      mkdirSync(dirPath, { recursive: true });
-      writeFileSync(
-        join(dirPath, 'template.json'),
-        `${serialized.templateJson.trimEnd()}\n`,
-        'utf8',
-      );
-      writeFileSync(
-        join(dirPath, 'metadata.json'),
-        `${serialized.metadataJson.trimEnd()}\n`,
-        'utf8',
-      );
-      writeFileSync(join(dirPath, 'preview.json'), `${serialized.previewJson.trimEnd()}\n`, 'utf8');
-      return { ok: true };
+      const stagingPath = mkdtempSync(join(templatesRoot, `.${directory}-staging-`));
+      const backupPath = join(templatesRoot, `.${directory}-backup-${process.pid}-${Date.now()}`);
+
+      try {
+        writeFile(
+          join(stagingPath, 'template.json'),
+          `${serialized.templateJson.trimEnd()}\n`,
+          'utf8',
+        );
+        writeFile(
+          join(stagingPath, 'metadata.json'),
+          `${serialized.metadataJson.trimEnd()}\n`,
+          'utf8',
+        );
+        writeFile(
+          join(stagingPath, 'preview.json'),
+          `${serialized.previewJson.trimEnd()}\n`,
+          'utf8',
+        );
+
+        if (existsSync(dirPath)) {
+          renameSync(dirPath, backupPath);
+        }
+        renameSync(stagingPath, dirPath);
+        if (existsSync(backupPath)) {
+          rmSync(backupPath, { recursive: true, force: true });
+        }
+        return { ok: true };
+      } catch (err) {
+        rmSync(stagingPath, { recursive: true, force: true });
+        if (existsSync(backupPath) && !existsSync(dirPath)) {
+          try {
+            renameSync(backupPath, dirPath);
+          } catch {
+            // leave backup in place for manual recovery
+          }
+        } else if (existsSync(backupPath)) {
+          rmSync(backupPath, { recursive: true, force: true });
+        }
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : 'Failed to save template files.',
+        };
+      }
     },
   };
 }

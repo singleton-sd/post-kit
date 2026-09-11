@@ -4,12 +4,12 @@
  * - List/load: seed from the filesystem store in Node tests / server wiring;
  *   this component takes a preloaded catalog for the embedding demo.
  * - Save: `onSave` → your API → Git/PR (here: in-memory adapter for the demo).
- * - Send-test: `onSendTest` POSTs to **your** `/api/email-templates/send-test`
- *   BFF which holds `POSTKIT_API_KEY` (see `src/send-test-handler.ts`).
+ * - Send-test: pass `sendTest` only when your BFF is configured; omitting it
+ *   hides Send-test chrome (see `postSendTestToBff` + README).
  *
  * Never pass API keys into this module or the editor props.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   EmailTemplateEditor,
   type SerializedTemplateSource,
@@ -17,14 +17,20 @@ import {
   type SendTestResult,
 } from '@singleton-sd/post-kit-editor';
 
-import { createMemoryPersistence, toOnSave } from './src/memory-persistence';
+import {
+  createMemoryPersistence,
+  reconcileSelectedKey,
+  toOnSave,
+  type MemoryPersistence,
+} from './src/memory-persistence';
 
 export interface AdminEditorExampleProps {
   /** Catalog of templates the admin may open (from Git / your list API). */
   templates: TemplateSourceFiles[];
   /**
-   * Optional override for Send-test. Default posts to
-   * `/api/email-templates/send-test` with `{ templateKey, to, variables }`.
+   * Optional Send-test callback. Omit when the trusted BFF / env is not
+   * configured so the editor hides Send-test. Use {@link postSendTestToBff}
+   * once `POSTKIT_API_*` is available server-side.
    */
   sendTest?: (
     serialized: SerializedTemplateSource,
@@ -33,7 +39,8 @@ export interface AdminEditorExampleProps {
   ) => Promise<SendTestResult | void> | SendTestResult | void;
 }
 
-async function defaultSendTest(
+/** Browser helper that POSTs to the consumer Send-test BFF (no secrets). */
+export async function postSendTestToBff(
   _serialized: SerializedTemplateSource,
   files: TemplateSourceFiles,
   recipient: string,
@@ -62,26 +69,32 @@ async function defaultSendTest(
   return { ok: true };
 }
 
-export function AdminEditorExample({
-  templates,
-  sendTest = defaultSendTest,
-}: AdminEditorExampleProps) {
+export function AdminEditorExample({ templates, sendTest }: AdminEditorExampleProps) {
   if (templates.length === 0) {
     throw new Error('AdminEditorExample requires at least one template.');
   }
 
-  const initialKey = templates[0]!.metadata.key;
-  const [selectedKey, setSelectedKey] = useState(initialKey);
-
-  const persistence = useMemo(() => {
+  const catalogKeys = templates.map((t) => t.metadata.key);
+  const persistenceRef = useRef<MemoryPersistence | null>(null);
+  if (persistenceRef.current === null) {
     const seed: Record<string, TemplateSourceFiles> = {};
     for (const t of templates) {
       seed[t.metadata.key] = t;
     }
-    return createMemoryPersistence(seed);
-  }, [templates]);
+    persistenceRef.current = createMemoryPersistence(seed);
+  } else {
+    persistenceRef.current.syncCatalog(templates);
+  }
+  const persistence = persistenceRef.current;
 
-  const template = persistence.load(selectedKey);
+  const [selectedKey, setSelectedKey] = useState(() => catalogKeys[0]!);
+
+  useEffect(() => {
+    setSelectedKey((current) => reconcileSelectedKey(current, catalogKeys));
+  }, [catalogKeys.join('\0')]);
+
+  const effectiveKey = reconcileSelectedKey(selectedKey, catalogKeys);
+  const template = persistence.load(effectiveKey);
   const availableVariables = template.metadata.variables.map((name) => ({
     name,
     label: name,
@@ -92,7 +105,7 @@ export function AdminEditorExample({
       <label>
         Template{' '}
         <select
-          value={selectedKey}
+          value={effectiveKey}
           onChange={(event) => setSelectedKey(event.target.value)}
           aria-label="Select template"
         >
@@ -104,11 +117,11 @@ export function AdminEditorExample({
         </select>
       </label>
       <EmailTemplateEditor
-        key={selectedKey}
+        key={effectiveKey}
         template={template}
         availableVariables={availableVariables}
         onSave={toOnSave(persistence)}
-        onSendTest={sendTest}
+        {...(sendTest !== undefined ? { onSendTest: sendTest } : {})}
       />
     </div>
   );

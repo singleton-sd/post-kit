@@ -45,15 +45,26 @@ key. Draft-only Git files are not sendable until publish CI has run.
 
 ## Wire the BFF (Express-style sketch)
 
+Gate the route (and the editor callback) on the same env boundary. When env is
+incomplete, omit `sendTest` on `AdminEditorExample` so Send-test chrome stays
+hidden — do not default the browser handler on.
+
 ```ts
 import express from 'express';
-import { createPostKitClientFromEnv } from './create-client-from-env';
+import {
+  createPostKitClientFromEnv,
+  isSendTestEnvConfigured,
+} from './create-client-from-env';
 import { handleSendTest } from './send-test-handler';
 
 const app = express();
 app.use(express.json());
 
 app.post('/api/email-templates/send-test', async (req, res) => {
+  if (!isSendTestEnvConfigured()) {
+    res.status(503).json({ error: 'Send-test is not configured.' });
+    return;
+  }
   const client = createPostKitClientFromEnv();
   const result = await handleSendTest(req.body, {
     client,
@@ -63,8 +74,8 @@ app.post('/api/email-templates/send-test', async (req, res) => {
 });
 ```
 
-`App.tsx` defaults `onSendTest` to `POST /api/email-templates/send-test` with
-`{ templateKey, to, variables }` — no secrets in the payload.
+When the BFF is configured, pass `sendTest={postSendTestToBff}` into
+`AdminEditorExample` (POST `{ templateKey, to, variables }` — no secrets).
 
 ## Map to InkAds (or any) admin
 

@@ -9,6 +9,17 @@ import { assertSafeDirectory, createFsTemplateStore } from './template-store';
 
 const CONTENT_ROOT = fileURLToPath(new URL('../content/email-templates', import.meta.url));
 
+function seedDemoWelcome(root: string): void {
+  const seedDir = join(root, 'demo.welcome');
+  mkdirSync(seedDir);
+  for (const name of ['template.json', 'metadata.json', 'preview.json'] as const) {
+    writeFileSync(
+      join(seedDir, name),
+      readFileSync(join(CONTENT_ROOT, 'demo.welcome', name), 'utf8'),
+    );
+  }
+}
+
 describe('assertSafeDirectory', () => {
   it('rejects traversal and empty names', () => {
     assert.throws(() => assertSafeDirectory(''), /Invalid/);
@@ -32,25 +43,56 @@ describe('createFsTemplateStore', () => {
     assert.ok(files.previewData['name']);
   });
 
-  it('saves a round-trip into a temp directory', () => {
+  it('saves changed content into a temp directory', () => {
     const root = mkdtempSync(join(tmpdir(), 'pk-admin-store-'));
     after(() => rmSync(root, { recursive: true, force: true }));
-
-    const seedDir = join(root, 'demo.welcome');
-    mkdirSync(seedDir);
-    for (const name of ['template.json', 'metadata.json', 'preview.json'] as const) {
-      writeFileSync(
-        join(seedDir, name),
-        readFileSync(join(CONTENT_ROOT, 'demo.welcome', name), 'utf8'),
-      );
-    }
+    seedDemoWelcome(root);
 
     const store = createFsTemplateStore(root);
     const files = store.load('demo.welcome');
-    const serialized = serializeTemplateSource(files);
-    const result = store.save('demo.welcome', serialized, files);
+    const next = {
+      ...files,
+      metadata: { ...files.metadata, name: 'Welcome (persisted)' },
+      previewData: { ...files.previewData, name: 'Persisted Name' },
+    };
+    const result = store.save('demo.welcome', serializeTemplateSource(next), next);
     assert.equal(result.ok, true);
     const reloaded = store.load('demo.welcome');
     assert.equal(reloaded.metadata.key, 'demo.welcome');
+    assert.equal(reloaded.metadata.name, 'Welcome (persisted)');
+    assert.equal(reloaded.previewData['name'], 'Persisted Name');
+  });
+
+  it('leaves original files unchanged when a later staged write fails', () => {
+    const root = mkdtempSync(join(tmpdir(), 'pk-admin-store-fail-'));
+    after(() => rmSync(root, { recursive: true, force: true }));
+    seedDemoWelcome(root);
+
+    const originalPreview = readFileSync(join(root, 'demo.welcome', 'preview.json'), 'utf8');
+    const originalMeta = readFileSync(join(root, 'demo.welcome', 'metadata.json'), 'utf8');
+
+    const store = createFsTemplateStore(root, {
+      writeFileSync(path, data, options) {
+        if (String(path).endsWith('preview.json')) {
+          throw new Error('simulated preview write failure');
+        }
+        return writeFileSync(path, data, options);
+      },
+    });
+
+    const files = store.load('demo.welcome');
+    const next = {
+      ...files,
+      metadata: { ...files.metadata, name: 'Should not land' },
+    };
+    const result = store.save('demo.welcome', serializeTemplateSource(next), next);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.message ?? '', /simulated preview write failure/);
+    }
+
+    assert.equal(readFileSync(join(root, 'demo.welcome', 'preview.json'), 'utf8'), originalPreview);
+    assert.equal(readFileSync(join(root, 'demo.welcome', 'metadata.json'), 'utf8'), originalMeta);
+    assert.equal(store.load('demo.welcome').metadata.name, files.metadata.name);
   });
 });
