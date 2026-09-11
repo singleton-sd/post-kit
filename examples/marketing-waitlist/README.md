@@ -60,6 +60,18 @@ export async function POST(request: Request): Promise<Response> {
 }
 ```
 
+### Environment variables
+
+Server-side only. None of these may be exposed to the browser — in particular
+never under a `NEXT_PUBLIC_*`, `VITE_*`, or `PUBLIC_*` prefix.
+
+| Variable | Purpose |
+| --- | --- |
+| `POSTKIT_ENDPOINT` | Base URL of the PostKit API. |
+| `POSTKIT_API_KEY` | Tenant Bearer credential. In production source it **only** from Azure Key Vault `ssd-postkit-kv-prod-ae`; any Function App setting must be a Key Vault reference. Never ship it in browser code. |
+
+The specs need none of them.
+
 ## Template source
 
 `content/email-templates/marketing.waitlist-confirm/` — publish with
