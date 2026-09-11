@@ -33,12 +33,10 @@ The security properties it enforces:
 
 ## Waitlist / whitelist signup
 
-The same handler shape covers waitlist signup — swap the template key and the
-variables. The one difference is that the confirmation goes *to the submitted
-address*, so `to` comes from user input. That is the only case where it should,
-and it needs the extra controls listed in the guide (strict validation, per
-address rate limiting, one send per submission, a dedicated template). Never
-accept a list of recipients.
+See the dedicated example
+[`examples/marketing-waitlist/`](../marketing-waitlist/) — same topology, but
+confirmation goes *to the submitted address*. Never accept a list of
+recipients.
 
 ## Run the specs
 

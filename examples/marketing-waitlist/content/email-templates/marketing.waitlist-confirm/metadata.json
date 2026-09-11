@@ -1,0 +1,7 @@
+{
+  "key": "marketing.waitlist-confirm",
+  "name": "Waitlist confirmation",
+  "subject": "You're on the list, {{name}}",
+  "variables": ["name", "email"],
+  "schemaVersion": "1"
+}
