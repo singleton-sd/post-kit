@@ -1,0 +1,93 @@
+name: Visual review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: visual-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual-review:
+    name: visual-review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Detect visual-accepted label
+        id: accept
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: labels } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const accepted = labels.some((l) => l.name === "visual-accepted");
+            core.setOutput("accepted", accepted ? "true" : "false");
+            if (accepted) {
+              core.info("Label visual-accepted is present; gate will pass.");
+            }
+
+      - name: Accept intentional visual diffs
+        if: steps.accept.outputs.accepted == 'true'
+        run: |
+          echo "visual-accepted label present — clearing visual-review (no rebuild required)."
+
+      - uses: actions/checkout@v4
+        if: steps.accept.outputs.accepted != 'true'
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        if: steps.accept.outputs.accepted != 'true'
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        if: steps.accept.outputs.accepted != 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        if: steps.accept.outputs.accepted != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build editor package deps
+        if: steps.accept.outputs.accepted != 'true'
+        run: |
+          pnpm --filter @singleton-sd/post-kit-types run build
+          pnpm --filter @singleton-sd/post-kit-compiler run build
+          pnpm --filter @singleton-sd/post-kit-editor run build
+
+      - name: Build Storybook
+        if: steps.accept.outputs.accepted != 'true'
+        run: pnpm --filter @singleton-sd/post-kit-editor build-storybook
+
+      - name: Install Playwright Chromium
+        if: steps.accept.outputs.accepted != 'true'
+        run: pnpm --filter @singleton-sd/post-kit-editor exec playwright install chromium --with-deps
+
+      - name: Capture visual screenshots
+        if: steps.accept.outputs.accepted != 'true'
+        run: pnpm --filter @singleton-sd/post-kit-editor test:visual
+
+      - name: Visual gate
+        if: steps.accept.outputs.accepted != 'true'
+        env:
+          VISUAL_ACCEPTED: '0'
+        run: pnpm --filter @singleton-sd/post-kit-editor test:visual:gate
+
+      - name: Upload visual artifact
+        if: steps.accept.outputs.accepted != 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-visual
+          path: packages/post-kit-editor/test-results/visual
+          if-no-files-found: ignore
+          retention-days: 14

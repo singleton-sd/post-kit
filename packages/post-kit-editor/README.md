@@ -215,12 +215,55 @@ Opens on http://localhost:6006. Stories live under `stories/` with config in
 with `examples/`). Prefer **Admin / EmailTemplateAdmin** for full-page review;
 `EmailTemplateEditor` stories use Storybook-only layout CSS so the PostKit
 sidebar sits beside the canvas (the published package still ships class names
-without a required stylesheet). There is no Chromatic / screenshot CI in the
-package itself — see the Playwright `visual-review` gate when present.
+without a required stylesheet).
 
 Most stories use the public API (`EmailTemplateEditor`, `EmailBuilderCanvas`).
 Isolated panel stories import private modules from `src/` and document that
 they are **dev-only** — do not treat those paths as a supported public API.
+
+## Visual review (Playwright + Storybook)
+
+CI job **`visual-review`** screenshots three Storybook iframe stories against
+committed PNGs in [`visual-baselines/`](./visual-baselines/). Capture always
+exits 0; `test:visual:gate` fails when the manifest has `changed` / `new`
+unless `VISUAL_ACCEPTED=1` (or the PR has label `visual-accepted`).
+
+Stories (desktop 1440×900):
+
+- `admin-emailtemplateadmin--full-admin`
+- `editor-emailbuildercanvas--editable`
+- `editor-emailtemplateeditor--full-editor`
+
+```bash
+# from the monorepo root
+pnpm --filter @singleton-sd/post-kit-editor playwright:install
+pnpm --filter @singleton-sd/post-kit-editor build-storybook
+pnpm --filter @singleton-sd/post-kit-editor test:visual
+pnpm --filter @singleton-sd/post-kit-editor test:visual:gate
+```
+
+Output lands in `test-results/visual/` (gitignored): `pr/`, `base/`, `diff/`,
+`manifest.json`, and `index.html`. Open the HTML report locally to inspect
+diffs.
+
+### Updating baselines
+
+After intentional UI changes:
+
+```bash
+cp packages/post-kit-editor/test-results/visual/pr/*.png \
+  packages/post-kit-editor/visual-baselines/
+pnpm --filter @singleton-sd/post-kit-editor test:visual
+pnpm --filter @singleton-sd/post-kit-editor test:visual:gate
+```
+
+Commit the updated PNGs under `visual-baselines/`.
+
+### Accepting diffs without updating baselines
+
+On a PR, add the GitHub label **`visual-accepted`**. That alone clears the
+`visual-review` check (no rebuild). Prefer committing new baselines when the
+change is intentional and should become the new reference.
 
 ## Development
 
