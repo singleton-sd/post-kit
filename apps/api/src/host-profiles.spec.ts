@@ -17,4 +17,20 @@ describe('Function App host profiles', () => {
     assert.ok(seed['app:email:profilesByHost']?.includes('inkads.poc.singletonsd.com'));
     assert.equal(seed['app:email:validation:domain'], 'mail.plattform-kit.poc.singletonsd.com');
   });
+
+  it('persists platform CORS exact origins alongside App Config ORIGINS globs', () => {
+    const root = path.resolve(__dirname, '../../..');
+    const bicep = readFileSync(path.join(root, 'infra/function-app.bicep'), 'utf8');
+    const seed = JSON.parse(
+      readFileSync(path.join(root, 'infra/appconfig-seed.json'), 'utf8'),
+    ) as Record<string, string>;
+
+    assert.match(bicep, /cors:\s*\{/);
+    assert.match(bicep, /supportCredentials:\s*false/);
+    assert.match(bicep, /'https:\/\/inkads\.poc\.singletonsd\.com'/);
+    assert.match(bicep, /'https:\/\/plattform-kit\.poc\.singletonsd\.com'/);
+    assert.match(bicep, /'http:\/\/localhost:4321'/);
+    assert.ok(seed['app:email:origins']?.includes('*.poc.singletonsd.com'));
+    assert.ok(seed['app:email:origins']?.includes('localhost:4321'));
+  });
 });

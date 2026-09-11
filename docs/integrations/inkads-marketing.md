@@ -40,6 +40,11 @@ Seeded in [`infra/appconfig-seed.json`](../../infra/appconfig-seed.json):
 `inkads.poc.singletonsd.com/pr-preview/pr-*` previews share the same allowed
 origin host.
 
+**Also required:** Function App **platform CORS** exact origins (see
+[`infra/function-app.bicep`](../../infra/function-app.bicep) `siteConfig.cors`).
+App Config ORIGINS alone does not satisfy Linux Consumption browser preflight.
+Full checklist: [`docs/onboarding/contact-consumer.md`](../onboarding/contact-consumer.md).
+
 ## Request shape
 
 `POST /contact` body (browser → PostKit):
@@ -115,6 +120,7 @@ only required for authenticated `SendRequest` flows.
 
 ## Related docs
 
+- [`docs/onboarding/contact-consumer.md`](../onboarding/contact-consumer.md)
 - [`docs/guides/public-forms.md`](../guides/public-forms.md)
 - [`docs/email-forward-email.md`](../email-forward-email.md)
 - Platform Kit reference: `plattform-kit` `docs/marketing-astro-decap.md`
