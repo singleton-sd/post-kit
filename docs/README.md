@@ -45,11 +45,13 @@ docs/
 │   └── inkads-marketing.md   (InkAds PoC site → POST /contact)
 ├── onboarding/
 │   ├── tenant-onboarding.md  (new tenant → first email)
+│   ├── contact-consumer.md   (new marketing/contact consumer checklist)
 │   └── environments.md       (dev/staging/prod separation, local dev)
 ├── operations/
 │   ├── troubleshooting.md    (send endpoint triage, correlation IDs, runbooks)
 │   ├── send-metrics-queries.md (Kusto queries for send telemetry)
-│   └── releasing.md          (release.yml bump + OIDC npm publish checklist)
+│   ├── releasing.md          (release.yml bump + OIDC npm publish checklist)
+│   └── learnings-contact-cors-custom-domain.md (CORS dual-allowlist, contact 500, custom domain, agent handoff)
 └── examples/
     └── publish-email-templates.yml (sample consumer publish workflow)
 ```
@@ -71,6 +73,7 @@ docs/
 | [`guides/editor-integration.md`](./guides/editor-integration.md) | Embed `@singleton-sd/post-kit-editor`: install, `onSave` persistence, preview vs send, access control |
 | [`examples/publish-email-templates.yml`](./examples/publish-email-templates.yml) | Sample consumer-repository publish workflow (not installed in this repo) |
 | [`onboarding/tenant-onboarding.md`](./onboarding/tenant-onboarding.md) | New tenant from nothing configured to first email: identifier, credential, sender, templates, publish, test send, triage |
+| [`onboarding/contact-consumer.md`](./onboarding/contact-consumer.md) | New marketing/contact consumer: App Config origins + host profile, platform CORS, optional mail domain, publicBaseUrl, preview header, smoke tests |
 | [`onboarding/environments.md`](./onboarding/environments.md) | development/staging/production separation, local development without real delivery |
 | [`architecture/request-lifecycle.md`](./architecture/request-lifecycle.md) | `POST /emails/send` runtime sequence, correlation IDs, error-code → HTTP-status table |
 | [`architecture/template-lifecycle.md`](./architecture/template-lifecycle.md) | Template source → compiler → publisher → Blob layout → send-time load |

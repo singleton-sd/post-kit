@@ -115,6 +115,11 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
       linuxFxVersion: 'Node|22'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
+      // Platform CORS is owned by App Config → scripts/sync-function-cors-from-appconfig.sh
+      // (deploy-api runs it after seed). Do not hardcode allowedOrigins here — a stale
+      // list in bicep would fight the sync on infra redeploy. Linux Consumption still
+      // requires platform CORS for OPTIONS; the sync derives exact URLs from
+      // app:email:origins (exact hosts) + app:email:profilesByHost keys.
       appSettings: [
         {
           name: 'AzureWebJobsStorage'

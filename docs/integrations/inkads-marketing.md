@@ -40,6 +40,12 @@ Seeded in [`infra/appconfig-seed.json`](../../infra/appconfig-seed.json):
 `inkads.poc.singletonsd.com/pr-preview/pr-*` previews share the same allowed
 origin host.
 
+Platform CORS on the Function App is **synced from App Config** (profile hosts
++ exact ORIGINS entries) via `pnpm cors:sync` /
+[`scripts/sync-function-cors-from-appconfig.sh`](../../scripts/sync-function-cors-from-appconfig.sh)
+— not a second hardcoded list. Full checklist:
+[`docs/onboarding/contact-consumer.md`](../onboarding/contact-consumer.md).
+
 ## Request shape
 
 `POST /contact` body (browser → PostKit):
@@ -115,6 +121,7 @@ only required for authenticated `SendRequest` flows.
 
 ## Related docs
 
+- [`docs/onboarding/contact-consumer.md`](../onboarding/contact-consumer.md)
 - [`docs/guides/public-forms.md`](../guides/public-forms.md)
 - [`docs/email-forward-email.md`](../email-forward-email.md)
 - Platform Kit reference: `plattform-kit` `docs/marketing-astro-decap.md`

@@ -17,4 +17,25 @@ describe('Function App host profiles', () => {
     assert.ok(seed['app:email:profilesByHost']?.includes('inkads.poc.singletonsd.com'));
     assert.equal(seed['app:email:validation:domain'], 'mail.plattform-kit.poc.singletonsd.com');
   });
+
+  it('owns platform CORS via App Config sync script, not hardcoded bicep origins', () => {
+    const root = path.resolve(__dirname, '../../..');
+    const bicep = readFileSync(path.join(root, 'infra/function-app.bicep'), 'utf8');
+    const seed = JSON.parse(
+      readFileSync(path.join(root, 'infra/appconfig-seed.json'), 'utf8'),
+    ) as Record<string, string>;
+    const deploy = readFileSync(path.join(root, '.github/workflows/deploy-api.yml'), 'utf8');
+    const syncScript = readFileSync(
+      path.join(root, 'scripts/sync-function-cors-from-appconfig.sh'),
+      'utf8',
+    );
+
+    assert.doesNotMatch(bicep, /cors:\s*\{/);
+    assert.doesNotMatch(bicep, /allowedOrigins:/);
+    assert.match(syncScript, /platformCorsOriginsFromAppConfig/);
+    assert.match(deploy, /sync-function-cors-from-appconfig\.sh/);
+    assert.ok(seed['app:email:origins']?.includes('*.poc.singletonsd.com'));
+    assert.ok(seed['app:email:origins']?.includes('localhost:4321'));
+    assert.ok(seed['app:email:profilesByHost']?.includes('inkads.poc.singletonsd.com'));
+  });
 });
