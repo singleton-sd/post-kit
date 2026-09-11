@@ -236,6 +236,10 @@ committed PNGs in [`visual-baselines/`](./visual-baselines/). Capture always
 exits 0; `test:visual:gate` fails when the manifest has `changed` / `new`
 unless `VISUAL_ACCEPTED=1` (or the PR has label `visual-accepted`).
 
+On each PR run the workflow posts (or updates) a sticky comment with the
+Actions run URL and steps to download the **`editor-visual`** artifact and
+open `index.html` (GitHub does not host the HTML report inline).
+
 Stories (desktop 1440×900):
 
 - `admin-email-builder-overview--full-admin`
