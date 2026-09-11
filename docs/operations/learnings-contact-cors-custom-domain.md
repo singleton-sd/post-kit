@@ -12,9 +12,12 @@ the `postkit-contact-consumer` skill.
 1. **Dual CORS is mandatory on Linux Consumption.** The Functions host answers
    browser `OPTIONS` before worker code runs. App Config `app:email:origins`
    + `contactCorsHeaders` only affect requests that reach the function (e.g.
-   `POST`). Platform CORS (`siteConfig.cors.allowedOrigins` / `az functionapp
-   cors`) needs **exact** `https://…` origins — no `*.poc…` globs. Persist
-   them in [`infra/function-app.bicep`](../../infra/function-app.bicep).
+   `POST`). Platform CORS still needs **exact** `https://…` origins — no
+   `*.poc…` globs. **Own the list in App Config** (`origins` exact hosts +
+   `profilesByHost` keys) and run
+   [`scripts/sync-function-cors-from-appconfig.sh`](../../scripts/sync-function-cors-from-appconfig.sh)
+   (`pnpm cors:sync`, Deploy API). Do not maintain a parallel hardcoded list
+   in bicep.
 2. **Symptom split:** missing platform CORS → browser reports no
    `Access-Control-Allow-Origin` on preflight (often a bare `204`). Direct
    `POST` may still return app CORS headers.

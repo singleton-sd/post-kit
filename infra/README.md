@@ -41,6 +41,11 @@ is first-run only — `scripts/seed-appconfig.sh` does **not** overwrite keys th
 already exist, so ops can edit in the portal. The Forward Email token is a Key
 Vault reference (`secret:forwardemail-api-key`), not a value in the store.
 
+After seed, Deploy API runs
+`scripts/sync-function-cors-from-appconfig.sh` so Function App **platform CORS**
+matches App Config (exact ORIGINS hosts + `profilesByHost` keys). Local:
+`pnpm cors:sync`.
+
 The Function App only needs `AZURE_APPCONFIGURATION_ENDPOINT` plus host
 plumbing. It loads keys at request time via managed identity.
 

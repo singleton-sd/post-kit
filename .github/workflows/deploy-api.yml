@@ -14,6 +14,8 @@ on:
       - 'infra/function-app.bicep'
       - 'infra/appconfig-seed.json'
       - 'scripts/seed-appconfig.sh'
+      - 'scripts/sync-function-cors-from-appconfig.sh'
+      - 'scripts/platform-cors-origins.mjs'
       - '.github/workflows/deploy-api.yml'
   workflow_dispatch:
 
@@ -137,6 +139,12 @@ jobs:
           set -euo pipefail
           chmod +x scripts/seed-appconfig.sh
           ./scripts/seed-appconfig.sh infra/appconfig-seed.json
+
+      - name: Sync Function App platform CORS from App Configuration
+        run: |
+          set -euo pipefail
+          chmod +x scripts/sync-function-cors-from-appconfig.sh
+          ./scripts/sync-function-cors-from-appconfig.sh
 
       - name: Zip deploy Function App
         run: |

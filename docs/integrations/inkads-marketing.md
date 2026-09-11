@@ -40,10 +40,11 @@ Seeded in [`infra/appconfig-seed.json`](../../infra/appconfig-seed.json):
 `inkads.poc.singletonsd.com/pr-preview/pr-*` previews share the same allowed
 origin host.
 
-**Also required:** Function App **platform CORS** exact origins (see
-[`infra/function-app.bicep`](../../infra/function-app.bicep) `siteConfig.cors`).
-App Config ORIGINS alone does not satisfy Linux Consumption browser preflight.
-Full checklist: [`docs/onboarding/contact-consumer.md`](../onboarding/contact-consumer.md).
+Platform CORS on the Function App is **synced from App Config** (profile hosts
++ exact ORIGINS entries) via `pnpm cors:sync` /
+[`scripts/sync-function-cors-from-appconfig.sh`](../../scripts/sync-function-cors-from-appconfig.sh)
+— not a second hardcoded list. Full checklist:
+[`docs/onboarding/contact-consumer.md`](../onboarding/contact-consumer.md).
 
 ## Request shape
 

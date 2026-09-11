@@ -115,18 +115,11 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
       linuxFxVersion: 'Node|22'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
-      // Linux Consumption handles OPTIONS at the platform. App-level CORS helpers
-      // and App Config ORIGINS alone do not satisfy browser preflight — keep these
-      // exact origins in sync with app:email:origins (hostname globs) when adding
-      // a marketing/contact consumer. Azure platform CORS does not support globs.
-      cors: {
-        allowedOrigins: [
-          'https://inkads.poc.singletonsd.com'
-          'https://plattform-kit.poc.singletonsd.com'
-          'http://localhost:4321'
-        ]
-        supportCredentials: false
-      }
+      // Platform CORS is owned by App Config → scripts/sync-function-cors-from-appconfig.sh
+      // (deploy-api runs it after seed). Do not hardcode allowedOrigins here — a stale
+      // list in bicep would fight the sync on infra redeploy. Linux Consumption still
+      // requires platform CORS for OPTIONS; the sync derives exact URLs from
+      // app:email:origins (exact hosts) + app:email:profilesByHost keys.
       appSettings: [
         {
           name: 'AzureWebJobsStorage'
