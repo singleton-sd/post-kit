@@ -182,8 +182,10 @@ Some teams stage drafts outside the publish branch:
 Keep staging credentials and PostKit send credentials on the server. The
 browser only talks to your admin API with the user’s session.
 
-See [`examples/admin-editor/`](../../examples/admin-editor/) for an
-in-memory load/save adapter that mirrors the callback contract without I/O.
+See [`examples/admin-editor/`](../../examples/admin-editor/) for list/load from
+`content/email-templates/`, a filesystem save stub (with PR reminder), an
+in-memory UI adapter, and a server-only Send-test BFF
+(`handleSendTest` + `POSTKIT_API_KEY`).
 
 ## Preview vs send-time Handlebars
 

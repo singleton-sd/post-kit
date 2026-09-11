@@ -28,7 +28,7 @@ the body.
 Consumer repository
   content/email-templates/<dir>/{template.json, metadata.json, preview.json}
         |
-        |  edit (by hand today; the editor package is not implemented — see #5)
+        |  edit (by hand or via @singleton-sd/post-kit-editor in a consumer admin)
         v
 Pull request in the consumer repository
         |
@@ -158,4 +158,6 @@ surfaces as `404 TEMPLATE_NOT_FOUND`. See
 
 Template source may be authored by hand or with
 [`@singleton-sd/post-kit-editor`](../../packages/post-kit-editor/README.md)
-(published on npmjs; epic [#5](https://github.com/singleton-sd/post-kit/issues/5)).
+(published on npmjs). Embed pattern:
+[`examples/admin-editor`](../../examples/admin-editor/) and
+[`guides/editor-integration.md`](../guides/editor-integration.md).

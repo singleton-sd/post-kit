@@ -81,6 +81,9 @@ importers:
 
   examples/admin-editor:
     dependencies:
+      '@singleton-sd/post-kit-client':
+        specifier: workspace:*
+        version: link:../../packages/post-kit-client
       '@singleton-sd/post-kit-editor':
         specifier: workspace:*
         version: link:../../packages/post-kit-editor
