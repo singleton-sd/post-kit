@@ -19,10 +19,35 @@ import {
   type EmailTemplateEditorProps,
 } from '../email-template-editor';
 import theme from '../email-builder-ui/theme';
+import { loadTemplateSource } from '../serialization';
 import type { TemplateSourceFiles, TemplateVariable } from '../types';
 import { reconcileSelectedKey } from './reconcile-selected-key';
 
 export const ADMIN_CLASS_PREFIX = 'pk-admin-';
+
+/** Synthetic placeholder used only while catalog is empty under loading/loadError. */
+const EMPTY_CATALOG_PLACEHOLDER: TemplateSourceFiles = loadTemplateSource({
+  templateJson: {
+    root: {
+      type: 'EmailLayout',
+      data: {
+        backdropColor: '#F5F5F5',
+        canvasColor: '#FFFFFF',
+        textColor: '#262626',
+        fontFamily: 'MODERN_SANS',
+        childrenIds: [],
+      },
+    },
+  },
+  metadata: {
+    key: 'admin.placeholder',
+    name: 'Loading',
+    subject: 'Loading',
+    variables: [],
+    schemaVersion: '1',
+  },
+  previewData: {},
+});
 
 export interface EmailTemplateAdminProps extends Omit<
   EmailTemplateEditorProps,
@@ -30,7 +55,7 @@ export interface EmailTemplateAdminProps extends Omit<
 > {
   /**
    * Catalog of templates the admin may open (from Git / consumer list API).
-   * Must contain at least one entry.
+   * Must contain at least one entry unless `loading` or `loadError` is set.
    */
   templates: TemplateSourceFiles[];
   /**
@@ -41,6 +66,17 @@ export interface EmailTemplateAdminProps extends Omit<
   className?: string;
 }
 
+function assertUniqueCatalogKeys(templates: TemplateSourceFiles[]): void {
+  const seen = new Set<string>();
+  for (const t of templates) {
+    const key = t.metadata.key;
+    if (seen.has(key)) {
+      throw new Error(`EmailTemplateAdmin: duplicate metadata.key "${key}".`);
+    }
+    seen.add(key);
+  }
+}
+
 /**
  * Full-page embeddable admin for PostKit email templates.
  *
@@ -49,11 +85,88 @@ export interface EmailTemplateAdminProps extends Omit<
  * Consumers supply the catalog and persistence callbacks only.
  */
 export function EmailTemplateAdmin(props: EmailTemplateAdminProps): JSX.Element {
-  const { templates, availableVariables, className, ...editorProps } = props;
+  const { templates, loading, loadError } = props;
+
+  if (!loading) {
+    assertUniqueCatalogKeys(templates);
+  }
 
   if (templates.length === 0) {
+    if (loading || loadError) {
+      return <EmailTemplateAdminShell {...props} />;
+    }
     throw new Error('EmailTemplateAdmin requires at least one template.');
   }
+
+  return <EmailTemplateAdminCatalog {...props} />;
+}
+
+/** Loading / error shell when the catalog has not arrived yet. */
+function EmailTemplateAdminShell({
+  templates: _templates,
+  availableVariables,
+  className,
+  loading,
+  loadError,
+  ...editorProps
+}: EmailTemplateAdminProps): JSX.Element {
+  void _templates;
+  const rootClass = [`${ADMIN_CLASS_PREFIX}root`, className].filter(Boolean).join(' ');
+
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box
+        className={rootClass}
+        data-testid={`${ADMIN_CLASS_PREFIX}root`}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: '100%',
+          bgcolor: 'background.default',
+        }}
+      >
+        <Stack
+          component="header"
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={2}
+          alignItems={{ xs: 'stretch', sm: 'center' }}
+          justifyContent="space-between"
+          sx={{
+            px: 2,
+            py: 1.5,
+            borderBottom: 1,
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+          }}
+          className={`${ADMIN_CLASS_PREFIX}header`}
+        >
+          <Typography variant="h6" component="h1" className={`${ADMIN_CLASS_PREFIX}title`}>
+            Email templates
+          </Typography>
+        </Stack>
+
+        <Box
+          className={`${ADMIN_CLASS_PREFIX}editor`}
+          data-testid={`${ADMIN_CLASS_PREFIX}editor`}
+          sx={{ flex: 1, minHeight: 0 }}
+        >
+          <EmailTemplateEditor
+            template={EMPTY_CATALOG_PLACEHOLDER}
+            availableVariables={availableVariables}
+            className={`${EDITOR_CLASS_PREFIX}in-admin`}
+            loading={loading}
+            loadError={loadError}
+            {...editorProps}
+          />
+        </Box>
+      </Box>
+    </ThemeProvider>
+  );
+}
+
+function EmailTemplateAdminCatalog(props: EmailTemplateAdminProps): JSX.Element {
+  const { templates, availableVariables, className, ...editorProps } = props;
 
   const catalogKeys = templates.map((t) => t.metadata.key);
   const catalogKeysSignature = catalogKeys.join('\0');

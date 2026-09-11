@@ -53,10 +53,58 @@ describe('EmailTemplateAdmin', () => {
     assert.match(withSend, /Send.test/i);
   });
 
-  it('throws when templates is empty', () => {
+  it('throws when templates is empty and not loading/loadError', () => {
     assert.throws(
       () => renderToStaticMarkup(<EmailTemplateAdmin templates={[]} onSave={() => undefined} />),
       /at least one template/,
     );
+  });
+
+  it('allows empty catalog while loading and renders loading shell', () => {
+    const html = renderToStaticMarkup(
+      <EmailTemplateAdmin templates={[]} loading onSave={() => undefined} />,
+    );
+    assert.match(html, new RegExp(`data-testid="${ADMIN_CLASS_PREFIX}root"`));
+    assert.match(html, /pk-editor-loading/);
+    assert.doesNotMatch(html, new RegExp(`data-testid="${ADMIN_CLASS_PREFIX}template-select"`));
+  });
+
+  it('allows empty catalog with loadError and renders error shell', () => {
+    const html = renderToStaticMarkup(
+      <EmailTemplateAdmin
+        templates={[]}
+        loadError="Synthetic catalog fetch failure."
+        onSave={() => undefined}
+      />,
+    );
+    assert.match(html, new RegExp(`data-testid="${ADMIN_CLASS_PREFIX}root"`));
+    assert.match(html, /Synthetic catalog fetch failure/);
+  });
+
+  it('throws on duplicate metadata.key when not loading', () => {
+    const dup = loadTemplateSource({
+      templateJson: minimalTemplate,
+      metadata: { ...minimalMetadata, key: nested.metadata.key },
+      previewData: minimalPreview,
+    });
+    assert.throws(
+      () =>
+        renderToStaticMarkup(
+          <EmailTemplateAdmin templates={[nested, dup]} onSave={() => undefined} />,
+        ),
+      /duplicate metadata\.key/,
+    );
+  });
+
+  it('skips duplicate-key check while loading', () => {
+    const dup = loadTemplateSource({
+      templateJson: minimalTemplate,
+      metadata: { ...minimalMetadata, key: nested.metadata.key },
+      previewData: minimalPreview,
+    });
+    const html = renderToStaticMarkup(
+      <EmailTemplateAdmin templates={[nested, dup]} loading onSave={() => undefined} />,
+    );
+    assert.match(html, /pk-editor-loading/);
   });
 });

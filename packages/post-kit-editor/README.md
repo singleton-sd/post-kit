@@ -199,11 +199,10 @@ markup.
 
 ## Storybook (local visual exploration)
 
-Package-local Storybook (Vite + React) for clicking through the canvas,
-metadata, variable catalogue, preview pane, and save/send-test chrome with
-**synthetic fixtures only**. It is not a substitute for
-[`examples/minimal/`](./examples/minimal/) (canonical consumer sample) or for
-the SSR unit tests above.
+Package-local Storybook 8.6 (Vite + React + interactions) for the Admin Email
+Builder with **synthetic fixtures only** (no network image URLs — fixtures use
+`data:image/svg+xml` URIs). It is not a substitute for
+[`examples/minimal/`](./examples/minimal/) or for the SSR unit tests above.
 
 ```bash
 # from the monorepo root
@@ -211,15 +210,24 @@ pnpm --filter @singleton-sd/post-kit-editor storybook
 ```
 
 Opens on http://localhost:6006. Stories live under `stories/` with config in
-`.storybook/`. Both are outside the published `files` / `dist` surface (along
-with `examples/`). Prefer **Admin / EmailTemplateAdmin** for full-page review;
-`EmailTemplateEditor` stories use Storybook-only layout CSS so the PostKit
-sidebar sits beside the canvas (the published package still ships class names
-without a required stylesheet).
+`.storybook/`. Both are outside the published `files` / `dist` surface.
 
-Most stories use the public API (`EmailTemplateEditor`, `EmailBuilderCanvas`).
-Isolated panel stories import private modules from `src/` and document that
-they are **dev-only** — do not treat those paths as a supported public API.
+Hierarchy (titles):
+
+| Group | Focus |
+| --- | --- |
+| **Admin/Email Builder/Overview** | Empty catalog entry, full welcome catalog |
+| **Admin/Email Builder/Blocks/\*** | Per-block `EmailBuilderCanvas` (Text, Heading, Button, Image, Avatar, Divider, Spacer, Container, Columns, Html) |
+| **Admin/Email Builder/Layout** | Typography, colours, nested containers, columns, long content |
+| **Admin/Email Builder/Templates** | Welcome, OTP, password reset, transactional, receipt, report |
+| **Admin/Email Builder/States** | Loading, load error, saving/saved/save error, invalid document, unsaved |
+| **Admin/Email Builder/Interactions** | Play functions (`@storybook/test`) for samples + Save success/failure |
+| **Admin/Email Builder/Responsive** | Desktop / mobile viewport parameters |
+
+Reusable fixtures: `stories/fixtures/` (`documents`, `template-sources`, `mocks`).
+Shell layout CSS: `stories/storybook-shell.css` (sidebar/canvas grid). Prefer
+**Overview / Templates** for full-page Admin review; block stories mount
+`EmailBuilderCanvas` fullscreen.
 
 ## Visual review (Playwright + Storybook)
 
@@ -230,9 +238,9 @@ unless `VISUAL_ACCEPTED=1` (or the PR has label `visual-accepted`).
 
 Stories (desktop 1440×900):
 
-- `admin-emailtemplateadmin--full-admin`
-- `editor-emailbuildercanvas--editable`
-- `editor-emailtemplateeditor--full-editor`
+- `admin-email-builder-overview--full-admin`
+- `admin-email-builder-blocks-text--default`
+- `admin-email-builder-templates--welcome-editor`
 
 ```bash
 # from the monorepo root

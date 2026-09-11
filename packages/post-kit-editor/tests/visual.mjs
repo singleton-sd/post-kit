@@ -48,15 +48,15 @@ const baseLabel = `committed:${path.relative(rootDir, baselinesDir) || 'visual-b
 /** @type {{ id: string; waitFor: string[] }[]} */
 const STORIES = [
   {
-    id: 'admin-emailtemplateadmin--full-admin',
+    id: 'admin-email-builder-overview--full-admin',
     waitFor: ['pk-admin-root', 'pk-editor-eb-mui-surface'],
   },
   {
-    id: 'editor-emailbuildercanvas--editable',
+    id: 'admin-email-builder-blocks-text--default',
     waitFor: ['pk-editor-eb-mui-surface'],
   },
   {
-    id: 'editor-emailtemplateeditor--full-editor',
+    id: 'admin-email-builder-templates--welcome-editor',
     waitFor: ['pk-editor-eb-mui-surface'],
   },
 ];
