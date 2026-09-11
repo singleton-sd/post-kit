@@ -10,7 +10,7 @@ ClickUp: [POC-259](https://app.clickup.com/t/86d42mwdr)
 key `app:api:publicBaseUrl` (seeded in [`infra/appconfig-seed.json`](../../infra/appconfig-seed.json)):
 
 ```text
-https://ssd-postkit-api-prod-ae.azurewebsites.net
+https://postkit.singletonsd.com
 ```
 
 Static consumers (InkAds marketing) should resolve this at **build time** via
@@ -25,7 +25,7 @@ limits, and routes the message to the InkAds inbox using the host profile below.
 Health check (no auth):
 
 ```bash
-curl -fsS "https://ssd-postkit-api-prod-ae.azurewebsites.net/health"
+curl -fsS "https://postkit.singletonsd.com/health"
 ```
 
 ## InkAds host profile (App Configuration)
@@ -110,7 +110,7 @@ allows real sends from preview hosts / preview-marked requests (see
 
 After deploying App Configuration changes:
 
-1. `curl -fsS https://ssd-postkit-api-prod-ae.azurewebsites.net/health`
+1. `curl -fsS https://postkit.singletonsd.com/health`
 2. From an allowed origin, smoke `POST /contact` with a valid body and confirm
    delivery to `inkads-support@singletonsd.com` (or dev capture on localhost).
 
