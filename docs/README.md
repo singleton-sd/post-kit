@@ -50,7 +50,8 @@ docs/
 ├── operations/
 │   ├── troubleshooting.md    (send endpoint triage, correlation IDs, runbooks)
 │   ├── send-metrics-queries.md (Kusto queries for send telemetry)
-│   └── releasing.md          (release.yml bump + OIDC npm publish checklist)
+│   ├── releasing.md          (release.yml bump + OIDC npm publish checklist)
+│   └── learnings-contact-cors-custom-domain.md (CORS dual-allowlist, contact 500, custom domain, agent handoff)
 └── examples/
     └── publish-email-templates.yml (sample consumer publish workflow)
 ```
