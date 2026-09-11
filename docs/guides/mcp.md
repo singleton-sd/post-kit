@@ -126,7 +126,7 @@ curl -sS http://localhost:7071/mcp \
 Endpoint:
 
 ```text
-https://ssd-postkit-api-prod-ae.azurewebsites.net/mcp
+https://postkit.singletonsd.com/mcp
 ```
 
 Use a Bearer token registered via `./scripts/register-tenant-api-key.sh` (hashed
@@ -139,7 +139,7 @@ or PR descriptions.
 {
   "mcpServers": {
     "post-kit": {
-      "url": "https://ssd-postkit-api-prod-ae.azurewebsites.net/mcp",
+      "url": "https://postkit.singletonsd.com/mcp",
       "headers": {
         "Authorization": "Bearer <token-from-secure-store>"
       }
