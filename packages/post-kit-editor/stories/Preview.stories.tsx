@@ -20,6 +20,7 @@ function PreviewDemo(): JSX.Element {
 
   return (
     <div
+      className="pk-story-shell pk-story-shell--wide"
       style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(240px, 320px) 1fr',
@@ -40,6 +41,7 @@ function PreviewDemo(): JSX.Element {
 const meta = {
   title: 'Editor/Preview',
   parameters: {
+    layout: 'fullscreen',
     docs: {
       description: {
         component:

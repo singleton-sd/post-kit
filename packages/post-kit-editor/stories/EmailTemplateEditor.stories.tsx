@@ -11,10 +11,11 @@ const meta = {
   title: 'Editor/EmailTemplateEditor',
   component: EmailTemplateEditor,
   parameters: {
+    layout: 'fullscreen',
     docs: {
       description: {
         story:
-          'Full consumer mount via the public `EmailTemplateEditor` export. Save and send-test are mocked in-memory — no network, Git, or filesystem I/O.',
+          'Single-template surface (advanced). Prefer Admin/EmailTemplateAdmin for the full page. Layout CSS is Storybook-only so the PostKit sidebar sits beside the canvas.',
       },
     },
   },
@@ -42,6 +43,7 @@ function mockSendTest(
   return { ok: true, message: `Mock send-test to ${recipient} (no network).` };
 }
 
+/** Canvas + PostKit chrome with room for the MUI EmailBuilder surface. */
 export const FullEditor: Story = {
   args: {
     template: nestedBlocksTemplate,
@@ -52,6 +54,7 @@ export const FullEditor: Story = {
 };
 
 export const Loading: Story = {
+  parameters: { layout: 'padded' },
   args: {
     template: nestedBlocksTemplate,
     onSave: mockSave,
@@ -60,6 +63,7 @@ export const Loading: Story = {
 };
 
 export const LoadError: Story = {
+  parameters: { layout: 'padded' },
   args: {
     template: nestedBlocksTemplate,
     onSave: mockSave,

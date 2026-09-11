@@ -45,7 +45,7 @@ function SaveSendDemo({
   };
 
   return (
-    <div style={{ maxWidth: 420 }}>
+    <div className="pk-story-shell">
       <SaveSendBar
         saveFeedback={saveFeedback}
         sendFeedback={sendFeedback}

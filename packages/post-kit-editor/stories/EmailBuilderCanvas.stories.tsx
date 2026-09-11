@@ -8,10 +8,11 @@ const meta = {
   title: 'Editor/EmailBuilderCanvas',
   component: EmailBuilderCanvas,
   parameters: {
+    layout: 'fullscreen',
     docs: {
       description: {
         story:
-          'Public `EmailBuilderCanvas` only — editable and read-only. No metadata, preview, or save chrome.',
+          'Public `EmailBuilderCanvas` only — editable and read-only. No metadata, preview, or save chrome. Uses the MUI EmailBuilder surface (inspector + samples).',
       },
     },
   },

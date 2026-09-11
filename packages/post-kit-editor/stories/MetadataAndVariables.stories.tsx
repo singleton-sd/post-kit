@@ -18,7 +18,7 @@ function MetadataAndVariablesDemo(): JSX.Element {
 
   return (
     <InsertionTargetProvider>
-      <div style={{ display: 'grid', gap: '1.5rem', maxWidth: 420 }}>
+      <div className="pk-story-shell">
         <MetadataPanel metadata={metadata} previewData={previewData} onChange={setMetadata} />
         <VariableCatalogue
           availableVariables={sampleAvailableVariables}
