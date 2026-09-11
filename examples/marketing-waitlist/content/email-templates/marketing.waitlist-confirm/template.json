@@ -1,0 +1,36 @@
+{
+  "root": {
+    "type": "EmailLayout",
+    "data": {
+      "backdropColor": "#F8F8F8",
+      "canvasColor": "#FFFFFF",
+      "textColor": "#242424",
+      "fontFamily": "MODERN_SANS",
+      "childrenIds": ["block-heading", "block-body"]
+    }
+  },
+  "block-heading": {
+    "type": "Text",
+    "data": {
+      "style": {
+        "fontWeight": "bold",
+        "padding": { "top": 24, "bottom": 8, "right": 24, "left": 24 }
+      },
+      "props": {
+        "text": "You're on the waitlist"
+      }
+    }
+  },
+  "block-body": {
+    "type": "Text",
+    "data": {
+      "style": {
+        "fontWeight": "normal",
+        "padding": { "top": 0, "bottom": 24, "right": 24, "left": 24 }
+      },
+      "props": {
+        "text": "Hi {{name}}, we saved {{email}} and will email you when a spot opens."
+      }
+    }
+  }
+}

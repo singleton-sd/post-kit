@@ -9,7 +9,12 @@ This is the reference pattern for every public-form integration: marketing-site
 double-opt-in. They are all the same shape — an anonymous visitor submits data,
 and a trusted server component turns that into a templated email.
 
-Worked example: [`examples/marketing-contact-us/`](../../examples/marketing-contact-us/).
+Worked examples:
+
+- Contact Us (inbox recipient):
+  [`examples/marketing-contact-us/`](../../examples/marketing-contact-us/)
+- Waitlist signup (confirmation to the submitted address):
+  [`examples/marketing-waitlist/`](../../examples/marketing-waitlist/)
 
 ## The required topology
 
@@ -254,4 +259,6 @@ which template keys exist and whether your credential is still valid.
 - [`docs/email-forward-email.md`](../email-forward-email.md) — provider
   runtime, DNS, and the existing `POST /contact` Function.
 - [`examples/marketing-contact-us/`](../../examples/marketing-contact-us/) —
-  runnable handler and specs for this pattern.
+  runnable Contact Us handler and specs.
+- [`examples/marketing-waitlist/`](../../examples/marketing-waitlist/) —
+  waitlist confirmation handler (recipient = signup email).

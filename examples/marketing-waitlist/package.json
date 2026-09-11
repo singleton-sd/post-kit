@@ -1,0 +1,21 @@
+{
+  "name": "@singleton-sd/example-marketing-waitlist",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Example: public waitlist signup confirmation through a trusted server endpoint",
+  "license": "MIT",
+  "scripts": {
+    "test": "pnpm --filter @singleton-sd/post-kit-client run build && tsc -p tsconfig.spec.json && node --import tsx --test src/waitlist-handler.spec.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@singleton-sd/post-kit-client": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  }
+}
