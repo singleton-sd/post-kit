@@ -70,7 +70,8 @@ export const BUTTONS: TButtonProps[] = [
       type: 'Image',
       data: {
         props: {
-          url: 'https://assets.usewaypoint.com/sample-image.jpg',
+          // Network-neutral empty placeholder (host supplies real URLs).
+          url: '',
           alt: 'Sample product',
           contentAlignment: 'middle',
           linkHref: null,
@@ -86,7 +87,8 @@ export const BUTTONS: TButtonProps[] = [
       type: 'Avatar',
       data: {
         props: {
-          imageUrl: 'https://ui-avatars.com/api/?size=128',
+          imageUrl:
+            "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Crect fill='%23E5E5E5' width='128' height='128'/%3E%3C/svg%3E",
           shape: 'circle',
         },
         style: { padding: { top: 16, bottom: 16, left: 24, right: 24 } },

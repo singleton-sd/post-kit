@@ -36,6 +36,7 @@ import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 import { chromium } from 'playwright';
 import { buildReportHtml } from './visual-report-html.mjs';
+import { isPathInsideRoot } from './is-path-inside-root.mjs';
 
 const rootDir = fileURLToPath(new URL('..', import.meta.url));
 const storybookDir = path.join(rootDir, 'storybook-static');
@@ -109,9 +110,11 @@ function createStaticServer(root) {
       }
 
       const pathname = normalizePathname(req.url);
-      const fsPath = path.join(root, pathname);
+      // Drop leading slash so join stays under root on POSIX.
+      const relativePath = pathname.replace(/^[/\\]+/, '');
+      const fsPath = path.resolve(root, relativePath);
 
-      if (!fsPath.startsWith(root) || !existsSync(fsPath)) {
+      if (!isPathInsideRoot(root, fsPath) || !existsSync(fsPath)) {
         res.statusCode = 404;
         res.end('Not found');
         return;

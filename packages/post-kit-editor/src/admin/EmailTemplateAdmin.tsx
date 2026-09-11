@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 import {
   Box,
-  CssBaseline,
   FormControl,
   InputLabel,
   ListSubheader,
   MenuItem,
+  ScopedCssBaseline,
   Select,
   Stack,
   ThemeProvider,
@@ -115,8 +115,7 @@ function EmailTemplateAdminShell({
 
   return (
     <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Box
+      <ScopedCssBaseline
         className={rootClass}
         data-testid={`${ADMIN_CLASS_PREFIX}root`}
         sx={{
@@ -160,7 +159,7 @@ function EmailTemplateAdminShell({
             {...editorProps}
           />
         </Box>
-      </Box>
+      </ScopedCssBaseline>
     </ThemeProvider>
   );
 }
@@ -202,8 +201,7 @@ function EmailTemplateAdminCatalog(props: EmailTemplateAdminProps): JSX.Element 
 
   return (
     <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Box
+      <ScopedCssBaseline
         className={rootClass}
         data-testid={`${ADMIN_CLASS_PREFIX}root`}
         sx={{
@@ -268,7 +266,7 @@ function EmailTemplateAdminCatalog(props: EmailTemplateAdminProps): JSX.Element 
             {...editorProps}
           />
         </Box>
-      </Box>
+      </ScopedCssBaseline>
     </ThemeProvider>
   );
 }

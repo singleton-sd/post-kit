@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { HexColorInput, HexColorPicker } from 'react-colorful';
 
 import { Box, Stack, SxProps } from '@mui/material';
@@ -75,6 +75,9 @@ type Props = {
 };
 export default function Picker({ value, onChange }: Props) {
   const [internalValue, setInternalValue] = useState(value);
+  useEffect(() => {
+    setInternalValue(value);
+  }, [value]);
   const handleChange = (v: string) => {
     setInternalValue(v);
     if (/^#[0-9a-fA-F]{6}$/.test(v)) {

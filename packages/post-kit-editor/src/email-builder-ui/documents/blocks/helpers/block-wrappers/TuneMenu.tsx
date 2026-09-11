@@ -12,6 +12,7 @@ import { TEditorBlock, TEditorConfiguration } from '../../../editor/core';
 import { resetDocument, setSelectedBlockId, useDocument } from '../../../editor/EditorContext';
 import { ColumnsContainerProps } from '../../ColumnsContainer/ColumnsContainerPropsSchema';
 import cloneDocumentBlock from '../cloneDocumentBlock';
+import { deleteBlockSubtree } from '../deleteBlockSubtree';
 
 const sx: SxProps = {
   position: 'absolute',
@@ -41,7 +42,7 @@ function findParentBlockId(blockId: string, document: TEditorConfiguration) {
         }
         break;
       case 'ColumnsContainer':
-        if (block.data.props?.columns?.some((col) => col.childrenIds?.includes(blockId))) {
+        if (block.data.props?.columns?.some((col) => col?.childrenIds?.includes(blockId))) {
           return id;
         }
         break;
@@ -89,8 +90,18 @@ export default function TuneMenu({ blockId }: Props) {
               columns: [{ childrenIds: [] }, { childrenIds: [] }, { childrenIds: [] }],
             };
           }
+          if (!parentBlock.data.props.columns) {
+            parentBlock.data.props.columns = [
+              { childrenIds: [] },
+              { childrenIds: [] },
+              { childrenIds: [] },
+            ];
+          }
 
           for (const column of parentBlock.data.props.columns) {
+            if (!column?.childrenIds) {
+              continue;
+            }
             if (column.childrenIds.includes(blockId)) {
               const index = column.childrenIds.indexOf(blockId);
               column.childrenIds.splice(index + 1, 0, newBlockId);
@@ -105,61 +116,8 @@ export default function TuneMenu({ blockId }: Props) {
   };
 
   const handleDeleteClick = () => {
-    const filterChildrenIds = (childrenIds: string[] | null | undefined) => {
-      if (!childrenIds) {
-        return childrenIds;
-      }
-      return childrenIds.filter((f) => f !== blockId);
-    };
-    const nDocument: typeof document = { ...document };
-    for (const [id, b] of Object.entries(nDocument)) {
-      const block = b as TEditorBlock;
-      if (id === blockId) {
-        continue;
-      }
-
-      switch (block.type) {
-        case 'EmailLayout':
-          nDocument[id] = {
-            ...block,
-            data: {
-              ...block.data,
-              childrenIds: filterChildrenIds(block.data.childrenIds),
-            },
-          };
-          break;
-        case 'Container':
-          nDocument[id] = {
-            ...block,
-            data: {
-              ...block.data,
-              props: {
-                ...block.data.props,
-                childrenIds: filterChildrenIds(block.data.props?.childrenIds),
-              },
-            },
-          };
-          break;
-        case 'ColumnsContainer':
-          nDocument[id] = {
-            type: 'ColumnsContainer',
-            data: {
-              style: block.data.style,
-              props: {
-                ...block.data.props,
-                columns: block.data.props?.columns?.map((c) => ({
-                  childrenIds: filterChildrenIds(c.childrenIds),
-                })),
-              },
-            } as ColumnsContainerProps,
-          };
-          break;
-        default:
-          nDocument[id] = block;
-      }
-    }
-    delete nDocument[blockId];
-    resetDocument(nDocument);
+    resetDocument(deleteBlockSubtree(document, blockId));
+    setSelectedBlockId(null);
   };
 
   const handleMoveClick = (direction: 'up' | 'down') => {
@@ -218,7 +176,8 @@ export default function TuneMenu({ blockId }: Props) {
               props: {
                 ...block.data.props,
                 columns: block.data.props?.columns?.map((c) => ({
-                  childrenIds: moveChildrenIds(c.childrenIds),
+                  ...c,
+                  childrenIds: moveChildrenIds(c?.childrenIds) ?? [],
                 })),
               },
             } as ColumnsContainerProps,

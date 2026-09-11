@@ -7,17 +7,19 @@
  *
  * Never pass API keys into this module or the admin props.
  */
-import { useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   EmailTemplateAdmin,
   type SerializedTemplateSource,
   type TemplateSourceFiles,
   type SendTestResult,
+  type SaveResult,
 } from '@singleton-sd/post-kit-editor';
 
 import {
   createMemoryPersistence,
-  toOnSave,
+  buildWorkingCatalog,
+  toOnSaveWithRefresh,
   type MemoryPersistence,
 } from './src/memory-persistence';
 
@@ -83,15 +85,25 @@ export function AdminEditorExample({ templates, sendTest }: AdminEditorExamplePr
   }
   const persistence = persistenceRef.current;
 
-  // Prefer in-memory copies (includes successful saves) while keeping prop order.
-  const workingCatalog = templates.map((t) =>
-    persistence.has(t.metadata.key) ? persistence.load(t.metadata.key) : t,
+  // Bump after successful save so workingCatalog is recomputed from persistence.
+  const [catalogEpoch, setCatalogEpoch] = useState(0);
+  const onSave = useCallback(
+    (
+      serialized: SerializedTemplateSource,
+      files: TemplateSourceFiles,
+    ): Promise<SaveResult | void> | SaveResult | void =>
+      toOnSaveWithRefresh(persistence, () => setCatalogEpoch((n) => n + 1))(serialized, files),
+    [persistence],
   );
+
+  // Prefer in-memory copies (includes successful saves) while keeping prop order.
+  void catalogEpoch;
+  const workingCatalog = buildWorkingCatalog(templates, persistence);
 
   return (
     <EmailTemplateAdmin
       templates={workingCatalog}
-      onSave={toOnSave(persistence)}
+      onSave={onSave}
       {...(sendTest !== undefined ? { onSendTest: sendTest } : {})}
     />
   );

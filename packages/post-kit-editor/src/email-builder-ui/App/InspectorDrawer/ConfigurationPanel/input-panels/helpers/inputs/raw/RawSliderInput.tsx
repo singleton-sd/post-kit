@@ -4,6 +4,8 @@ import { Box, Slider, Stack, Typography } from '@mui/material';
 
 type SliderInputProps = {
   iconLabel: JSX.Element;
+  /** Accessible name for the slider (icon-only control otherwise). */
+  label?: string;
 
   step?: number;
   marks?: boolean;
@@ -17,6 +19,7 @@ type SliderInputProps = {
 
 export default function RawSliderInput({
   iconLabel,
+  label,
   value,
   setValue,
   units,
@@ -33,6 +36,7 @@ export default function RawSliderInput({
       <Box sx={{ minWidth: 24, lineHeight: 1, flexShrink: 0 }}>{iconLabel}</Box>
       <Slider
         {...props}
+        aria-label={label}
         value={value}
         onChange={(_, value: unknown) => {
           if (typeof value !== 'number') {

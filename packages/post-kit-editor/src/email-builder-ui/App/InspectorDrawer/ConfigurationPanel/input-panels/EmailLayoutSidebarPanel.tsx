@@ -59,7 +59,7 @@ export default function EmailLayoutSidebarFields({ data, setData }: EmailLayoutS
       />
       <NullableFontFamily
         label="Font family"
-        defaultValue="MODERN_SANS"
+        defaultValue={data.fontFamily ?? 'MODERN_SANS'}
         onChange={(fontFamily) => updateData({ ...data, fontFamily })}
       />
       <ColorInput

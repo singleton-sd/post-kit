@@ -14,15 +14,18 @@ const TILE_BUTTON: SxProps = {
 };
 export default function Swatch({ paletteColors, value, onChange }: Props) {
   const renderButton = (colorValue: string) => {
+    const selected = value === colorValue;
     return (
       <Button
         key={colorValue}
+        aria-label={`Color ${colorValue}`}
+        aria-pressed={selected}
         onClick={() => onChange(colorValue)}
         sx={{
           ...TILE_BUTTON,
           backgroundColor: colorValue,
           border: '1px solid',
-          borderColor: value === colorValue ? 'black' : 'grey.200',
+          borderColor: selected ? 'black' : 'grey.200',
           minWidth: 24,
           display: 'inline-flex',
           '&:hover': {

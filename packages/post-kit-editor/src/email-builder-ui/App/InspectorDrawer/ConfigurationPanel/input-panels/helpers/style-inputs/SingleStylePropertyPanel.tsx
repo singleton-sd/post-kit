@@ -54,7 +54,7 @@ export default function SingleStylePropertyPanel({
           min={0}
           max={48}
           label="Border radius"
-          defaultValue={defaultValue}
+          defaultValue={typeof defaultValue === 'number' ? defaultValue : 0}
           onChange={handleChange}
         />
       );
@@ -76,7 +76,11 @@ export default function SingleStylePropertyPanel({
       );
     case 'fontSize':
       return (
-        <FontSizeInput label="Font size" defaultValue={defaultValue} onChange={handleChange} />
+        <FontSizeInput
+          label="Font size"
+          defaultValue={typeof defaultValue === 'number' ? defaultValue : 16}
+          onChange={handleChange}
+        />
       );
     case 'fontWeight':
       return (

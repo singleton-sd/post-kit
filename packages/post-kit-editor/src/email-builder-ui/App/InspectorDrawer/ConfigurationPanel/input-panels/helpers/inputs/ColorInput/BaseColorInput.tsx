@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { AddOutlined, CloseOutlined } from '@mui/icons-material';
 import { ButtonBase, InputLabel, Menu, Stack } from '@mui/material';
@@ -30,6 +30,9 @@ type Props =
 export default function ColorInput({ label, defaultValue, onChange, nullable }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [value, setValue] = useState(defaultValue);
+  useEffect(() => {
+    setValue(defaultValue);
+  }, [defaultValue]);
   const handleClickOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
   };
@@ -43,6 +46,7 @@ export default function ColorInput({ label, defaultValue, onChange, nullable }: 
     }
     return (
       <ButtonBase
+        aria-label={`Clear ${label}`}
         onClick={() => {
           setValue(null);
           onChange(null);
@@ -55,10 +59,16 @@ export default function ColorInput({ label, defaultValue, onChange, nullable }: 
 
   const renderOpenButton = () => {
     if (value) {
-      return <ButtonBase onClick={handleClickOpen} sx={{ ...BUTTON_SX, bgcolor: value }} />;
+      return (
+        <ButtonBase
+          aria-label={`Choose ${label}`}
+          onClick={handleClickOpen}
+          sx={{ ...BUTTON_SX, bgcolor: value }}
+        />
+      );
     }
     return (
-      <ButtonBase onClick={handleClickOpen} sx={{ ...BUTTON_SX }}>
+      <ButtonBase aria-label={`Add ${label}`} onClick={handleClickOpen} sx={{ ...BUTTON_SX }}>
         <AddOutlined fontSize="small" />
       </ButtonBase>
     );

@@ -16,9 +16,15 @@ type FixedWidths = [
 ];
 type ColumnsLayoutInputProps = {
   defaultValue: FixedWidths | null | undefined;
+  /** Number of columns that have width fields (2 or 3). Defaults to 3. */
+  columnsCount?: 2 | 3;
   onChange: (v: FixedWidths | null | undefined) => void;
 };
-export default function ColumnWidthsInput({ defaultValue, onChange }: ColumnsLayoutInputProps) {
+export default function ColumnWidthsInput({
+  defaultValue,
+  columnsCount = 3,
+  onChange,
+}: ColumnsLayoutInputProps) {
   const [currentValue, setCurrentValue] = useState<[TWidthValue, TWidthValue, TWidthValue]>(() => {
     if (defaultValue) {
       return defaultValue;
@@ -33,7 +39,7 @@ export default function ColumnWidthsInput({ defaultValue, onChange }: ColumnsLay
     onChange(nValue);
   };
 
-  const columnsCountValue = 3;
+  const columnsCountValue = columnsCount === 2 ? 2 : 3;
   let column3 = null;
   if (columnsCountValue === 3) {
     column3 = (

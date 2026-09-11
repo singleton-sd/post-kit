@@ -23,6 +23,10 @@ export default function EditorBlockWrapper({ children }: TEditorBlockWrapperProp
     outline = '2px solid rgba(0,121,204, 0.3)';
   }
 
+  const selectBlock = () => {
+    setSelectedBlockId(blockId);
+  };
+
   const renderMenu = () => {
     if (selectedBlockId !== blockId) {
       return null;
@@ -32,6 +36,9 @@ export default function EditorBlockWrapper({ children }: TEditorBlockWrapperProp
 
   return (
     <Box
+      role="button"
+      tabIndex={0}
+      aria-label="Select block"
       sx={{
         position: 'relative',
         maxWidth: '100%',
@@ -46,9 +53,16 @@ export default function EditorBlockWrapper({ children }: TEditorBlockWrapperProp
         setMouseInside(false);
       }}
       onClick={(ev) => {
-        setSelectedBlockId(blockId);
+        selectBlock();
         ev.stopPropagation();
         ev.preventDefault();
+      }}
+      onKeyDown={(ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          ev.stopPropagation();
+          selectBlock();
+        }
       }}
     >
       {renderMenu()}

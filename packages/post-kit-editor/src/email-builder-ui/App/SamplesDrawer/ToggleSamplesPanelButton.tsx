@@ -8,15 +8,18 @@ import {
   useSamplesDrawerOpen,
 } from '../../documents/editor/EditorContext';
 
-function useIcon() {
-  const samplesDrawerOpen = useSamplesDrawerOpen();
-  if (samplesDrawerOpen) {
-    return <FirstPageOutlined fontSize="small" />;
-  }
-  return <MenuOutlined fontSize="small" />;
-}
-
 export default function ToggleSamplesPanelButton() {
-  const icon = useIcon();
-  return <IconButton onClick={toggleSamplesDrawerOpen}>{icon}</IconButton>;
+  const samplesDrawerOpen = useSamplesDrawerOpen();
+  return (
+    <IconButton
+      onClick={toggleSamplesDrawerOpen}
+      aria-label={samplesDrawerOpen ? 'Close samples' : 'Open samples'}
+    >
+      {samplesDrawerOpen ? (
+        <FirstPageOutlined fontSize="small" />
+      ) : (
+        <MenuOutlined fontSize="small" />
+      )}
+    </IconButton>
+  );
 }

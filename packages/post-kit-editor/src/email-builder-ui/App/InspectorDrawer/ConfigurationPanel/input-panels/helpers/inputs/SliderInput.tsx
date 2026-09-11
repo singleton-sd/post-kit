@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { InputLabel, Stack } from '@mui/material';
 
@@ -20,14 +20,18 @@ type SliderInputProps = {
 
 export default function SliderInput({ label, defaultValue, onChange, ...props }: SliderInputProps) {
   const [value, setValue] = useState(defaultValue);
+  useEffect(() => {
+    setValue(defaultValue);
+  }, [defaultValue]);
   return (
     <Stack spacing={1} alignItems="flex-start">
       <InputLabel shrink>{label}</InputLabel>
       <RawSliderInput
+        label={label}
         value={value}
-        setValue={(value: number) => {
-          setValue(value);
-          onChange(value);
+        setValue={(next: number) => {
+          setValue(next);
+          onChange(next);
         }}
         {...props}
       />

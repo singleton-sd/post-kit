@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { html, json } from './highlighters';
 
@@ -8,17 +8,25 @@ type TextEditorPanelProps = {
 };
 export default function HighlightedCodePanel({ type, value }: TextEditorPanelProps) {
   const [code, setCode] = useState<string | null>(null);
+  const generationRef = useRef(0);
 
   useEffect(() => {
+    const generation = ++generationRef.current;
+    const apply = (next: string) => {
+      if (generation === generationRef.current) {
+        setCode(next);
+      }
+    };
+
     switch (type) {
       case 'html':
-        html(value).then(setCode);
+        html(value).then(apply);
         return;
       case 'json':
-        json(value).then(setCode);
+        json(value).then(apply);
         return;
     }
-  }, [setCode, value, type]);
+  }, [value, type]);
 
   if (code === null) {
     return null;

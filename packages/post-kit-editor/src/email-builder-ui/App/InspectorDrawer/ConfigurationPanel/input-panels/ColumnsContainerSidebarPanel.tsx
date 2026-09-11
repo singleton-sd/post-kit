@@ -49,6 +49,7 @@ export default function ColumnsContainerPanel({ data, setData }: ColumnsContaine
       </RadioGroupInput>
       <ColumnWidthsInput
         defaultValue={data.props?.fixedWidths}
+        columnsCount={data.props?.columnsCount === 2 ? 2 : 3}
         onChange={(fixedWidths) => {
           updateData({ ...data, props: { ...data.props, fixedWidths } });
         }}
@@ -71,13 +72,13 @@ export default function ColumnsContainerPanel({ data, setData }: ColumnsContaine
           updateData({ ...data, props: { ...data.props, contentAlignment } });
         }}
       >
-        <ToggleButton value="top">
+        <ToggleButton value="top" aria-label="Align top">
           <VerticalAlignTopOutlined fontSize="small" />
         </ToggleButton>
-        <ToggleButton value="middle">
+        <ToggleButton value="middle" aria-label="Align middle">
           <VerticalAlignCenterOutlined fontSize="small" />
         </ToggleButton>
-        <ToggleButton value="bottom">
+        <ToggleButton value="bottom" aria-label="Align bottom">
           <VerticalAlignBottomOutlined fontSize="small" />
         </ToggleButton>
       </RadioGroupInput>

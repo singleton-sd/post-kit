@@ -26,13 +26,13 @@ export default function TextAlignInput({ label, defaultValue, onChange }: Props)
         onChange(value);
       }}
     >
-      <ToggleButton value="left">
+      <ToggleButton value="left" aria-label="Align left">
         <FormatAlignLeftOutlined fontSize="small" />
       </ToggleButton>
-      <ToggleButton value="center">
+      <ToggleButton value="center" aria-label="Align center">
         <FormatAlignCenterOutlined fontSize="small" />
       </ToggleButton>
-      <ToggleButton value="right">
+      <ToggleButton value="right" aria-label="Align right">
         <FormatAlignRightOutlined fontSize="small" />
       </ToggleButton>
     </RadioGroupInput>

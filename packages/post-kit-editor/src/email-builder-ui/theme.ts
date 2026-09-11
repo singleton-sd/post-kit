@@ -80,7 +80,7 @@ const THEME = createTheme(BASE_THEME, {
           padding: 0;
         }
         pre {
-          font-family: ${MONOSPACE_FONT_FAMILY}
+          font-family: ${MONOSPACE_FONT_FAMILY};
           white-space: pre-wrap;
           font-size: 12px;
         }

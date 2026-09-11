@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { FormControlLabel, Switch } from '@mui/material';
 
@@ -10,6 +10,9 @@ type Props = {
 
 export default function BooleanInput({ label, defaultValue, onChange }: Props) {
   const [value, setValue] = useState(defaultValue);
+  useEffect(() => {
+    setValue(defaultValue);
+  }, [defaultValue]);
   return (
     <FormControlLabel
       label={label}

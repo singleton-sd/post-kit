@@ -7,7 +7,13 @@ import {
   type TemplateSourceFiles,
 } from '@singleton-sd/post-kit-editor';
 
-import { createMemoryPersistence, reconcileSelectedKey, toOnSave } from './memory-persistence';
+import {
+  createMemoryPersistence,
+  reconcileSelectedKey,
+  toOnSave,
+  buildWorkingCatalog,
+  toOnSaveWithRefresh,
+} from './memory-persistence';
 
 import templateJson from '../sample/template.json';
 import metadata from '../sample/metadata.json';
@@ -116,5 +122,53 @@ describe('reconcileSelectedKey', () => {
       reconcileSelectedKey('demo.welcome', ['auth.password-reset']),
       'auth.password-reset',
     );
+  });
+});
+
+describe('workingCatalog refresh after save', () => {
+  it('buildWorkingCatalog reflects persistence after a successful save', async () => {
+    const persistence = createMemoryPersistence({
+      [seed.metadata.key]: seed,
+      [other.metadata.key]: other,
+    });
+    const catalog = [seed, other];
+
+    const before = buildWorkingCatalog(catalog, persistence);
+    assert.equal(before[0]!.metadata.name, 'Welcome');
+
+    let refreshCount = 0;
+    const onSave = toOnSaveWithRefresh(persistence, () => {
+      refreshCount += 1;
+    });
+
+    const edited: TemplateSourceFiles = {
+      ...seed,
+      metadata: { ...seed.metadata, name: 'Welcome (saved)' },
+    };
+    const result = await onSave(serializeTemplateSource(edited), edited);
+    assert.deepEqual(result, { ok: true });
+    assert.equal(refreshCount, 1);
+
+    const after = buildWorkingCatalog(catalog, persistence);
+    assert.equal(after[0]!.metadata.name, 'Welcome (saved)');
+    assert.equal(after[1]!.metadata.key, other.metadata.key);
+  });
+
+  it('does not refresh on failed save', async () => {
+    const persistence = createMemoryPersistence(
+      { [seed.metadata.key]: seed },
+      { failNextSave: true },
+    );
+    let refreshCount = 0;
+    const onSave = toOnSaveWithRefresh(persistence, () => {
+      refreshCount += 1;
+    });
+    const edited: TemplateSourceFiles = {
+      ...seed,
+      metadata: { ...seed.metadata, name: 'Nope' },
+    };
+    const result = await onSave(serializeTemplateSource(edited), edited);
+    assert.equal(result && 'ok' in result && result.ok, false);
+    assert.equal(refreshCount, 0);
   });
 });

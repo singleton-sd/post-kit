@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { TextFieldsOutlined } from '@mui/icons-material';
 import { InputLabel, Stack } from '@mui/material';
@@ -12,6 +12,9 @@ type Props = {
 };
 export default function FontSizeInput({ label, defaultValue, onChange }: Props) {
   const [value, setValue] = useState(defaultValue);
+  useEffect(() => {
+    setValue(defaultValue);
+  }, [defaultValue]);
   const handleChange = (value: number) => {
     setValue(value);
     onChange(value);
@@ -20,6 +23,7 @@ export default function FontSizeInput({ label, defaultValue, onChange }: Props) 
     <Stack spacing={1} alignItems="flex-start">
       <InputLabel shrink>{label}</InputLabel>
       <RawSliderInput
+        label={label}
         iconLabel={<TextFieldsOutlined sx={{ fontSize: 16 }} />}
         value={value}
         setValue={handleChange}
