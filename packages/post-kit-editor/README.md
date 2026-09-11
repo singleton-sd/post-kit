@@ -248,7 +248,16 @@ diffs.
 
 ### Updating baselines
 
-After intentional UI changes:
+After intentional UI changes, prefer **CI Linux** screenshots (download the
+`editor-visual` artifact `pr/*.png`) so local/WSL font rendering does not
+drift the gate:
+
+```bash
+cp /path/to/editor-visual/pr/*.png \
+  packages/post-kit-editor/visual-baselines/
+```
+
+Or from a local Linux capture after `build-storybook` + `test:visual`:
 
 ```bash
 cp packages/post-kit-editor/test-results/visual/pr/*.png \
