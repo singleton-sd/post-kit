@@ -236,9 +236,13 @@ committed PNGs in [`visual-baselines/`](./visual-baselines/). Capture always
 exits 0; `test:visual:gate` fails when the manifest has `changed` / `new`
 unless `VISUAL_ACCEPTED=1` (or the PR has label `visual-accepted`).
 
-On each PR run the workflow posts (or updates) a sticky comment with the
-Actions run URL and steps to download the **`editor-visual`** artifact and
-open `index.html` (GitHub does not host the HTML report inline).
+The same run **deploys the HTML report to GitHub Pages** (InkAds-style) and
+posts a sticky PR comment with a live link:
+
+`https://singleton-sd.github.io/post-kit/pr-preview/pr-<N>/visual/`
+
+(`base/` · `pr/` · `diff/` · `index.html`). Closing the PR removes that
+preview. Artifact `editor-visual` remains as a backup.
 
 Stories (desktop 1440×900):
 
