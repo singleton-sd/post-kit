@@ -145,4 +145,33 @@ describe('createFsTemplateStore', () => {
     }
     assert.equal(store.load('demo.welcome').metadata.name, files.metadata.name);
   });
+
+  it('preserves the original save error when cleanup also fails', () => {
+    const root = mkdtempSync(join(tmpdir(), 'pk-admin-store-cleanup-'));
+    after(() => rmSync(root, { recursive: true, force: true }));
+    seedDemoWelcome(root);
+
+    const store = createFsTemplateStore(root, {
+      writeFileSync(path, data, options) {
+        if (String(path).endsWith('preview.json')) {
+          throw new Error('simulated preview write failure');
+        }
+        return writeFileSync(path, data, options);
+      },
+      rmSync() {
+        throw new Error('simulated cleanup failure');
+      },
+    });
+    const files = store.load('demo.welcome');
+    const next = {
+      ...files,
+      metadata: { ...files.metadata, name: 'Should not land' },
+    };
+    const result = store.save('demo.welcome', serializeTemplateSource(next), next);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.message ?? '', /simulated preview write failure/);
+      assert.doesNotMatch(result.message ?? '', /cleanup failure/);
+    }
+  });
 });

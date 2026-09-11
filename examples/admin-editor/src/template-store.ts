@@ -49,6 +49,8 @@ export interface FsTemplateStoreOptions {
   mkdirSync?: typeof mkdirSync;
   /** Injectable for tests. Defaults to `fs.mkdtempSync`. */
   mkdtempSync?: typeof mkdtempSync;
+  /** Injectable for tests. Defaults to `fs.rmSync`. */
+  rmSync?: typeof rmSync;
 }
 
 /**
@@ -65,6 +67,7 @@ export function createFsTemplateStore(
   const writeFile = options.writeFileSync ?? writeFileSync;
   const mkdir = options.mkdirSync ?? mkdirSync;
   const mkdtemp = options.mkdtempSync ?? mkdtempSync;
+  const remove = options.rmSync ?? rmSync;
 
   return {
     list(): TemplateListItem[] {
@@ -160,21 +163,25 @@ export function createFsTemplateStore(
         renameSync(stagingPath, dirPath);
         stagingPath = undefined;
         if (existsSync(backupPath)) {
-          rmSync(backupPath, { recursive: true, force: true });
+          remove(backupPath, { recursive: true, force: true });
         }
         return { ok: true };
       } catch (err) {
-        if (stagingPath !== undefined) {
-          rmSync(stagingPath, { recursive: true, force: true });
-        }
-        if (existsSync(backupPath) && !existsSync(dirPath)) {
-          try {
-            renameSync(backupPath, dirPath);
-          } catch {
-            // leave backup in place for manual recovery
+        try {
+          if (stagingPath !== undefined) {
+            remove(stagingPath, { recursive: true, force: true });
           }
-        } else if (existsSync(backupPath)) {
-          rmSync(backupPath, { recursive: true, force: true });
+          if (existsSync(backupPath) && !existsSync(dirPath)) {
+            try {
+              renameSync(backupPath, dirPath);
+            } catch {
+              // leave backup in place for manual recovery
+            }
+          } else if (existsSync(backupPath)) {
+            remove(backupPath, { recursive: true, force: true });
+          }
+        } catch {
+          // Cleanup must not replace the original save failure.
         }
         return {
           ok: false,
