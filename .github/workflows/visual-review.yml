@@ -1,0 +1,231 @@
+name: Visual review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, closed]
+
+# Per-PR group so label-accept and capture do not cancel each other incorrectly.
+concurrency:
+  group: ${{ contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && format('visual-label-pr-{0}', github.event.pull_request.number) || format('visual-review-pr-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # Removes hosted report when the PR closes (InkAds-style pr-preview cleanup).
+  preview-cleanup:
+    name: preview-cleanup
+    if: >
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove PR visual preview
+        uses: rossjrw/pr-preview-action@v1.8.1
+        with:
+          source-dir: .
+          preview-branch: gh-pages
+          pages-base-url: https://singleton-sd.github.io/post-kit
+          umbrella-dir: pr-preview
+          action: remove
+          comment: false
+
+  visual-review:
+    name: visual-review
+    if: >
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Detect visual-accepted label
+        id: accept
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: labels } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const accepted = labels.some((l) => l.name === "visual-accepted");
+            core.setOutput("accepted", accepted ? "true" : "false");
+            if (accepted) {
+              core.info("Label visual-accepted is present; gate will pass.");
+            }
+
+      - name: Accept intentional visual diffs
+        if: steps.accept.outputs.accepted == 'true'
+        run: |
+          echo "visual-accepted label present — clearing visual-review (no rebuild required)."
+
+      - uses: actions/checkout@v4
+        if: steps.accept.outputs.accepted != 'true'
+
+      - uses: pnpm/action-setup@v4
+        if: steps.accept.outputs.accepted != 'true'
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        if: steps.accept.outputs.accepted != 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        if: steps.accept.outputs.accepted != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build editor package deps
+        if: steps.accept.outputs.accepted != 'true'
+        run: |
+          pnpm --filter @singleton-sd/post-kit-types run build
+          pnpm --filter @singleton-sd/post-kit-compiler run build
+          pnpm --filter @singleton-sd/post-kit-editor run build
+
+      - name: Build Storybook
+        if: steps.accept.outputs.accepted != 'true'
+        run: pnpm --filter @singleton-sd/post-kit-editor build-storybook
+
+      - name: Install Playwright Chromium
+        if: steps.accept.outputs.accepted != 'true'
+        run: pnpm --filter @singleton-sd/post-kit-editor exec playwright install chromium --with-deps
+
+      - name: Capture visual screenshots
+        id: capture
+        if: steps.accept.outputs.accepted != 'true'
+        run: pnpm --filter @singleton-sd/post-kit-editor test:visual
+
+      - name: Upload visual artifact
+        if: steps.accept.outputs.accepted != 'true' && always() && steps.capture.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-visual
+          path: packages/post-kit-editor/test-results/visual
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Stage visual report for GitHub Pages
+        id: stage
+        if: steps.accept.outputs.accepted != 'true' && always() && steps.capture.outcome == 'success'
+        run: |
+          set -euo pipefail
+          rm -rf visual-pages
+          mkdir -p visual-pages/visual
+          cp -R packages/post-kit-editor/test-results/visual/. visual-pages/visual/
+          # Root of the PR preview redirects to /visual/
+          printf '%s\n' \
+            '<!doctype html>' \
+            '<meta charset="utf-8" />' \
+            '<meta http-equiv="refresh" content="0;url=visual/" />' \
+            '<title>PostKit visual report</title>' \
+            '<p><a href="visual/">Open visual report</a></p>' \
+            > visual-pages/index.html
+          touch visual-pages/.nojekyll
+          echo "visual_url=https://singleton-sd.github.io/post-kit/pr-preview/pr-${{ github.event.number }}/visual/" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy visual report to GitHub Pages
+        id: deploy
+        if: steps.accept.outputs.accepted != 'true' && always() && steps.stage.outcome == 'success'
+        continue-on-error: true
+        uses: rossjrw/pr-preview-action@v1.8.1
+        with:
+          source-dir: visual-pages
+          preview-branch: gh-pages
+          pages-base-url: https://singleton-sd.github.io/post-kit
+          umbrella-dir: pr-preview
+          comment: false
+
+      - name: Retry deploy visual report
+        id: deploy_retry
+        if: steps.accept.outputs.accepted != 'true' && always() && steps.deploy.outcome == 'failure'
+        uses: rossjrw/pr-preview-action@v1.8.1
+        with:
+          source-dir: visual-pages
+          preview-branch: gh-pages
+          pages-base-url: https://singleton-sd.github.io/post-kit
+          umbrella-dir: pr-preview
+          comment: false
+
+      - name: Comment visual review link on PR
+        if: steps.accept.outputs.accepted != 'true' && always() && steps.capture.outcome == 'success'
+        uses: actions/github-script@v7
+        env:
+          VISUAL_URL: ${{ steps.stage.outputs.visual_url }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- post-kit-editor-visual-review -->';
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const artifactUrl = `${runUrl}#artifacts`;
+            const visualUrl =
+              process.env.VISUAL_URL ||
+              `https://singleton-sd.github.io/post-kit/pr-preview/pr-${context.issue.number}/visual/`;
+            const manifestPath =
+              'packages/post-kit-editor/test-results/visual/manifest.json';
+            let summaryLine = '_Capture finished._';
+            let statusLine = '';
+            if (fs.existsSync(manifestPath)) {
+              const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+              const s = manifest.summary || {};
+              const changed = (s.changedStories || []).join(', ') || '—';
+              const neu = (s.newStories || []).join(', ') || '—';
+              summaryLine = [
+                `**${s.unchanged ?? 0}** unchanged · **${s.changed ?? 0}** changed · **${s.new ?? 0}** new`,
+                s.changed ? `Changed: \`${changed}\`` : null,
+                s.new ? `New: \`${neu}\`` : null,
+              ]
+                .filter(Boolean)
+                .join('\n');
+              statusLine = s.hasDiffs
+                ? '⚠️ Visual review needed — open the live report, then add `visual-accepted` (or update baselines).'
+                : '✅ Visual review clear vs committed baselines.';
+            }
+            const body = [
+              marker,
+              '## Visual review (Storybook)',
+              '',
+              `🖼️ **[Open live visual report](${visualUrl})** (baseline · PR · diff)`,
+              '',
+              statusLine,
+              '',
+              summaryLine,
+              '',
+              `- Artifact backup: [\`editor-visual\`](${artifactUrl})`,
+              `- Workflow run: ${runUrl}`,
+              '',
+              'To accept intentional diffs: update `packages/post-kit-editor/visual-baselines/` from CI Linux `pr/*.png`, or add the **`visual-accepted`** label.',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      # Gate last so the live report is deployed even when review is required.
+      - name: Visual gate
+        if: steps.accept.outputs.accepted != 'true'
+        env:
+          VISUAL_ACCEPTED: '0'
+        run: pnpm --filter @singleton-sd/post-kit-editor test:visual:gate

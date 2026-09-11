@@ -1,26 +1,25 @@
 /**
  * Reference React host for `@singleton-sd/post-kit-editor`.
  *
- * - List/load: seed from the filesystem store in Node tests / server wiring;
- *   this component takes a preloaded catalog for the embedding demo.
- * - Save: `onSave` → your API → Git/PR (here: in-memory adapter for the demo).
- * - Send-test: pass `sendTest` only when your BFF is configured; omitting it
- *   hides Send-test chrome (see `postSendTestToBff` + README).
+ * Mounts {@link EmailTemplateAdmin} — the full admin page (list, MUI
+ * EmailBuilder canvas, PostKit chrome). This example only supplies the catalog
+ * and persistence / send-test callbacks.
  *
- * Never pass API keys into this module or the editor props.
+ * Never pass API keys into this module or the admin props.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
-  EmailTemplateEditor,
+  EmailTemplateAdmin,
   type SerializedTemplateSource,
   type TemplateSourceFiles,
   type SendTestResult,
+  type SaveResult,
 } from '@singleton-sd/post-kit-editor';
 
 import {
   createMemoryPersistence,
-  reconcileSelectedKey,
-  toOnSave,
+  buildWorkingCatalog,
+  toOnSaveWithRefresh,
   type MemoryPersistence,
 } from './src/memory-persistence';
 
@@ -74,7 +73,6 @@ export function AdminEditorExample({ templates, sendTest }: AdminEditorExamplePr
     throw new Error('AdminEditorExample requires at least one template.');
   }
 
-  const catalogKeys = templates.map((t) => t.metadata.key);
   const persistenceRef = useRef<MemoryPersistence | null>(null);
   if (persistenceRef.current === null) {
     const seed: Record<string, TemplateSourceFiles> = {};
@@ -87,42 +85,26 @@ export function AdminEditorExample({ templates, sendTest }: AdminEditorExamplePr
   }
   const persistence = persistenceRef.current;
 
-  const [selectedKey, setSelectedKey] = useState(() => catalogKeys[0]!);
+  // Bump after successful save so workingCatalog is recomputed from persistence.
+  const [catalogEpoch, setCatalogEpoch] = useState(0);
+  const onSave = useCallback(
+    (
+      serialized: SerializedTemplateSource,
+      files: TemplateSourceFiles,
+    ): Promise<SaveResult | void> | SaveResult | void =>
+      toOnSaveWithRefresh(persistence, () => setCatalogEpoch((n) => n + 1))(serialized, files),
+    [persistence],
+  );
 
-  useEffect(() => {
-    setSelectedKey((current) => reconcileSelectedKey(current, catalogKeys));
-  }, [catalogKeys.join('\0')]);
-
-  const effectiveKey = reconcileSelectedKey(selectedKey, catalogKeys);
-  const template = persistence.load(effectiveKey);
-  const availableVariables = template.metadata.variables.map((name) => ({
-    name,
-    label: name,
-  }));
+  // Prefer in-memory copies (includes successful saves) while keeping prop order.
+  void catalogEpoch;
+  const workingCatalog = buildWorkingCatalog(templates, persistence);
 
   return (
-    <div className="pk-admin-editor-example">
-      <label>
-        Template{' '}
-        <select
-          value={effectiveKey}
-          onChange={(event) => setSelectedKey(event.target.value)}
-          aria-label="Select template"
-        >
-          {templates.map((t) => (
-            <option key={t.metadata.key} value={t.metadata.key}>
-              {t.metadata.name} ({t.metadata.key})
-            </option>
-          ))}
-        </select>
-      </label>
-      <EmailTemplateEditor
-        key={effectiveKey}
-        template={template}
-        availableVariables={availableVariables}
-        onSave={toOnSave(persistence)}
-        {...(sendTest !== undefined ? { onSendTest: sendTest } : {})}
-      />
-    </div>
+    <EmailTemplateAdmin
+      templates={workingCatalog}
+      onSave={onSave}
+      {...(sendTest !== undefined ? { onSendTest: sendTest } : {})}
+    />
   );
 }

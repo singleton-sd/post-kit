@@ -128,3 +128,34 @@ export function toOnSave(
 ) => Promise<SaveResult | void> | SaveResult | void {
   return (serialized, files) => persistence.save(serialized, files);
 }
+
+/** Map prop catalog to in-memory copies (including prior successful saves). */
+export function buildWorkingCatalog(
+  templates: TemplateSourceFiles[],
+  persistence: MemoryPersistence,
+): TemplateSourceFiles[] {
+  return templates.map((t) =>
+    persistence.has(t.metadata.key) ? persistence.load(t.metadata.key) : t,
+  );
+}
+
+/**
+ * Like {@link toOnSave}, but invokes `onRefresh` after a successful write so
+ * React hosts can recompute {@link buildWorkingCatalog}.
+ */
+export function toOnSaveWithRefresh(
+  persistence: MemoryPersistence,
+  onRefresh: () => void,
+): (
+  serialized: SerializedTemplateSource,
+  files: TemplateSourceFiles,
+) => Promise<SaveResult | void> | SaveResult | void {
+  return async (serialized, files) => {
+    const result = await Promise.resolve(persistence.save(serialized, files));
+    const failed = result && typeof result === 'object' && 'ok' in result && result.ok === false;
+    if (!failed) {
+      onRefresh();
+    }
+    return result;
+  };
+}

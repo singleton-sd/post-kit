@@ -50,7 +50,7 @@ export const BLOCK_TEMPLATES: BlockTemplate[] = [
       type: 'Image',
       data: {
         props: {
-          url: 'https://placehold.co/600x400',
+          url: '',
           alt: 'Sample image',
           contentAlignment: 'middle',
           linkHref: null,

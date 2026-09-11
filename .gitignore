@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 storybook-static/
+packages/post-kit-editor/test-results/
 
 # Marketplace skills from singleton-sd/ai-plattform-skills (`pnpm sync:skills`).
 # Do not commit copies; another repo owns the skill source.

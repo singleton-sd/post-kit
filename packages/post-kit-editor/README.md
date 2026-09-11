@@ -1,10 +1,14 @@
 # @singleton-sd/post-kit-editor
 
-React admin editor component for [PostKit](../../README.md) email templates. It
-edits the three Git-backed source files (`template.json`, `metadata.json`,
+Full-page React admin for [PostKit](../../README.md) email templates
+(`EmailTemplateAdmin`), plus lower-level surfaces for advanced hosts. Edits the
+three Git-backed source files (`template.json`, `metadata.json`,
 `preview.json`) **in memory**, with Save and optional Send-test controls that
 call **consumer-supplied** callbacks. The package never writes to disk, Git, or
 the network, and never accepts API keys or other credentials as props.
+
+The canvas is a port of the official EmailBuilder.js MUI sample (inspector +
+samples). See [`src/email-builder-ui/NOTICE.md`](./src/email-builder-ui/NOTICE.md).
 
 ## Installation
 
@@ -18,77 +22,69 @@ React is a **peer dependency** — the consumer application owns the React insta
 pnpm add react@^18.3.1 react-dom@^18.3.1
 ```
 
-## Usage
+MUI / Emotion ship as package dependencies. You do not need to wrap
+`ThemeProvider` yourself.
+
+## Usage (recommended)
 
 ```tsx
 import {
-  EmailTemplateEditor,
+  EmailTemplateAdmin,
   type TemplateSourceFiles,
   type SerializedTemplateSource,
-  type ValidationIssue,
 } from '@singleton-sd/post-kit-editor';
 
-export function TemplateAdminPage({
-  template,
-  loading,
-  loadError,
-}: {
-  template: TemplateSourceFiles;
-  loading?: boolean;
-  loadError?: string;
-}) {
+export function TemplateAdminPage({ templates }: { templates: TemplateSourceFiles[] }) {
   return (
-    <EmailTemplateEditor
-      template={template}
-      availableVariables={[{ name: 'name', description: 'Recipient display name' }]}
-      loading={loading}
-      loadError={loadError}
+    <EmailTemplateAdmin
+      templates={templates}
       onSave={async (serialized: SerializedTemplateSource, files: TemplateSourceFiles) => {
-        // Commit serialized.templateJson / metadataJson / previewJson to the
-        // consumer repository (e.g. via the app's own server endpoint).
         const res = await fetch('/api/templates', {
           method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ serialized, key: files.metadata.key }),
         });
-        // fetch() resolves for HTTP 4xx/5xx — return failure so the editor
-        // keeps dirty state and does not treat the rejection as success.
         if (!res.ok) {
           return { ok: false, message: 'Save failed.' };
         }
       }}
-      onSendTest={async (serialized, _files, recipient) => {
-        // Browser → your trusted server only. The server uses
-        // @singleton-sd/post-kit-client with secrets from Azure Key Vault
-        // (production) or local `.env` (development). Never embed a
-        // long-lived PostKit API key in browser code.
-        const res = await fetch('/api/templates/send-test', {
+      onSendTest={async (_serialized, files, recipient) => {
+        const res = await fetch('/api/email-templates/send-test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ serialized, recipient }),
+          body: JSON.stringify({
+            templateKey: files.metadata.key,
+            to: recipient,
+            variables: files.previewData,
+          }),
         });
         if (!res.ok) {
           return { ok: false, message: 'Test send failed.' };
         }
       }}
-      onDirtyChange={(dirty) => {
-        // Optional: guard in-app navigation while dirty.
-      }}
-      onValidationChange={(issues: ValidationIssue[]) => {
-        // Optional: mirror validation in the host chrome.
-      }}
-      onPreviewRendered={(html) => {
-        console.log('preview bytes', html.length);
-      }}
-      className="tenant-theme"
     />
   );
 }
 ```
 
-A copy-pasteable single-file integration (plus synthetic sample JSON) lives in
-[`examples/minimal/`](./examples/minimal/).
+Guide: [`docs/guides/editor-integration.md`](../../docs/guides/editor-integration.md).
+Thin host example: [`examples/admin-editor/`](../../examples/admin-editor/).
+Single-template advanced surface: `EmailTemplateEditor` (see
+[`examples/minimal/`](./examples/minimal/)).
 
 ## Props
+
+### `EmailTemplateAdmin`
+
+| Prop | Type | Required | Description |
+| --- | --- | --- | --- |
+| `templates` | `TemplateSourceFiles[]` | yes | Catalog (at least one). |
+| `onSave` | `(serialized, files) => SaveResult \| void \| Promise<…>` | yes | Persist working files. |
+| `onSendTest` | `(serialized, files, recipient) => SendTestResult \| void \| Promise<…>` | no | When set, shows Send-test chrome. |
+| `availableVariables` | `TemplateVariable[]` | no | Catalogue labels; defaults to metadata names. |
+| `loading` / `loadError` / `className` / dirty & validation callbacks | — | no | Same semantics as `EmailTemplateEditor`. |
+
+### `EmailTemplateEditor` (advanced)
 
 | Prop | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -104,8 +100,8 @@ A copy-pasteable single-file integration (plus synthetic sample JSON) lives in
 | `className` | `string` | no | Extra class on the root element. |
 
 Also exported: `loadTemplateSource`, `serializeTemplateSource`,
-`validateTemplate`, `hasValidationErrors`, `EDITOR_CLASS_PREFIX`, and related
-types.
+`validateTemplate`, `hasValidationErrors`, `EDITOR_CLASS_PREFIX`,
+`ADMIN_CLASS_PREFIX`, and related types.
 
 ## What this package does not do
 
@@ -203,11 +199,10 @@ markup.
 
 ## Storybook (local visual exploration)
 
-Package-local Storybook (Vite + React) for clicking through the canvas,
-metadata, variable catalogue, preview pane, and save/send-test chrome with
-**synthetic fixtures only**. It is not a substitute for
-[`examples/minimal/`](./examples/minimal/) (canonical consumer sample) or for
-the SSR unit tests above.
+Package-local Storybook 8.6 (Vite + React + interactions) for the Admin Email
+Builder with **synthetic fixtures only** (no network image URLs — fixtures use
+`data:image/svg+xml` URIs). It is not a substitute for
+[`examples/minimal/`](./examples/minimal/) or for the SSR unit tests above.
 
 ```bash
 # from the monorepo root
@@ -215,12 +210,85 @@ pnpm --filter @singleton-sd/post-kit-editor storybook
 ```
 
 Opens on http://localhost:6006. Stories live under `stories/` with config in
-`.storybook/`. Both are outside the published `files` / `dist` surface (along
-with `examples/`). There is no Chromatic / screenshot CI in v1.
+`.storybook/`. Both are outside the published `files` / `dist` surface.
 
-Most stories use the public API (`EmailTemplateEditor`, `EmailBuilderCanvas`).
-Isolated panel stories import private modules from `src/` and document that
-they are **dev-only** — do not treat those paths as a supported public API.
+Hierarchy (titles):
+
+| Group | Focus |
+| --- | --- |
+| **Admin/Email Builder/Overview** | Empty catalog entry, full welcome catalog |
+| **Admin/Email Builder/Blocks/\*** | Per-block `EmailBuilderCanvas` (Text, Heading, Button, Image, Avatar, Divider, Spacer, Container, Columns, Html) |
+| **Admin/Email Builder/Layout** | Typography, colours, nested containers, columns, long content |
+| **Admin/Email Builder/Templates** | Welcome, OTP, password reset, transactional, receipt, report |
+| **Admin/Email Builder/States** | Loading, load error, saving/saved/save error, invalid document, unsaved |
+| **Admin/Email Builder/Interactions** | Play functions (`@storybook/test`) for samples + Save success/failure |
+| **Admin/Email Builder/Responsive** | Desktop / mobile viewport parameters |
+
+Reusable fixtures: `stories/fixtures/` (`documents`, `template-sources`, `mocks`).
+Shell layout CSS: `stories/storybook-shell.css` (sidebar/canvas grid). Prefer
+**Overview / Templates** for full-page Admin review; block stories mount
+`EmailBuilderCanvas` fullscreen.
+
+## Visual review (Playwright + Storybook)
+
+CI job **`visual-review`** screenshots three Storybook iframe stories against
+committed PNGs in [`visual-baselines/`](./visual-baselines/). Capture always
+exits 0; `test:visual:gate` fails when the manifest has `changed` / `new`
+unless `VISUAL_ACCEPTED=1` (or the PR has label `visual-accepted`).
+
+The same run **deploys the HTML report to GitHub Pages** (InkAds-style) and
+posts a sticky PR comment with a live link:
+
+`https://singleton-sd.github.io/post-kit/pr-preview/pr-<N>/visual/`
+
+(`base/` · `pr/` · `diff/` · `index.html`). Closing the PR removes that
+preview. Artifact `editor-visual` remains as a backup.
+
+Stories (desktop 1440×900):
+
+- `admin-email-builder-overview--full-admin`
+- `admin-email-builder-blocks-text--default`
+- `admin-email-builder-templates--welcome-editor`
+
+```bash
+# from the monorepo root
+pnpm --filter @singleton-sd/post-kit-editor playwright:install
+pnpm --filter @singleton-sd/post-kit-editor build-storybook
+pnpm --filter @singleton-sd/post-kit-editor test:visual
+pnpm --filter @singleton-sd/post-kit-editor test:visual:gate
+```
+
+Output lands in `test-results/visual/` (gitignored): `pr/`, `base/`, `diff/`,
+`manifest.json`, and `index.html`. Open the HTML report locally to inspect
+diffs.
+
+### Updating baselines
+
+After intentional UI changes, prefer **CI Linux** screenshots (download the
+`editor-visual` artifact `pr/*.png`) so local/WSL font rendering does not
+drift the gate:
+
+```bash
+cp /path/to/editor-visual/pr/*.png \
+  packages/post-kit-editor/visual-baselines/
+```
+
+Or from a local Linux capture after `build-storybook` + `test:visual`:
+
+```bash
+cp packages/post-kit-editor/test-results/visual/pr/*.png \
+  packages/post-kit-editor/visual-baselines/
+pnpm --filter @singleton-sd/post-kit-editor test:visual
+pnpm --filter @singleton-sd/post-kit-editor test:visual:gate
+```
+
+Commit the updated PNGs under `visual-baselines/`.
+
+### Accepting diffs without updating baselines
+
+On a PR, add the GitHub label **`visual-accepted`**. That alone clears the
+`visual-review` check (no rebuild). Prefer committing new baselines when the
+change is intentional and should become the new reference.
 
 ## Development
 
