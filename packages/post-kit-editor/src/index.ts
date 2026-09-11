@@ -8,6 +8,11 @@ export {
   EmailTemplateEditor,
   type EmailTemplateEditorProps,
 } from './email-template-editor';
+export {
+  ADMIN_CLASS_PREFIX,
+  EmailTemplateAdmin,
+  type EmailTemplateAdminProps,
+} from './admin/EmailTemplateAdmin';
 export { EmailBuilderCanvas, type EmailBuilderCanvasProps } from './canvas/EmailBuilderCanvas';
 export { loadTemplateSource, serializeTemplateSource, TemplateSourceError } from './serialization';
 export type { SerializedTemplateSource, SaveResult, SendTestResult } from './save-send/types';
