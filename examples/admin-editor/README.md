@@ -1,10 +1,11 @@
 # Example: admin editor + Send-test BFF
 
 Reference host for embedding
-[`@singleton-sd/post-kit-editor`](../../packages/post-kit-editor) in a
-**consumer** admin app (InkAds back-office, etc.). PostKit does not host an
-admin CMS — your app owns list/load/save auth and Git; this example shows the
-wiring.
+[`EmailTemplateAdmin`](../../packages/post-kit-editor) from
+`@singleton-sd/post-kit-editor` in a **consumer** admin app (InkAds
+back-office, etc.). PostKit does not host an admin CMS — your app owns
+SSO/RBAC and Git; this example shows the thin wiring around the full page
+component.
 
 Guide: [`docs/guides/editor-integration.md`](../../docs/guides/editor-integration.md).
 
@@ -12,7 +13,8 @@ Guide: [`docs/guides/editor-integration.md`](../../docs/guides/editor-integratio
 
 ```text
 Admin browser
-  → EmailTemplateEditor (onSave / onSendTest callbacks only)
+  → EmailTemplateAdmin (list + MUI EmailBuilder canvas + PostKit chrome)
+       callbacks: onSave / optional onSendTest only
   → Your admin API (session / SSO — not PostKit API keys)
        ├─ list/load/save → content/email-templates/… (or open a PR)
        └─ POST …/send-test → PostKitClient + POSTKIT_API_KEY → PostKit API
@@ -28,7 +30,7 @@ Never put `POSTKIT_API_KEY` in a browser bundle.
 | --- | --- |
 | List / load / save on disk | `src/template-store.ts` + seeded `content/email-templates/` |
 | Save stub + PR reminder | `src/save-stub.ts` |
-| React host (list select + editor) | `App.tsx` (in-memory save for the UI demo) |
+| React host (`EmailTemplateAdmin`) | `App.tsx` (in-memory save for the UI demo) |
 | Send-test BFF handler | `src/send-test-handler.ts` |
 | Env → `PostKitClient` | `src/create-client-from-env.ts` |
 | In-memory adapter (UI contract) | `src/memory-persistence.ts` |
@@ -79,13 +81,16 @@ When the BFF is configured, pass `sendTest={postSendTestToBff}` into
 
 ## Map to InkAds (or any) admin
 
-1. Embed `EmailTemplateEditor` on an authenticated admin route (your SSO/RBAC).
-2. List/load from your Git tree or admin API (`createFsTemplateStore` pattern).
+1. Embed `EmailTemplateAdmin` on an authenticated admin route (your SSO/RBAC).
+2. Load the catalog from your Git tree or admin API (`createFsTemplateStore` pattern).
 3. `onSave` → trusted server → commit or GitHub App PR (this example writes
    locally and logs a PR reminder via `toFsOnSave`).
 4. `onSendTest` → your BFF → `handleSendTest` + `createPostKitClientFromEnv`.
 5. Publish CI: adapt [`docs/examples/publish-email-templates.yml`](../../docs/examples/publish-email-templates.yml).
 6. Per-environment keys so Send-test hits the right Blob prefix.
+
+You do **not** rebuild list UI, EmailBuilder inspector/samples, or PostKit
+metadata chrome — that is all inside `EmailTemplateAdmin`.
 
 ## Layout
 
