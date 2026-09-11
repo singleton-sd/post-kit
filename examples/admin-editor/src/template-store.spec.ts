@@ -26,6 +26,11 @@ describe('assertSafeDirectory', () => {
     assert.throws(() => assertSafeDirectory('..'), /Invalid/);
     assert.throws(() => assertSafeDirectory('a/b'), /Invalid/);
   });
+
+  it('rejects dot-prefixed directory names', () => {
+    assert.throws(() => assertSafeDirectory('.draft'), /Invalid/);
+    assert.throws(() => assertSafeDirectory('.demo.welcome-staging-xyz'), /Invalid/);
+  });
 });
 
 describe('createFsTemplateStore', () => {
@@ -93,6 +98,51 @@ describe('createFsTemplateStore', () => {
 
     assert.equal(readFileSync(join(root, 'demo.welcome', 'preview.json'), 'utf8'), originalPreview);
     assert.equal(readFileSync(join(root, 'demo.welcome', 'metadata.json'), 'utf8'), originalMeta);
+    assert.equal(store.load('demo.welcome').metadata.name, files.metadata.name);
+  });
+
+  it('rejects saving under a dot-prefixed directory name', () => {
+    const root = mkdtempSync(join(tmpdir(), 'pk-admin-store-dot-'));
+    after(() => rmSync(root, { recursive: true, force: true }));
+    seedDemoWelcome(root);
+
+    const store = createFsTemplateStore(root);
+    const files = store.load('demo.welcome');
+    const next = {
+      ...files,
+      metadata: { ...files.metadata, key: '.draft', name: 'Hidden draft' },
+    };
+    const result = store.save('.draft', serializeTemplateSource(next), next);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.message ?? '', /Invalid/);
+    }
+    assert.deepEqual(
+      store.list().map((i) => i.directory),
+      ['demo.welcome'],
+    );
+  });
+
+  it('returns ok:false when staging directory creation fails', () => {
+    const root = mkdtempSync(join(tmpdir(), 'pk-admin-store-stage-'));
+    after(() => rmSync(root, { recursive: true, force: true }));
+    seedDemoWelcome(root);
+
+    const store = createFsTemplateStore(root, {
+      mkdtempSync() {
+        throw new Error('simulated mkdtemp failure');
+      },
+    });
+    const files = store.load('demo.welcome');
+    const next = {
+      ...files,
+      metadata: { ...files.metadata, name: 'Should not land' },
+    };
+    const result = store.save('demo.welcome', serializeTemplateSource(next), next);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.message ?? '', /simulated mkdtemp failure/);
+    }
     assert.equal(store.load('demo.welcome').metadata.name, files.metadata.name);
   });
 });

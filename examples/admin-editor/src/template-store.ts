@@ -45,6 +45,10 @@ export interface TemplateStore {
 export interface FsTemplateStoreOptions {
   /** Injectable for tests (e.g. fail a later write). Defaults to `fs.writeFileSync`. */
   writeFileSync?: typeof writeFileSync;
+  /** Injectable for tests. Defaults to `fs.mkdirSync`. */
+  mkdirSync?: typeof mkdirSync;
+  /** Injectable for tests. Defaults to `fs.mkdtempSync`. */
+  mkdtempSync?: typeof mkdtempSync;
 }
 
 /**
@@ -59,6 +63,8 @@ export function createFsTemplateStore(
   options: FsTemplateStoreOptions = {},
 ): TemplateStore {
   const writeFile = options.writeFileSync ?? writeFileSync;
+  const mkdir = options.mkdirSync ?? mkdirSync;
+  const mkdtemp = options.mkdtempSync ?? mkdtempSync;
 
   return {
     list(): TemplateListItem[] {
@@ -70,6 +76,8 @@ export function createFsTemplateStore(
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
         const dir = entry.name;
+        // Skip store-owned staging/backup dirs and any other dot-prefixed names
+        // (assertSafeDirectory also rejects them for save/load).
         if (dir.startsWith('.')) continue;
         try {
           const files = loadDirectory(templatesRoot, dir);
@@ -122,12 +130,14 @@ export function createFsTemplateStore(
         return { ok: false, message: 'Serialized key does not match files.metadata.key.' };
       }
 
-      mkdirSync(templatesRoot, { recursive: true });
       const dirPath = join(templatesRoot, directory);
-      const stagingPath = mkdtempSync(join(templatesRoot, `.${directory}-staging-`));
       const backupPath = join(templatesRoot, `.${directory}-backup-${process.pid}-${Date.now()}`);
+      let stagingPath: string | undefined;
 
       try {
+        mkdir(templatesRoot, { recursive: true });
+        stagingPath = mkdtemp(join(templatesRoot, `.${directory}-staging-`));
+
         writeFile(
           join(stagingPath, 'template.json'),
           `${serialized.templateJson.trimEnd()}\n`,
@@ -148,12 +158,15 @@ export function createFsTemplateStore(
           renameSync(dirPath, backupPath);
         }
         renameSync(stagingPath, dirPath);
+        stagingPath = undefined;
         if (existsSync(backupPath)) {
           rmSync(backupPath, { recursive: true, force: true });
         }
         return { ok: true };
       } catch (err) {
-        rmSync(stagingPath, { recursive: true, force: true });
+        if (stagingPath !== undefined) {
+          rmSync(stagingPath, { recursive: true, force: true });
+        }
         if (existsSync(backupPath) && !existsSync(dirPath)) {
           try {
             renameSync(backupPath, dirPath);
@@ -186,12 +199,17 @@ function loadDirectory(root: string, directory: string): TemplateSourceFiles {
   });
 }
 
-/** Reject path traversal — directory must be a single path segment. */
+/**
+ * Reject path traversal and store-reserved names.
+ * Directory must be a single non-empty path segment that does not start with `.`
+ * (staging/backup dirs are dot-prefixed).
+ */
 export function assertSafeDirectory(directory: string): void {
   if (
     !directory ||
     directory === '.' ||
     directory === '..' ||
+    directory.startsWith('.') ||
     directory.includes('/') ||
     directory.includes('\\') ||
     directory.includes('\0')
