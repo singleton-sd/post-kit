@@ -1,9 +1,14 @@
-# Path-aware release: bump workspace package versions on main,
-# publish to npmjs via Trusted Publishing (OIDC), then tag + GitHub Releases.
-# Skips when the push is already a release commit (avoids loops).
+# Tag-only release: on merge to main, compute next per-package versions from
+# tags, set version in the CI workspace only, publish via npm Trusted
+# Publishing (OIDC), push tags only, then create GitHub Releases.
 #
-# Auth model matches engineering/publish-npm-library and
-# singleton-sd/poc-inkads-epaper-renderer (no NPM_TOKEN / registry-url).
+# Never commits or pushes to the default branch (no version-bump or CHANGELOG
+# commits) and needs no ruleset bypass. Branch rulesets must target
+# refs/heads/main only — not refs/tags/** — so tag pushes are not GH013'd.
+#
+# Auth model matches engineering/publish-npm-library (no NPM_TOKEN /
+# registry-url). GITHUB_TOKEN is contents: write (tags + Releases) plus
+# id-token: write (OIDC).
 name: Release
 
 on:
@@ -21,9 +26,8 @@ permissions:
 
 jobs:
   release:
-    if: "${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore: Release') }}"
     runs-on: ubuntu-latest
-    name: Bump package versions
+    name: Publish changed packages
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,6 +69,7 @@ jobs:
       - name: Configure git identity
         run: |
           set -euo pipefail
+          # Annotated tags require a local identity. This job never commits.
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -73,10 +78,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
           set -euo pipefail
 
@@ -84,7 +85,6 @@ jobs:
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           git fetch origin main --tags
-          git checkout -B main origin/main
 
           tmp=$(mktemp)
           set +e
@@ -98,9 +98,9 @@ jobs:
             echo "released=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if grep -q 'Release commit and tags pushed' "$tmp"; then
+          if grep -q 'Release tags pushed' "$tmp"; then
             echo "released=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "::error::Unexpected release:ci output (no release push and not empty)."
+          echo "::error::Unexpected release:ci output (no tag push and not empty)."
           exit 1

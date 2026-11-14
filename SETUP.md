@@ -20,22 +20,21 @@ require approving reviews.
 4. **Human merge only** for product PRs — agents never merge or review other
    agents' work. Connected review bots leave PR comments; the human validates
    the test plan and merges after CI is green.
-5. **Release exception:** `release.yml` must push `chore: Release…` commits
-   (version bumps + tags) directly to `main` via `GITHUB_TOKEN`. Classic
-   required-PR / required-status-check rules reject that push (`GH006`).
-   Repo-level rulesets also cannot list the GitHub Actions integration as a
-   bypass actor unless configured at the **organization** ruleset layer
-   (`admin:org`). Until an org ruleset requires PR + `Lint / test / build` for
-   humans and lists **GitHub Actions** as a bypass actor for `release.yml`
-   only, keep those two classic requirements **off** so Release can succeed.
+5. **Tag-only releases (no bypass):** `release.yml` never commits or pushes to
+   `main`. It computes the next per-package version from tags, writes it in
+   the CI workspace only, publishes via npm Trusted Publishing, pushes
+   **tags only**, and creates GitHub Releases. Required-PR / CodeRabbit /
+   status-check rulesets may stay **on** for `refs/heads/main`. Do **not** add
+   a GitHub Actions (or PAT) bypass actor — the marketing-repo commit-back
+   push was rejected by the CodeRabbit ruleset (`GH013`).
+
+   **Tag rulesets:** those default-branch rulesets must **not** target
+   `refs/tags/**`. Tag creation uses `GITHUB_TOKEN` with `contents: write`.
+   Blocking tag updates would stall publish.
 
    **Process vs GitHub enforcement:** Product changes still land only via
    human-merged PRs after `Lint / test / build` is green — agents never push
-   to `main`, and humans must not merge red CI. What is disabled is only
-   GitHub’s *server-side* “required check / required PR” gate (so the Release
-   bot’s direct push is not `GH006`). Preferred end state: org ruleset that
-   requires PR + `Lint / test / build` for humans, with **GitHub Actions** as
-   a bypass actor for `release.yml` only.
+   to `main`, and humans must not merge red CI.
 
 ### Branch naming (agents + optional GitHub rules)
 
@@ -76,8 +75,10 @@ anywhere on any OS. Do not create `post-kit-wt-*` siblings next to other project
    ```
 
    That permits `main` and `<type>/<issue-number>-<kebab-title>` and blocks
-   other names at create/rename. Do **not** add a GitHub Actions workflow
-   to validate `github.head_ref` — agents follow `AGENTS.md`; humans merge.
+   other names at create/rename. Target **branches only** — do not include
+   tags (`refs/tags/**`) or the Release workflow’s tag push will fail.
+   Do **not** add a GitHub Actions workflow to validate `github.head_ref` —
+   agents follow `AGENTS.md`; humans merge.
 4. Ensure PRs into `main` come from those branches only (agents never merge; humans merge).
 
 ## 2. GitHub Issues
@@ -298,6 +299,7 @@ npm pack @singleton-sd/post-kit-types@0.3.0
 
 `release.yml` uses the root `packageManager` pnpm version + npm 11.x, refuses
 auth-bearing `.npmrc` files (no `registry-url` on `setup-node`), and runs
-`pnpm release:ci`, which publishes changed packages **before** pushing tags.
+`pnpm release:ci`, which writes versions in the CI workspace only, publishes
+changed packages, then pushes **tags only** (never a commit to `main`).
 `publishConfig.provenance: true` is for CI OIDC only — local interactive
 publish may need it omitted temporarily.

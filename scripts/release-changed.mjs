@@ -1,35 +1,57 @@
 #!/usr/bin/env node
 /**
- * Path-aware independent releases for the pnpm monorepo.
+ * Path-aware independent tag-only releases for the pnpm monorepo.
  *
- * Bumps each workspace package whose name starts with `@singleton-sd/post-kit-`
- * that has releasable conventional commits since its last `@scope/name@version`
- * tag (reachable from HEAD), then creates one git commit, publishes to npmjs
- * via Trusted Publishing (OIDC), pushes tags, and creates GitHub Releases.
+ * Computes the next version for each `@singleton-sd/post-kit-*` workspace
+ * package from its latest reachable `@scope/name@version` tag plus
+ * conventional commits since that tag. In CI it writes the version in the
+ * workspace only (`npm version --no-git-tag-version`), publishes to npmjs
+ * via Trusted Publishing (OIDC), pushes **tags only**, and creates GitHub
+ * Releases with generated notes.
  *
- * Push order is commit-then-tags (never `--follow-tags`): a non-fast-forward
- * race must not publish tags without the release commit on main. npm publish
- * runs after the local commit and before `git push` so an auth failure does
- * not leave tags on origin/main.
+ * Never commits or pushes to the default branch. package.json on main is
+ * not the published version; tags / npm / GitHub Releases are canonical.
  *
  * Usage:
  *   node scripts/release-changed.mjs           # dry-run
- *   node scripts/release-changed.mjs --ci      # bump, commit, npm publish, push, GitHub Releases
+ *   node scripts/release-changed.mjs --ci      # bump in workspace, npm publish, tag, GitHub Releases
  */
 import { execFileSync, execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import semver from 'semver';
 import { createGitHubReleases } from './github-releases.mjs';
 import { publishNpmReleases } from './publish-npm.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CI = process.argv.includes('--ci');
-const RELEASE_SUBJECT = 'chore: Release package versions';
 const PACKAGE_PREFIX = '@singleton-sd/post-kit-';
+export const TAGS_PUSHED_MESSAGE = 'Release tags pushed.';
+export const NOTHING_TO_RELEASE_MESSAGE = 'Nothing to release.';
 
 /** @typedef {'major' | 'minor' | 'patch'} Increment */
+
+/**
+ * @typedef {{
+ *   name: string,
+ *   path: string,
+ *   version: string,
+ *   next: string,
+ *   increment: Increment,
+ *   tag: string,
+ *   previousTag: string | null,
+ *   messages: string[],
+ * }} ReleasePlan
+ */
+
+/**
+ * @typedef {{
+ *   getLastTag: (packageName: string) => string | null,
+ *   getCommitMessages: (sinceTag: string | null, paths: string[]) => string[],
+ *   tagExists: (tag: string) => boolean,
+ * }} GitLookup
+ */
 
 /**
  * @param {string} command
@@ -106,8 +128,6 @@ function isAncestorOfHead(ref) {
 
 /**
  * Highest semver tag for the package that is reachable from HEAD.
- * Ignores orphaned tags left behind when a release push rejected the branch
- * but still published tags (`git push --follow-tags` is not atomic).
  * @param {string} packageName
  * @returns {string | null}
  */
@@ -152,7 +172,7 @@ function tagExists(tag) {
  * @param {{ name: string, path: string }} pkg
  * @returns {string[]}
  */
-function watchPathsFor(pkg) {
+export function watchPathsFor(pkg) {
   const rel = relative(ROOT, pkg.path).replace(/\\/g, '/');
   return [rel];
 }
@@ -183,7 +203,7 @@ function getCommitMessages(sinceTag, paths) {
  * @param {string[]} messages
  * @returns {Increment | null}
  */
-function deriveIncrement(messages) {
+export function deriveIncrement(messages) {
   /** @type {Increment | null} */
   let bump = null;
   const rank = { patch: 1, minor: 2, major: 3 };
@@ -218,7 +238,7 @@ function deriveIncrement(messages) {
  * @param {string} current
  * @param {Increment} increment
  */
-function nextVersion(current, increment) {
+export function nextVersion(current, increment) {
   const base = semver.valid(current) ? current : '0.0.0';
   const next = semver.inc(base, increment);
   if (!next) {
@@ -229,14 +249,22 @@ function nextVersion(current, increment) {
 
 /**
  * Max of package.json version and last reachable tag, then bump until the
- * target tag name is free (skips orphaned remote tags).
+ * target tag name is free (skips orphaned remote tags). Tags are the source
+ * of truth once they move ahead of package.json on main.
  * @param {string} packageName
  * @param {string} packageVersion
  * @param {string | null} lastTag
  * @param {Increment} increment
+ * @param {(tag: string) => boolean} [tagExistsFn]
  * @returns {{ base: string, next: string, tag: string }}
  */
-function resolveNextVersion(packageName, packageVersion, lastTag, increment) {
+export function resolveNextVersion(
+  packageName,
+  packageVersion,
+  lastTag,
+  increment,
+  tagExistsFn = tagExists,
+) {
   const tagVersion = versionFromTag(packageName, lastTag);
   const candidates = [packageVersion, tagVersion].filter(
     (v) => typeof v === 'string' && Boolean(semver.valid(v)),
@@ -248,7 +276,7 @@ function resolveNextVersion(packageName, packageVersion, lastTag, increment) {
   for (let i = 0; i < 50; i += 1) {
     const next = nextVersion(base, increment);
     const tag = `${packageName}@${next}`;
-    if (!tagExists(tag)) {
+    if (!tagExistsFn(tag)) {
       return { base: from, next, tag };
     }
     console.warn(`Tag ${tag} already exists — skipping to next ${increment}.`);
@@ -259,51 +287,45 @@ function resolveNextVersion(packageName, packageVersion, lastTag, increment) {
 }
 
 /**
- * @param {{ name: string, version: string, next: string, increment: Increment }[]} releases
+ * @param {{ name: string, path: string, version: string }} pkg
+ * @param {GitLookup} git
+ * @returns {ReleasePlan | null}
  */
-function updateChangelog(releases) {
-  const changelogPath = join(ROOT, 'CHANGELOG.md');
-  const date = new Date().toISOString().slice(0, 10);
-  const section = [
-    `## ${date}`,
-    '',
-    ...releases.map((r) => `- **${r.name}** \`${r.version}\` → \`${r.next}\` (${r.increment})`),
-    '',
-  ].join('\n');
+export function planPackageRelease(pkg, git) {
+  const lastTag = git.getLastTag(pkg.name);
+  const paths = watchPathsFor(pkg);
+  const messages = git.getCommitMessages(lastTag, paths);
+  const increment = deriveIncrement(messages);
+  if (!increment) return null;
 
-  if (existsSync(changelogPath)) {
-    const existing = readFileSync(changelogPath, 'utf8');
-    const withoutHeader = existing.replace(/^# Changelog\r?\n\r?\n?/, '');
-    writeFileSync(changelogPath, `# Changelog\n\n${section}${withoutHeader}`);
-  } else {
-    writeFileSync(changelogPath, `# Changelog\n\n${section}`);
-  }
+  const resolved = resolveNextVersion(pkg.name, pkg.version, lastTag, increment, git.tagExists);
+  return {
+    name: pkg.name,
+    path: pkg.path,
+    version: resolved.base,
+    next: resolved.next,
+    increment,
+    tag: resolved.tag,
+    previousTag: lastTag,
+    messages,
+  };
 }
 
 /**
- * @param {string} packagePath
- * @param {string} version
- */
-function writePackageVersion(packagePath, version) {
-  const pkgJsonPath = join(packagePath, 'package.json');
-  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8'));
-  pkg.version = version;
-  writeFileSync(pkgJsonPath, `${JSON.stringify(pkg, null, 2)}\n`);
-}
-
-/**
- * Write the computed next version into package.json.
- * (release-it is available via `.release-it.json` for manual/single-package use;
- * the orchestrator owns path-filtered increments so versions stay consistent.)
+ * Write the computed next version into package.json in this workspace only.
+ * `--no-git-tag-version` must never create a commit or tag.
  * @param {{ path: string, next: string }} release
+ * @param {typeof run} [runFn]
  */
-function bumpPackageVersion(release) {
-  writePackageVersion(release.path, release.next);
+export function bumpPackageVersion(release, runFn = run) {
+  runFn('npm', ['version', release.next, '--no-git-tag-version', '--allow-same-version'], {
+    cwd: release.path,
+  });
 }
 
 /**
  * Sync to origin/main before computing bumps so concurrent pushes do not
- * release from a stale tip.
+ * release from a stale tip. Does not create or push a branch.
  */
 function syncToOriginMain() {
   run('git', ['fetch', 'origin', 'main', '--tags']);
@@ -315,41 +337,79 @@ function syncToOriginMain() {
 }
 
 /**
- * Push the release commit only (no tags). Retries once after rebase when
- * concurrent main updates cause a non-fast-forward rejection.
+ * Create and push annotated tags for the current HEAD (the merge commit).
+ * Never push a branch: use `refs/tags/<name>` so branch rulesets cannot match.
+ * @param {string[]} tags
+ * @param {typeof run} [runFn]
  */
-function pushReleaseCommit() {
-  const maxAttempts = 3;
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+export function createAndPushTags(tags, runFn = run) {
+  for (const tag of tags) {
     try {
-      run('git', ['push', 'origin', 'HEAD:main']);
-      return;
-    } catch (error) {
-      if (attempt === maxAttempts) throw error;
-      console.log(
-        `Push rejected (attempt ${attempt}/${maxAttempts}); rebasing onto origin/main...`,
-      );
-      run('git', ['fetch', 'origin', 'main']);
-      run('git', ['pull', '--rebase', '--autostash', 'origin', 'main']);
+      runFn('git', ['rev-parse', '-q', '--verify', `refs/tags/${tag}`]);
+      runFn('git', ['tag', '-d', tag]);
+    } catch {
+      // Tag is not local yet.
     }
+    runFn('git', ['tag', '-a', tag, '-m', tag]);
+  }
+  if (tags.length > 0) {
+    const refspecs = tags.map((tag) => `refs/tags/${tag}:refs/tags/${tag}`);
+    runFn('git', ['push', 'origin', ...refspecs]);
   }
 }
 
 /**
- * Create and push annotated tags only after HEAD is on origin/main.
- * Never use `git push --follow-tags`: git can accept new tags while rejecting
- * a non-fast-forward main update, leaving orphan tags that block later releases.
- * @param {string[]} tags
+ * @param {ReleasePlan[]} releases
+ * @param {{
+ *   bumpPackageVersion?: (release: ReleasePlan) => void,
+ *   publishNpmReleases?: (releases: ReleasePlan[]) => Promise<{ published: string[], skipped: string[] }>,
+ *   createAndPushTags?: (tags: string[]) => void,
+ *   createGitHubReleases?: (releases: ReleasePlan[]) => void,
+ *   log?: (msg: string) => void,
+ * }} [deps]
  */
-function createAndPushTags(tags) {
-  for (const tag of tags) {
-    if (tagExists(tag)) {
-      run('git', ['tag', '-d', tag]);
-    }
-    run('git', ['tag', '-a', tag, '-m', tag]);
+export async function applyCiRelease(releases, deps = {}) {
+  const bump = deps.bumpPackageVersion ?? bumpPackageVersion;
+  const publish = deps.publishNpmReleases ?? publishNpmReleases;
+  const pushTags = deps.createAndPushTags ?? createAndPushTags;
+  const publishReleases = deps.createGitHubReleases ?? createGitHubReleases;
+  const log = deps.log ?? console.log;
+
+  for (const release of releases) {
+    bump(release);
   }
-  if (tags.length > 0) {
-    run('git', ['push', 'origin', ...tags]);
+
+  // Publish while the workspace package.json holds the computed version.
+  // Already-published versions are skipped so a partial run can recover.
+  const npmResult = await publish(releases);
+  log(
+    `npm publish completed (published: ${npmResult.published.length}, skipped: ${npmResult.skipped.length}).`,
+  );
+
+  pushTags(releases.map((r) => r.tag));
+  log(TAGS_PUSHED_MESSAGE);
+  publishReleases(releases);
+  log('GitHub Releases created (or already present).');
+}
+
+function defaultGitLookup() {
+  return {
+    getLastTag,
+    getCommitMessages,
+    tagExists,
+  };
+}
+
+/**
+ * @returns {boolean}
+ */
+function isExecutedDirectly() {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return import.meta.url === pathToFileURL(resolve(entry)).href;
+  } catch {
+    return false;
   }
 }
 
@@ -360,34 +420,21 @@ async function main() {
 
   const packages = listWorkspacePackages();
   if (packages.length === 0) {
-    console.log('Nothing to release.');
+    console.log(NOTHING_TO_RELEASE_MESSAGE);
     return;
   }
 
-  /** @type {{ name: string, path: string, version: string, next: string, increment: Increment, tag: string }[]} */
+  const git = defaultGitLookup();
+  /** @type {ReleasePlan[]} */
   const releases = [];
 
   for (const pkg of packages) {
-    const lastTag = getLastTag(pkg.name);
-    const paths = watchPathsFor(pkg);
-    const messages = getCommitMessages(lastTag, paths);
-    const increment = deriveIncrement(messages);
-    if (!increment) continue;
-
-    const resolved = resolveNextVersion(pkg.name, pkg.version, lastTag, increment);
-    releases.push({
-      name: pkg.name,
-      path: pkg.path,
-      version: resolved.base,
-      next: resolved.next,
-      increment,
-      tag: resolved.tag,
-      messages,
-    });
+    const planned = planPackageRelease(pkg, git);
+    if (planned) releases.push(planned);
   }
 
   if (releases.length === 0) {
-    console.log('Nothing to release.');
+    console.log(NOTHING_TO_RELEASE_MESSAGE);
     return;
   }
 
@@ -397,45 +444,18 @@ async function main() {
   }
 
   if (!CI) {
-    console.log('\nRe-run with --ci to bump, commit, npm publish, tag, and push.');
+    console.log(
+      '\nRe-run with --ci to bump in the workspace, npm publish, tag, and push tags only.',
+    );
     return;
   }
 
-  for (const release of releases) {
-    bumpPackageVersion(release);
-  }
-
-  updateChangelog(releases);
-
-  const body = releases.map((r) => `- ${r.tag}`).join('\n');
-  const message = `${RELEASE_SUBJECT}\n\n${body}\n`;
-
-  for (const release of releases) {
-    run('git', ['add', join(release.path, 'package.json')]);
-  }
-  run('git', ['add', 'CHANGELOG.md']);
-  // Release commits are auto-generated; bypass hooks (lint-staged).
-  run('git', ['commit', '-m', message], {
-    env: { ...process.env, HUSKY: '0' },
-  });
-
-  // Publish before pushing so OIDC/auth failure does not leave tags on main.
-  // Already-published versions are skipped so a partial run can recover.
-  const npmResult = await publishNpmReleases(releases);
-  console.log(
-    `npm publish completed (published: ${npmResult.published.length}, skipped: ${npmResult.skipped.length}).`,
-  );
-
-  // Commit first, then tag. Tagging before a rebase-on-push-failure leaves
-  // tags pointing at a rewritten commit SHA.
-  pushReleaseCommit();
-  createAndPushTags(releases.map((r) => r.tag));
-  console.log('Release commit and tags pushed.');
-  createGitHubReleases(releases);
-  console.log('GitHub Releases created (or already present).');
+  await applyCiRelease(releases);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+if (isExecutedDirectly()) {
+  main().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  });
+}

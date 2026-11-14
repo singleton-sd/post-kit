@@ -1,5 +1,10 @@
 # Changelog
 
+Release notes for new versions live in
+[GitHub Releases](https://github.com/singleton-sd/post-kit/releases).
+This file is a historical record of commit-back releases and is **not**
+updated by the tag-only `release.yml` workflow.
+
 ## 2026-09-10
 
 - **@singleton-sd/post-kit-types** `0.4.0` → `0.5.0` (minor)

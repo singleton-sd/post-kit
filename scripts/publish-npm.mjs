@@ -139,9 +139,10 @@ export async function buildAndPublishPackage(release, options = {}) {
   run('pnpm', ['run', 'build'], { cwd: packagePath });
 
   log(`Publishing ${release.name}@${version} to npmjs (OIDC / Trusted Publishing)…`);
-  // --no-git-checks: release commit may not be pushed yet; we publish before push
-  // so a failed publish does not leave tags on origin/main.
-  // --publish-branch main: Release job checks out main; matches InkAds requireBranch.
+  // --no-git-checks: tag-only releases bump package.json in the CI workspace
+  // only, so the working tree is dirty on purpose. Publish before tagging so
+  // an auth failure does not leave tags without a matching npm version.
+  // --publish-branch main: Release job checks out main.
   run('pnpm', ['publish', '--access', 'public', '--no-git-checks', '--publish-branch', 'main'], {
     cwd: packagePath,
   });

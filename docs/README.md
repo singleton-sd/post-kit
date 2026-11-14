@@ -50,7 +50,7 @@ docs/
 ├── operations/
 │   ├── troubleshooting.md    (send endpoint triage, correlation IDs, runbooks)
 │   ├── send-metrics-queries.md (Kusto queries for send telemetry)
-│   ├── releasing.md          (release.yml bump + OIDC npm publish checklist)
+│   ├── releasing.md          (tag-only release.yml + OIDC npm publish checklist)
 │   └── learnings-contact-cors-custom-domain.md (CORS dual-allowlist, contact 500, custom domain, agent handoff)
 └── examples/
     └── publish-email-templates.yml (sample consumer publish workflow)
@@ -80,6 +80,6 @@ docs/
 | [`architecture/multi-tenant-security.md`](./architecture/multi-tenant-security.md) | Tenant resolution, environment separation, path safety, credential boundaries, unimplemented controls |
 | [`operations/troubleshooting.md`](./operations/troubleshooting.md) | `POST /emails/send` error triage, correlation-ID tracing, incident runbooks |
 | [`operations/send-metrics-queries.md`](./operations/send-metrics-queries.md) | Kusto queries for send volume, success rate, provider failures, latency, duplicates |
-| [`operations/releasing.md`](./operations/releasing.md) | `release.yml` triggers, path-aware bumps, OIDC Trusted Publishing, maintainer checklist |
+| [`operations/releasing.md`](./operations/releasing.md) | Tag-only `release.yml`: versions from tags, OIDC Trusted Publishing, GitHub Releases |
 | [`guides/public-forms.md`](./guides/public-forms.md) | Public web forms (Contact Us, waitlist): trusted server endpoint pattern, credential-exposure anti-patterns, consumer-side validation / abuse / rate-limit duties |
 | [`integrations/inkads-marketing.md`](./integrations/inkads-marketing.md) | InkAds PoC site → `POST /contact` integration |

@@ -187,11 +187,11 @@ Humans merge product PRs only after required CI (`Lint / test / build`) is
 green. Do not require approving reviews (solo identity cannot self-approve).
 Connected review bots comment; agents never approve or merge.
 
-**Branch protection nuance:** classic “required PR / required status checks”
-on `main` must stay **off** until an **organization** ruleset can bypass
-GitHub Actions for `release.yml` (that workflow pushes `chore: Release…`
-directly to `main`). Process still forbids merging red CI and forbids agents
-pushing to `main`. See `SETUP.md` §1 Release exception.
+**Branch protection:** `release.yml` is tag-only — it never commits or pushes
+to `main`, so **no GitHub Actions ruleset bypass** is required or permitted.
+Default-branch rulesets (required PR, CodeRabbit, status checks) may stay on;
+they must not target `refs/tags/**`. Process still forbids merging red CI and
+forbids agents pushing to `main`. See `SETUP.md` §1.
 
 ## Shared hub files (conflict prevention)
 
@@ -300,7 +300,7 @@ GitHub Actions (see `docs/pr-pipelines.md` / `SETUP.md`):
 
 | Change set | CI | Preview | Production (`main`) |
 | --- | --- | --- | --- |
-| Any PR / push to `main` | `ci.yml` (`Lint / test / build`) | None in v1 | `release.yml` bumps public packages |
+| Any PR / push to `main` | `ci.yml` (`Lint / test / build`) | None in v1 | `release.yml` tag-only publish of public packages |
 
 - Local checks: pre-commit runs Prettier + ESLint on staged files only via
   `lint-staged` (never bypass with `--no-verify` for format/lint). Full-repo

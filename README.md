@@ -25,7 +25,7 @@ org-wide. This repository has **no** ClickUp engineering integration.
 | Email | `@singleton-sd/post-kit-email` (Forward Email + development provider) |
 | Secrets | Azure Key Vault `ssd-postkit-kv-prod-ae` |
 | CI | GitHub Actions — single `CI` workflow (`Lint / test / build`) |
-| Release | Path-aware bumps via `scripts/release-changed.mjs` |
+| Release | Tag-only: path-aware versions from git tags, npm Trusted Publishing, GitHub Releases |
 | Agents | GitHub Issues → worktree → PR (`Closes #N`); humans merge |
 
 ## Quick start
@@ -44,3 +44,29 @@ Claude Code, Grok, and Codex). Do not copy `SKILL.md` files into this repo.
 
 See [SETUP.md](./SETUP.md), [AGENTS.md](./AGENTS.md), and
 [docs/pr-pipelines.md](./docs/pr-pipelines.md).
+
+## Releases
+
+All singleton-sd repositories use **tag-only** releases (decision: 14 Nov 2026).
+Merging to `main` runs [`.github/workflows/release.yml`](./.github/workflows/release.yml),
+which:
+
+1. Computes the next version per `@singleton-sd/post-kit-*` package from the
+   latest reachable `@scope/name@version` tag and conventional commits since
+   that tag.
+2. Sets the version in the CI workspace only (`npm version --no-git-tag-version`).
+   That write is **not** committed.
+3. Publishes to npmjs via **Trusted Publishing** (OIDC; `id-token: write`; no
+   `NPM_TOKEN`).
+4. Pushes **tags only** (`@singleton-sd/post-kit-<name>@<version>`) and creates
+   [GitHub Releases](https://github.com/singleton-sd/post-kit/releases) with
+   generated notes.
+
+The workflow never commits or pushes to the default branch, so it needs **no
+ruleset bypass**. Protect `refs/heads/main` as usual; do **not** apply
+CodeRabbit / required-PR rulesets to `refs/tags/**` (those blocked the old
+commit-back push with `GH013`).
+
+`CHANGELOG.md` remains as a historical record. Current release notes live in
+GitHub Releases. Details:
+[`docs/operations/releasing.md`](./docs/operations/releasing.md).
