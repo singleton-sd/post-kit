@@ -4,17 +4,18 @@
  *
  * Computes the next version for each `@singleton-sd/post-kit-*` workspace
  * package from its latest reachable `@scope/name@version` tag plus
- * conventional commits since that tag. In CI it writes the version in the
- * workspace only (`npm version --no-git-tag-version`), publishes to npmjs
- * via Trusted Publishing (OIDC), pushes **tags only**, and creates GitHub
- * Releases with generated notes.
+ * conventional commits since that tag. In CI it writes every workspace
+ * package version (last tag, or the planned bump) in the workspace only
+ * (`npm version --no-git-tag-version`), pushes **tags only**, publishes to
+ * npmjs via Trusted Publishing (OIDC), and creates GitHub Releases with
+ * generated notes.
  *
  * Never commits or pushes to the default branch. package.json on main is
  * not the published version; tags / npm / GitHub Releases are canonical.
  *
  * Usage:
  *   node scripts/release-changed.mjs           # dry-run
- *   node scripts/release-changed.mjs --ci      # bump in workspace, npm publish, tag, GitHub Releases
+ *   node scripts/release-changed.mjs --ci      # bump in workspace, tag, npm publish, GitHub Releases
  */
 import { execFileSync, execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -300,9 +301,10 @@ export function headsMatch(gitHead, headSha) {
 }
 
 /**
- * Write last-tag versions into workspace package.json for packages that are
- * not in this run's release set, so `workspace:*` rewrites to the published
- * version instead of a stale committed manifest.
+ * Set every public workspace package's version to its latest tag, or to the
+ * planned version when this run is releasing that package. `pnpm publish`
+ * rewrites `workspace:*` from the live package.json, and main's committed
+ * versions lag the tags.
  *
  * @param {{ name: string, path: string, version: string }[]} packages
  * @param {ReleasePlan[]} releases
@@ -310,18 +312,21 @@ export function headsMatch(gitHead, headSha) {
  * @param {(release: { path: string, next: string, name?: string }) => void} bump
  * @param {(msg: string) => void} [log]
  */
-export function syncWorkspaceVersionsToTags(packages, releases, git, bump, log = console.log) {
-  const releasing = new Set(releases.map((r) => r.name));
+export function applyWorkspaceVersions(packages, releases, git, bump, log = console.log) {
+  const planned = new Map(releases.map((r) => [r.name, r.next]));
   for (const pkg of packages) {
-    if (releasing.has(pkg.name)) continue;
     const lastTag = git.getLastTag(pkg.name);
-    const target = versionFromTag(pkg.name, lastTag);
-    if (!target) continue;
-    if (!semver.valid(pkg.version) || !semver.gt(target, pkg.version)) continue;
+    const tagged = versionFromTag(pkg.name, lastTag);
+    const target = planned.has(pkg.name) ? planned.get(pkg.name) : tagged;
+    if (!target || !semver.valid(target)) continue;
+    if (pkg.version === target) continue;
     bump({ name: pkg.name, path: pkg.path, next: target });
-    log(`Synced ${pkg.name} workspace version ${pkg.version} → ${target} (${lastTag}).`);
+    log(`Set ${pkg.name} workspace version ${pkg.version} → ${target}.`);
   }
 }
+
+/** @deprecated alias — use {@link applyWorkspaceVersions} */
+export const syncWorkspaceVersionsToTags = applyWorkspaceVersions;
 
 /**
  * If the planned version is already on npm from a *different* (or unknown)
@@ -507,10 +512,6 @@ export async function applyCiRelease(releases, deps = {}) {
   const fetchNpmMeta = deps.fetchNpmMeta ?? fetchNpmVersionMetadata;
   const headSha = deps.headSha ?? run('git', ['rev-parse', 'HEAD']);
 
-  if (deps.workspacePackages && deps.git) {
-    syncWorkspaceVersionsToTags(deps.workspacePackages, releases, deps.git, bump, log);
-  }
-
   /** @type {(ReleasePlan & { npmAlreadyPublished: boolean })[]} */
   const bound = [];
   for (const release of releases) {
@@ -524,9 +525,18 @@ export async function applyCiRelease(releases, deps = {}) {
     );
   }
 
-  for (const release of bound) {
-    bump(release);
+  if (deps.workspacePackages && deps.git) {
+    applyWorkspaceVersions(deps.workspacePackages, bound, deps.git, bump, log);
+  } else {
+    for (const release of bound) {
+      bump(release);
+    }
   }
+
+  // Tag first so a later retry cannot bind an already-published version to a
+  // newer HEAD. Reconcile republishes any tag-at-HEAD still missing on npm.
+  pushTags(bound.map((r) => r.tag));
+  log(TAGS_PUSHED_MESSAGE);
 
   const toPublish = bound.filter((release) => !release.npmAlreadyPublished);
   const npmResult = await publish(toPublish);
@@ -534,10 +544,45 @@ export async function applyCiRelease(releases, deps = {}) {
     `npm publish completed (published: ${npmResult.published.length}, skipped: ${npmResult.skipped.length}).`,
   );
 
-  pushTags(bound.map((r) => r.tag));
-  log(TAGS_PUSHED_MESSAGE);
   publishReleases(bound);
   log('GitHub Releases created (or already present).');
+}
+
+/**
+ * Retry path when there is no new bump: tags already at HEAD may still be
+ * missing on npm and/or GitHub Releases. Does not rewrite CHANGELOG.md.
+ *
+ * @param {{ name: string, path: string, version: string }[]} packages
+ * @param {GitLookup} git
+ * @param {{
+ *   run?: (file: string, args: string[]) => string,
+ *   bumpPackageVersion?: (release: { name?: string, path: string, next: string }) => void,
+ *   publishNpmReleases?: (releases: ReleasePlan[]) => Promise<{ published: string[], skipped: string[] }>,
+ *   createGitHubReleases?: (releases: ReleasePlan[]) => void,
+ *   log?: (msg: string) => void,
+ *   headSha?: string,
+ * }} [deps]
+ * @returns {Promise<ReleasePlan[]>}
+ */
+export async function reconcileTaggedHead(packages, git, deps = {}) {
+  const runFn = deps.run ?? run;
+  const bump = deps.bumpPackageVersion ?? bumpPackageVersion;
+  const publish = deps.publishNpmReleases ?? publishNpmReleases;
+  const publishReleases = deps.createGitHubReleases ?? createGitHubReleases;
+  const log = deps.log ?? console.log;
+  const headSha = deps.headSha ?? runFn('git', ['rev-parse', 'HEAD']);
+
+  const atHead = releaseSpecsForTagsAtHead(packages, git, headSha, runFn);
+  if (atHead.length === 0) return [];
+
+  applyWorkspaceVersions(packages, atHead, git, bump, log);
+  const npmResult = await publish(atHead);
+  log(
+    `npm publish completed (published: ${npmResult.published.length}, skipped: ${npmResult.skipped.length}).`,
+  );
+  publishReleases(atHead);
+  log('GitHub Releases created (or already present).');
+  return atHead;
 }
 
 function defaultGitLookup() {
@@ -583,12 +628,7 @@ async function main() {
 
   if (releases.length === 0) {
     if (CI) {
-      const headSha = run('git', ['rev-parse', 'HEAD']);
-      const atHead = releaseSpecsForTagsAtHead(packages, git, headSha, run);
-      if (atHead.length > 0) {
-        createGitHubReleases(atHead);
-        console.log('GitHub Releases created (or already present).');
-      }
+      await reconcileTaggedHead(packages, git);
     }
     console.log(NOTHING_TO_RELEASE_MESSAGE);
     return;
@@ -601,7 +641,7 @@ async function main() {
 
   if (!CI) {
     console.log(
-      '\nRe-run with --ci to bump in the workspace, npm publish, tag, and push tags only.',
+      '\nRe-run with --ci to bump in the workspace, push tags, npm publish, and create GitHub Releases.',
     );
     return;
   }

@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import {
   TAGS_PUSHED_MESSAGE,
   applyCiRelease,
+  applyWorkspaceVersions,
   bindReleaseVersion,
   bumpPackageVersion,
   createAndPushTags,
@@ -13,9 +16,9 @@ import {
   headsMatch,
   nextVersion,
   planPackageRelease,
+  reconcileTaggedHead,
   releaseSpecsForTagsAtHead,
   resolveNextVersion,
-  syncWorkspaceVersionsToTags,
 } from './release-changed.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -151,7 +154,7 @@ test('bumpPackageVersion uses npm version --no-git-tag-version', () => {
   assert.equal(calls[0].cwd, '/tmp/pkg');
 });
 
-test('applyCiRelease publishes, pushes tags only, then creates GitHub Releases', async () => {
+test('applyCiRelease pushes tags, then publishes, then creates GitHub Releases', async () => {
   const planned = {
     name: '@singleton-sd/post-kit-email',
     path: '/tmp/post-kit-email',
@@ -189,8 +192,8 @@ test('applyCiRelease publishes, pushes tags only, then creates GitHub Releases',
 
   assert.deepEqual(steps, [
     'bump:0.6.0',
-    'publish:@singleton-sd/post-kit-email@0.6.0',
     'tags:@singleton-sd/post-kit-email@0.6.0',
+    'publish:@singleton-sd/post-kit-email@0.6.0',
     'gh:@singleton-sd/post-kit-email@0.6.0',
   ]);
   assert.ok(logs.includes(TAGS_PUSHED_MESSAGE));
@@ -207,10 +210,10 @@ test('headsMatch compares gitHead prefixes of at least 7 hex chars', () => {
   assert.equal(headsMatch(null, 'abcdef1ffffffff'), false);
 });
 
-test('syncWorkspaceVersionsToTags bumps unreleased deps whose tags are ahead', () => {
+test('applyWorkspaceVersions sets every package to last tag or planned version', () => {
   /** @type {string[]} */
   const bumped = [];
-  syncWorkspaceVersionsToTags(
+  applyWorkspaceVersions(
     [
       { name: '@singleton-sd/post-kit-types', path: '/tmp/types', version: '0.5.0' },
       { name: '@singleton-sd/post-kit-editor', path: '/tmp/editor', version: '0.7.0' },
@@ -237,7 +240,10 @@ test('syncWorkspaceVersionsToTags bumps unreleased deps whose tags are ahead', (
     },
     (release) => bumped.push(`${release.name}@${release.next}`),
   );
-  assert.deepEqual(bumped, ['@singleton-sd/post-kit-types@0.6.0']);
+  assert.deepEqual(bumped, [
+    '@singleton-sd/post-kit-types@0.6.0',
+    '@singleton-sd/post-kit-editor@0.8.0',
+  ]);
 });
 
 test('bindReleaseVersion selects the next increment when npm already has a different commit', async () => {
@@ -291,7 +297,7 @@ test('bindReleaseVersion recovers a same-commit skip without republishing', asyn
   assert.equal(bound.npmAlreadyPublished, true);
 });
 
-test('applyCiRelease syncs stale workspace deps then publishes the planned package', async () => {
+test('applyCiRelease sets workspace versions, tags, then publishes the planned package', async () => {
   /** @type {string[]} */
   const steps = [];
   await applyCiRelease(
@@ -342,8 +348,8 @@ test('applyCiRelease syncs stale workspace deps then publishes the planned packa
   assert.deepEqual(steps, [
     'bump:@singleton-sd/post-kit-types@0.6.0',
     'bump:@singleton-sd/post-kit-editor@0.8.0',
-    'publish:@singleton-sd/post-kit-editor@0.8.0',
     'tags:@singleton-sd/post-kit-editor@0.8.0',
+    'publish:@singleton-sd/post-kit-editor@0.8.0',
     'gh',
   ]);
 });
@@ -369,6 +375,176 @@ test('releaseSpecsForTagsAtHead returns last tags that point at HEAD', () => {
   assert.equal(specs[0].next, '0.5.0');
 });
 
+test('reconcileTaggedHead publishes missing npm versions and creates GitHub Releases', async () => {
+  /** @type {string[]} */
+  const steps = [];
+  const atHead = await reconcileTaggedHead(
+    [
+      { name: '@singleton-sd/post-kit-email', path: '/tmp/email', version: '0.5.0' },
+      { name: '@singleton-sd/post-kit-types', path: '/tmp/types', version: '0.5.0' },
+    ],
+    {
+      getLastTag: (name) =>
+        name === '@singleton-sd/post-kit-email'
+          ? '@singleton-sd/post-kit-email@0.6.0'
+          : '@singleton-sd/post-kit-types@0.6.0',
+      getCommitMessages: () => [],
+      tagExists: () => true,
+    },
+    {
+      headSha: 'deadbeef',
+      run: (_file, args) => {
+        if (args[0] === 'rev-parse' && args[1] === '@singleton-sd/post-kit-email@0.6.0') {
+          return 'deadbeef';
+        }
+        return 'other';
+      },
+      bumpPackageVersion: (release) => {
+        steps.push(`bump:${release.name}@${release.next}`);
+      },
+      publishNpmReleases: async (releases) => {
+        steps.push(`publish:${releases.map((r) => r.tag).join(',')}`);
+        return { published: releases.map((r) => r.tag), skipped: [] };
+      },
+      createGitHubReleases: (releases) => {
+        steps.push(`gh:${releases.map((r) => r.tag).join(',')}`);
+      },
+      log: () => {},
+    },
+  );
+  assert.equal(atHead.length, 1);
+  assert.equal(atHead[0].tag, '@singleton-sd/post-kit-email@0.6.0');
+  assert.deepEqual(steps, [
+    'bump:@singleton-sd/post-kit-email@0.6.0',
+    'bump:@singleton-sd/post-kit-types@0.6.0',
+    'publish:@singleton-sd/post-kit-email@0.6.0',
+    'gh:@singleton-sd/post-kit-email@0.6.0',
+  ]);
+});
+
+/**
+ * @param {string} packageDir
+ * @param {string} destDir
+ * @returns {Record<string, string>}
+ */
+function packedDependencyVersions(packageDir, destDir) {
+  execFileSync('pnpm', ['pack', '--pack-destination', destDir], {
+    cwd: packageDir,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const tgz = readdirSync(destDir).find((name) => name.endsWith('.tgz'));
+  assert.ok(tgz, 'expected pnpm pack to write a tarball');
+  const extractDir = join(destDir, 'extracted');
+  mkdirSync(extractDir, { recursive: true });
+  execFileSync('tar', ['-xzf', join(destDir, tgz), '-C', extractDir], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const packed = JSON.parse(readFileSync(join(extractDir, 'package', 'package.json'), 'utf8'));
+  return packed.dependencies ?? {};
+}
+
+test('publishing a dependent package pins workspace:* to the latest tagged dep version', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'post-kit-ws-'));
+  const typesDir = join(root, 'packages', 'types');
+  const editorDir = join(root, 'packages', 'editor');
+  const packDir = join(root, 'pack');
+  mkdirSync(typesDir, { recursive: true });
+  mkdirSync(editorDir, { recursive: true });
+  mkdirSync(packDir, { recursive: true });
+  writeFileSync(
+    join(root, 'package.json'),
+    `${JSON.stringify({ name: 'post-kit-tmp', private: true }, null, 2)}\n`,
+  );
+  writeFileSync(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n');
+  writeFileSync(
+    join(typesDir, 'package.json'),
+    `${JSON.stringify(
+      {
+        name: '@singleton-sd/post-kit-types',
+        version: '0.5.0',
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  writeFileSync(
+    join(editorDir, 'package.json'),
+    `${JSON.stringify(
+      {
+        name: '@singleton-sd/post-kit-editor',
+        version: '0.7.0',
+        dependencies: {
+          '@singleton-sd/post-kit-types': 'workspace:*',
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  try {
+    execFileSync('pnpm', ['install', '--ignore-scripts'], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, npm_config_offline: 'false' },
+    });
+
+    /** @type {Record<string, string> | null} */
+    let packedDeps = null;
+    await applyCiRelease(
+      [
+        {
+          name: '@singleton-sd/post-kit-editor',
+          path: editorDir,
+          version: '0.7.0',
+          next: '0.8.0',
+          increment: 'minor',
+          tag: '@singleton-sd/post-kit-editor@0.8.0',
+          previousTag: '@singleton-sd/post-kit-editor@0.7.0',
+          messages: [],
+        },
+      ],
+      {
+        workspacePackages: [
+          { name: '@singleton-sd/post-kit-types', path: typesDir, version: '0.5.0' },
+          { name: '@singleton-sd/post-kit-editor', path: editorDir, version: '0.7.0' },
+        ],
+        git: {
+          getLastTag: (name) =>
+            name === '@singleton-sd/post-kit-types'
+              ? '@singleton-sd/post-kit-types@0.6.0'
+              : '@singleton-sd/post-kit-editor@0.7.0',
+          getCommitMessages: () => [],
+          tagExists: () => false,
+        },
+        bumpPackageVersion: (release) => {
+          const pkgPath = join(release.path, 'package.json');
+          const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+          pkg.version = release.next;
+          writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+        },
+        publishNpmReleases: async () => {
+          packedDeps = packedDependencyVersions(editorDir, packDir);
+          return { published: ['@singleton-sd/post-kit-editor@0.8.0'], skipped: [] };
+        },
+        createAndPushTags: () => {},
+        createGitHubReleases: () => {},
+        fetchNpmMeta: async () => ({ published: false, gitHead: null }),
+        tagExists: () => false,
+        headSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        log: () => {},
+      },
+    );
+
+    assert.equal(packedDeps?.['@singleton-sd/post-kit-types'], '0.6.0');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('release-changed.mjs never commits or pushes the default branch', () => {
   const src = readFileSync(new URL('./release-changed.mjs', import.meta.url), 'utf8');
   assert.doesNotMatch(src, /HEAD:main/);
@@ -380,14 +556,21 @@ test('release-changed.mjs never commits or pushes the default branch', () => {
   assert.match(src, /refs\/tags\//);
 });
 
-test('release.yml is tag-only and keeps Trusted Publishing permissions', () => {
+test('release.yml is tag-only and keeps job-level Trusted Publishing permissions', () => {
   const yml = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8');
   assert.doesNotMatch(yml, /HEAD:main/);
   assert.doesNotMatch(yml, /checkout -B main/);
   assert.doesNotMatch(yml, /chore: Release/);
   assert.doesNotMatch(yml, /secrets\.NPM_TOKEN|NPM_TOKEN:/);
-  assert.match(yml, /id-token:\s*write/);
-  assert.match(yml, /contents:\s*write/);
   assert.match(yml, /Release tags pushed/);
   assert.match(yml, /secrets\.GITHUB_TOKEN/);
+  const uncommented = yml
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('#'))
+    .join('\n');
+  const [workflowLevel, jobLevel] = uncommented.split(/jobs:\s/);
+  assert.match(workflowLevel, /permissions:\s*\{\s*\}/);
+  assert.doesNotMatch(workflowLevel, /contents:\s*write/);
+  assert.doesNotMatch(workflowLevel, /id-token:\s*write/);
+  assert.match(jobLevel, /permissions:\s*\n\s+contents:\s*write\s*\n\s+id-token:\s*write/);
 });

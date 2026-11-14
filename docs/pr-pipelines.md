@@ -27,14 +27,16 @@ Default-branch rulesets must not target `refs/tags/**`.
 
 On **`main`**, `release.yml` computes the next version for changed public
 packages from the latest per-package tag plus conventional commits since then
-(`fix`→patch, `feat`→minor, `BREAKING CHANGE`→major), writes the version in
-the CI workspace only (`npm version --no-git-tag-version`), publishes to
-npmjs via **Trusted Publishing (OIDC)** (`id-token: write`; no `NPM_TOKEN`),
-pushes one annotated git tag per package, then creates a matching **GitHub
-Release** with generated notes (`scripts/github-releases.mjs`). With an empty
-workspace (no `@singleton-sd/post-kit-*` packages yet) it logs
-`Nothing to release` and exits 0. `CHANGELOG.md` is historical; current notes
-live on GitHub Releases.
+(`fix`→patch, `feat`→minor, `BREAKING CHANGE`→major), writes every workspace
+package version in the CI workspace only (`npm version --no-git-tag-version`
+— last tag, or the planned bump), pushes one annotated git tag per package,
+publishes to npmjs via **Trusted Publishing (OIDC)** (job-level
+`id-token: write`; no `NPM_TOKEN`), then creates a matching **GitHub
+Release** with generated notes (`scripts/github-releases.mjs`). A retry with
+no new bump still publishes missing npm versions and GitHub Releases for
+tags that already point at HEAD. With an empty workspace (no
+`@singleton-sd/post-kit-*` packages yet) it logs `Nothing to release` and
+exits 0. `CHANGELOG.md` is historical; current notes live on GitHub Releases.
 
 ### Backfill existing tags (one-shot)
 

@@ -56,23 +56,24 @@ rules:
 
 After planning bumps, CI:
 
-1. Writes the version in the **CI workspace only**
-   (`npm version --no-git-tag-version`). This is not committed.
-2. Publishes changed packages to **npmjs** via **Trusted Publishing (OIDC)** —
-   `permissions: id-token: write`; **no `NPM_TOKEN`**.
-3. Pushes **annotated tags only** (`refs/tags/@singleton-sd/post-kit-*@x.y.z`)
+1. Writes **every** public workspace package version in the **CI workspace
+   only** (`npm version --no-git-tag-version`): last tag, or the planned bump
+   for packages in this run. This is not committed. `pnpm publish` rewrites
+   `workspace:*` from those live versions.
+2. Pushes **annotated tags only** (`refs/tags/@singleton-sd/post-kit-*@x.y.z`)
    pointing at the merge commit on `main`. It never runs `git push origin HEAD:main`.
+3. Publishes changed packages to **npmjs** via **Trusted Publishing (OIDC)** —
+   job-level `permissions: id-token: write`; **no `NPM_TOKEN`**.
 4. Creates **GitHub Releases** per tag with `gh release create --generate-notes`
    (`scripts/github-releases.mjs`).
 
-Publish runs **before** pushing tags so an auth failure does not leave orphan
-tags. `package.json` on `main` is not the published version — tags, npmjs, and
-GitHub Releases are canonical. Before publish, CI writes last-tag versions into
-unreleased workspace dependencies so `workspace:*` does not pin a stale
-committed version. If a planned version is already on npm from a different
-commit, CI skips to the next increment instead of tagging HEAD as that version.
-A retry with no new bump still creates missing GitHub Releases for tags that
-already point at HEAD.
+Tags are pushed **before** publish so a later retry cannot bind an already-
+published version to a newer HEAD. A retry with no new bump republishes any
+tag-at-HEAD still missing on npm and creates missing GitHub Releases.
+`package.json` on `main` is not the published version — tags, npmjs, and
+GitHub Releases are canonical. If a planned version is already on npm from a
+different commit, CI skips to the next increment instead of tagging HEAD as
+that version.
 
 `CHANGELOG.md` stays in the tree as a historical record of commit-back
 releases. New notes live on GitHub Releases.
@@ -118,7 +119,8 @@ After a release run:
 npm publish uses **GitHub Actions OIDC → npm Trusted Publishing**. Do not add
 `NPM_TOKEN` / `NODE_AUTH_TOKEN` or Key Vault publish secrets for this path.
 
-The workflow uses the built-in `GITHUB_TOKEN` with:
+The workflow sets `permissions: {}` at the workflow level (deny by default)
+and grants the release job:
 
 | Permission | Why |
 | --- | --- |

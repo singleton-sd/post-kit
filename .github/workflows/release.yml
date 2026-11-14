@@ -1,14 +1,15 @@
 # Tag-only release: on merge to main, compute next per-package versions from
-# tags, set version in the CI workspace only, publish via npm Trusted
-# Publishing (OIDC), push tags only, then create GitHub Releases.
+# tags, set every workspace package version (last tag or planned bump) in the
+# CI workspace only, push tags, publish via npm Trusted Publishing (OIDC),
+# then create GitHub Releases.
 #
 # Never commits or pushes to the default branch (no version-bump or CHANGELOG
 # commits) and needs no ruleset bypass. Branch rulesets must target
 # refs/heads/main only — not refs/tags/** — so tag pushes are not GH013'd.
 #
 # Auth model matches engineering/publish-npm-library (no NPM_TOKEN /
-# registry-url). GITHUB_TOKEN is contents: write (tags + Releases) plus
-# id-token: write (OIDC).
+# registry-url). Job-level GITHUB_TOKEN is contents: write (tags + Releases)
+# plus id-token: write (OIDC). Workflow-level permissions are empty.
 name: Release
 
 on:
@@ -20,14 +21,15 @@ concurrency:
   group: release-main
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  id-token: write
+permissions: {}
 
 jobs:
   release:
     runs-on: ubuntu-latest
     name: Publish changed packages
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:

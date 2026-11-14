@@ -194,8 +194,9 @@ export async function buildAndPublishPackage(release, options = {}) {
 
   log(`Publishing ${release.name}@${version} to npmjs (OIDC / Trusted Publishing)…`);
   // --no-git-checks: tag-only releases bump package.json in the CI workspace
-  // only, so the working tree is dirty on purpose. Publish before tagging so
-  // an auth failure does not leave tags without a matching npm version.
+  // only, so the working tree is dirty on purpose. Tags are pushed before
+  // publish so a later retry cannot bind an already-published version to a
+  // newer HEAD. Reconcile republishes any tag-at-HEAD still missing on npm.
   // --publish-branch main: Release job checks out main.
   run('pnpm', ['publish', '--access', 'public', '--no-git-checks', '--publish-branch', 'main'], {
     cwd: packagePath,
