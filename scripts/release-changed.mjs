@@ -306,7 +306,9 @@ export function releaseSpecsForTagsAtHead(packages, git, headSha, runFn) {
     if (!lastTag) continue;
     let tagged;
     try {
-      tagged = runFn('git', ['rev-parse', lastTag]);
+      // Peel annotated tags to the commit they point at (`tag^{commit}`).
+      // `git rev-parse <tag>` returns the tag object id for `git tag -a`.
+      tagged = runFn('git', ['rev-parse', `${lastTag}^{commit}`]);
     } catch {
       continue;
     }
@@ -420,32 +422,20 @@ function syncToOriginMain() {
 }
 
 /**
- * Push the release commit only (no tags). Retries after rebase when concurrent
- * main updates cause a non-fast-forward rejection. Uses whatever credentials
- * `origin` already has (the singleton-release app token from checkout).
+ * Push the release commit only. Fails closed on a non-fast-forward: rebasing
+ * would keep a stale plan and could tag a later breaking commit as the
+ * already-chosen version. A later Release run re-plans from the new tip.
  * @param {typeof run} [runFn]
  */
 export function pushReleaseCommit(runFn = run) {
-  const maxAttempts = 3;
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      runFn('git', ['push', 'origin', 'HEAD:main']);
-      return;
-    } catch (error) {
-      if (attempt === maxAttempts) throw error;
-      console.log(
-        `Push rejected (attempt ${attempt}/${maxAttempts}); rebasing onto origin/main...`,
-      );
-      runFn('git', ['fetch', 'origin', 'main']);
-      runFn('git', ['pull', '--rebase', '--autostash', 'origin', 'main']);
-    }
-  }
+  runFn('git', ['push', '--atomic', 'origin', 'HEAD:main']);
 }
 
 /**
- * Create and push annotated tags for the current HEAD (the release commit).
- * Never use `git push --follow-tags`: git can accept new tags while rejecting
- * a non-fast-forward main update.
+ * Create annotated tags for the current HEAD and push them with the release
+ * commit in one `--atomic` update. Never `--follow-tags`: that can accept
+ * tags while rejecting a non-fast-forward main update. Never rebase a
+ * rejected push: the next run must re-plan.
  * @param {string[]} tags
  * @param {typeof run} [runFn]
  */
@@ -459,10 +449,8 @@ export function createAndPushTags(tags, runFn = run) {
     }
     runFn('git', ['tag', '-a', tag, '-m', tag]);
   }
-  if (tags.length > 0) {
-    const refspecs = tags.map((tag) => `refs/tags/${tag}:refs/tags/${tag}`);
-    runFn('git', ['push', 'origin', ...refspecs]);
-  }
+  const refspecs = tags.map((tag) => `refs/tags/${tag}:refs/tags/${tag}`);
+  runFn('git', ['push', '--atomic', 'origin', 'HEAD:main', ...refspecs]);
 }
 
 /**
@@ -471,7 +459,6 @@ export function createAndPushTags(tags, runFn = run) {
  *   bumpPackageVersion?: (release: { name?: string, path: string, next: string }) => void,
  *   updateChangelog?: (releases: ReleasePlan[]) => void,
  *   commitRelease?: (releases: ReleasePlan[]) => void,
- *   pushReleaseCommit?: () => void,
  *   createAndPushTags?: (tags: string[]) => void,
  *   publishNpmReleases?: (releases: ReleasePlan[]) => Promise<{ published: string[], skipped: string[] }>,
  *   createGitHubReleases?: (releases: ReleasePlan[]) => void,
@@ -482,7 +469,6 @@ export async function applyCiRelease(releases, deps = {}) {
   const bump = deps.bumpPackageVersion ?? bumpPackageVersion;
   const changelog = deps.updateChangelog ?? updateChangelog;
   const commit = deps.commitRelease ?? commitRelease;
-  const pushCommit = deps.pushReleaseCommit ?? pushReleaseCommit;
   const pushTags = deps.createAndPushTags ?? createAndPushTags;
   const publish = deps.publishNpmReleases ?? publishNpmReleases;
   const publishReleases = deps.createGitHubReleases ?? createGitHubReleases;
@@ -493,7 +479,6 @@ export async function applyCiRelease(releases, deps = {}) {
   }
   changelog(releases);
   commit(releases);
-  pushCommit();
   pushTags(releases.map((r) => r.tag));
   log(COMMIT_AND_TAGS_PUSHED_MESSAGE);
 

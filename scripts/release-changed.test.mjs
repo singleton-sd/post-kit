@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync, execSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -114,7 +115,7 @@ test('planPackageRelease returns null when there is nothing to bump', () => {
   assert.equal(planned, null);
 });
 
-test('createAndPushTags pushes tag refspecs only', () => {
+test('createAndPushTags pushes HEAD:main and tags atomically', () => {
   /** @type {{ file: string, args: string[] }[]} */
   const calls = [];
   const runFn = (file, args) => {
@@ -129,23 +130,44 @@ test('createAndPushTags pushes tag refspecs only', () => {
   assert.ok(push);
   assert.deepEqual(push.args, [
     'push',
+    '--atomic',
     'origin',
+    'HEAD:main',
     'refs/tags/@singleton-sd/post-kit-email@0.6.0:refs/tags/@singleton-sd/post-kit-email@0.6.0',
   ]);
+});
+
+test('pushReleaseCommit does not rebase a rejected push', () => {
+  /** @type {string[][]} */
+  const calls = [];
+  assert.throws(() => {
+    pushReleaseCommit((_file, args) => {
+      calls.push(args);
+      throw new Error('non-fast-forward');
+    });
+  }, /non-fast-forward/);
+  assert.deepEqual(calls, [['push', '--atomic', 'origin', 'HEAD:main']]);
   assert.equal(
-    calls.some((c) => c.args.includes('HEAD:main') || c.args.includes('main')),
+    calls.some((args) => args.includes('pull') || args.includes('--rebase')),
     false,
   );
 });
 
-test('pushReleaseCommit pushes HEAD:main', () => {
+test('createAndPushTags does not rebase after a rejected atomic push', () => {
   /** @type {string[][]} */
   const calls = [];
-  pushReleaseCommit((_file, args) => {
-    calls.push(args);
-    return '';
-  });
-  assert.deepEqual(calls[0], ['push', 'origin', 'HEAD:main']);
+  assert.throws(() => {
+    createAndPushTags(['@singleton-sd/post-kit-email@0.6.0'], (_file, args) => {
+      calls.push(args);
+      if (args[0] === 'rev-parse') throw new Error('not a tag');
+      if (args[0] === 'push') throw new Error('non-fast-forward');
+      return '';
+    });
+  }, /non-fast-forward/);
+  assert.equal(
+    calls.some((args) => args.includes('pull') || args.includes('--rebase')),
+    false,
+  );
 });
 
 test('commitRelease uses the skip-ci subject and stages package.json plus CHANGELOG', () => {
@@ -221,11 +243,8 @@ test('applyCiRelease commits, pushes main and tags, then publishes, then creates
     commitRelease: () => {
       steps.push('commit');
     },
-    pushReleaseCommit: () => {
-      steps.push('push-main');
-    },
     createAndPushTags: (tags) => {
-      steps.push(`tags:${tags.join(',')}`);
+      steps.push(`push:${tags.join(',')}`);
     },
     publishNpmReleases: async (releases) => {
       steps.push(`publish:${releases.map((r) => r.tag).join(',')}`);
@@ -241,8 +260,7 @@ test('applyCiRelease commits, pushes main and tags, then publishes, then creates
     'bump:0.6.0',
     'changelog',
     'commit',
-    'push-main',
-    'tags:@singleton-sd/post-kit-email@0.6.0',
+    'push:@singleton-sd/post-kit-email@0.6.0',
     'publish:@singleton-sd/post-kit-email@0.6.0',
     'gh:@singleton-sd/post-kit-email@0.6.0',
   ]);
@@ -259,7 +277,7 @@ test('releaseSpecsForTagsAtHead returns last tags that point at HEAD', () => {
     },
     'deadbeef',
     (_file, args) => {
-      if (args[0] === 'rev-parse' && args[1] === '@singleton-sd/post-kit-email@0.5.0') {
+      if (args[0] === 'rev-parse' && args[1] === '@singleton-sd/post-kit-email@0.5.0^{commit}') {
         return 'deadbeef';
       }
       return 'other';
@@ -268,6 +286,44 @@ test('releaseSpecsForTagsAtHead returns last tags that point at HEAD', () => {
   assert.equal(specs.length, 1);
   assert.equal(specs[0].tag, '@singleton-sd/post-kit-email@0.5.0');
   assert.equal(specs[0].next, '0.5.0');
+});
+
+test('releaseSpecsForTagsAtHead peels a real annotated tag to HEAD', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'post-kit-ann-tag-'));
+  const git = (args) =>
+    execFileSync('git', args, {
+      cwd: dir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  try {
+    execSync('git init', { cwd: dir, stdio: 'ignore' });
+    git(['config', 'user.email', 'release-test@example.com']);
+    git(['config', 'user.name', 'Release Test']);
+    writeFileSync(join(dir, 'README'), 'ok\n');
+    git(['add', 'README']);
+    git(['commit', '-m', 'init']);
+    const head = git(['rev-parse', 'HEAD']);
+    const tag = '@singleton-sd/post-kit-email@0.5.0';
+    git(['tag', '-a', tag, '-m', tag]);
+    const tagObject = git(['rev-parse', tag]);
+    assert.notEqual(tagObject, head);
+    const specs = releaseSpecsForTagsAtHead(
+      [{ name: '@singleton-sd/post-kit-email', path: dir }],
+      {
+        getLastTag: () => tag,
+        getCommitMessages: () => [],
+        tagExists: () => true,
+      },
+      head,
+      (_file, args) => git(args),
+    );
+    assert.equal(specs.length, 1);
+    assert.equal(specs[0].tag, tag);
+    assert.equal(specs[0].next, '0.5.0');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('reconcileTaggedHead publishes missing npm versions and creates GitHub Releases', async () => {
@@ -283,7 +339,10 @@ test('reconcileTaggedHead publishes missing npm versions and creates GitHub Rele
     {
       headSha: 'deadbeef',
       run: (_file, args) => {
-        if (args[0] === 'rev-parse' && args[1] === '@singleton-sd/post-kit-email@0.6.0') {
+        if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
+          return 'deadbeef';
+        }
+        if (args[0] === 'rev-parse' && args[1] === '@singleton-sd/post-kit-email@0.6.0^{commit}') {
           return 'deadbeef';
         }
         return 'other';
@@ -311,9 +370,10 @@ test('release-changed.mjs commits CHANGELOG and pushes HEAD:main', () => {
   assert.match(src, /git', \['commit'/);
   assert.match(src, /git', \['add'/);
   assert.match(src, /updateChangelog/);
-  assert.match(src, /pushReleaseCommit/);
+  assert.match(src, /--atomic/);
   assert.match(src, /chore\(release\): Release package versions \[skip ci\]/);
   assert.match(src, /refs\/tags\//);
+  assert.match(src, /\^\{commit\}/);
 });
 
 test('release.yml uses the singleton-release app, pinned SHAs, and job-level permissions', () => {
@@ -325,6 +385,8 @@ test('release.yml uses the singleton-release app, pinned SHAs, and job-level per
   assert.match(yml, /vars\.RELEASE_APP_ID/);
   assert.match(yml, /secrets\.RELEASE_APP_PRIVATE_KEY/);
   assert.match(yml, /owner:\s*singleton-sd/);
+  assert.match(yml, /repositories:\s*post-kit/);
+  assert.match(yml, /permission-contents:\s*write/);
   assert.match(yml, /actions\/create-github-app-token@[0-9a-f]{40}/);
   assert.match(yml, /actions\/checkout@[0-9a-f]{40}/);
   assert.match(yml, /pnpm\/action-setup@[0-9a-f]{40}/);
@@ -346,5 +408,5 @@ test('release.yml uses the singleton-release app, pinned SHAs, and job-level per
   assert.doesNotMatch(workflowLevel, /contents:\s*write/);
   assert.doesNotMatch(workflowLevel, /id-token:\s*write/);
   assert.match(jobLevel, /permissions:\s*\n\s+contents:\s*read\s*\n\s+id-token:\s*write/);
-  assert.doesNotMatch(jobLevel, /contents:\s*write/);
+  assert.doesNotMatch(jobLevel, /^\s+contents:\s*write\s*$/m);
 });

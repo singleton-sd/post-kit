@@ -68,8 +68,10 @@ After planning bumps, CI:
    `pnpm publish` uses to rewrite `workspace:*`.
 2. Prepends a dated section to `CHANGELOG.md`.
 3. Commits `chore(release): Release package versions [skip ci]`.
-4. Pushes **HEAD:main** and annotated tags
-   (`refs/tags/@singleton-sd/post-kit-*@x.y.z`) with the App token.
+4. Pushes **HEAD:main** and annotated tags in **one atomic** `git push`
+   (`refs/tags/@singleton-sd/post-kit-*@x.y.z`) with the App token. If `main`
+   has moved, the push fails closed; a later run re-plans from the new tip
+   instead of tagging a stale version.
 5. Publishes changed packages to **npmjs** via **Trusted Publishing (OIDC)** —
    job-level `permissions: id-token: write`; **no `NPM_TOKEN`**.
 6. Creates **GitHub Releases** per tag with `gh release create --generate-notes`
@@ -77,7 +79,19 @@ After planning bumps, CI:
 
 Commit and tags are pushed **before** publish so a later retry cannot bind an
 already-published version to a newer HEAD. A retry with no new bump republishes
-any tag-at-HEAD still missing on npm and creates missing GitHub Releases.
+any **tag-at-HEAD** still missing on npm and creates missing GitHub Releases
+(annotated tags are peeled to the commit they point at).
+
+That retry does **not** cover a tag that is **behind HEAD** (for example npm
+publish failed, then more commits landed on `main`). Recover that version
+from the tag’s own tree:
+
+1. `git fetch --tags` and `git switch --detach <tag>`
+   (example: `@singleton-sd/post-kit-email@0.6.0`).
+2. From that commit, publish the package to npm and
+   `gh release create <tag> --generate-notes`.
+3. Do not move the tag onto HEAD or bump past the missing version until it
+   exists on npm.
 
 ## Contributor requirements (so a release is correct)
 
