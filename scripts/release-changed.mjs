@@ -31,6 +31,7 @@ const PACKAGE_PREFIX = '@singleton-sd/post-kit-';
 export const RELEASE_SUBJECT = 'chore(release): Release package versions [skip ci]';
 export const COMMIT_AND_TAGS_PUSHED_MESSAGE = 'Release commit and tags pushed.';
 export const NOTHING_TO_RELEASE_MESSAGE = 'Nothing to release.';
+export const RELEASE_APP_TOKEN_ENV = 'RELEASE_APP_TOKEN';
 
 /** @typedef {'major' | 'minor' | 'patch'} Increment */
 
@@ -409,6 +410,72 @@ export function commitRelease(releases, runFn = run) {
 }
 
 /**
+ * @param {string} token
+ * @param {string} repository
+ * @returns {string}
+ */
+export function originUrlWithToken(token, repository) {
+  if (!token) {
+    throw new Error(
+      'RELEASE_APP_TOKEN is required to push to main. Never falling back to GITHUB_TOKEN.',
+    );
+  }
+  if (!repository) {
+    throw new Error('GITHUB_REPOSITORY is required to push to main.');
+  }
+  return `https://x-access-token:${token}@github.com/${repository}.git`;
+}
+
+/**
+ * @param {string} repository
+ * @returns {string}
+ */
+export function originUrlPublic(repository) {
+  if (!repository) {
+    throw new Error('GITHUB_REPOSITORY is required to reset the origin remote.');
+  }
+  return `https://github.com/${repository}.git`;
+}
+
+/**
+ * Authenticate origin for `fn`, then always restore a token-free remote so
+ * later `pnpm build` / `pnpm publish` cannot observe the App token in git config.
+ *
+ * @template T
+ * @param {() => T} fn
+ * @param {typeof run} [runFn]
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {T}
+ */
+export function withAuthenticatedOrigin(fn, runFn = run, env = process.env) {
+  const token = env[RELEASE_APP_TOKEN_ENV];
+  const repository = env.GITHUB_REPOSITORY ?? '';
+  runFn('git', ['remote', 'set-url', 'origin', originUrlWithToken(token ?? '', repository)]);
+  try {
+    return fn();
+  } finally {
+    runFn('git', ['remote', 'set-url', 'origin', originUrlPublic(repository)]);
+  }
+}
+
+/**
+ * Remove the App token from `env` after the git push. Returns it so `gh release`
+ * can receive it as GH_TOKEN on that subprocess only.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
+export function takeAndClearAppTokenFromEnv(env = process.env) {
+  const token = env[RELEASE_APP_TOKEN_ENV] ?? '';
+  delete env[RELEASE_APP_TOKEN_ENV];
+  delete env.GH_TOKEN;
+  if (token && env.GITHUB_TOKEN === token) {
+    delete env.GITHUB_TOKEN;
+  }
+  return token;
+}
+
+/**
  * Sync to origin/main before computing bumps so concurrent pushes do not
  * release from a stale tip.
  */
@@ -460,8 +527,11 @@ export function createAndPushTags(tags, runFn = run) {
  *   updateChangelog?: (releases: ReleasePlan[]) => void,
  *   commitRelease?: (releases: ReleasePlan[]) => void,
  *   createAndPushTags?: (tags: string[]) => void,
+ *   authenticatePush?: (fn: () => void) => void,
  *   publishNpmReleases?: (releases: ReleasePlan[]) => Promise<{ published: string[], skipped: string[] }>,
- *   createGitHubReleases?: (releases: ReleasePlan[]) => void,
+ *   createGitHubReleases?: (releases: ReleasePlan[], options?: { ghToken?: string }) => void,
+ *   ghToken?: string,
+ *   env?: NodeJS.ProcessEnv,
  *   log?: (msg: string) => void,
  * }} [deps]
  */
@@ -473,21 +543,27 @@ export async function applyCiRelease(releases, deps = {}) {
   const publish = deps.publishNpmReleases ?? publishNpmReleases;
   const publishReleases = deps.createGitHubReleases ?? createGitHubReleases;
   const log = deps.log ?? console.log;
+  const env = deps.env ?? process.env;
+  const authenticatePush = deps.authenticatePush ?? ((fn) => withAuthenticatedOrigin(fn, run, env));
 
   for (const release of releases) {
     bump(release);
   }
   changelog(releases);
   commit(releases);
-  pushTags(releases.map((r) => r.tag));
+  authenticatePush(() => {
+    pushTags(releases.map((r) => r.tag));
+  });
   log(COMMIT_AND_TAGS_PUSHED_MESSAGE);
+
+  const ghToken = deps.ghToken ?? takeAndClearAppTokenFromEnv(env);
 
   const npmResult = await publish(releases);
   log(
     `npm publish completed (published: ${npmResult.published.length}, skipped: ${npmResult.skipped.length}).`,
   );
 
-  publishReleases(releases);
+  publishReleases(releases, { ghToken });
   log('GitHub Releases created (or already present).');
 }
 
@@ -500,7 +576,9 @@ export async function applyCiRelease(releases, deps = {}) {
  * @param {{
  *   run?: (file: string, args: string[]) => string,
  *   publishNpmReleases?: (releases: ReleasePlan[]) => Promise<{ published: string[], skipped: string[] }>,
- *   createGitHubReleases?: (releases: ReleasePlan[]) => void,
+ *   createGitHubReleases?: (releases: ReleasePlan[], options?: { ghToken?: string }) => void,
+ *   ghToken?: string,
+ *   env?: NodeJS.ProcessEnv,
  *   log?: (msg: string) => void,
  *   headSha?: string,
  * }} [deps]
@@ -511,16 +589,19 @@ export async function reconcileTaggedHead(packages, git, deps = {}) {
   const publish = deps.publishNpmReleases ?? publishNpmReleases;
   const publishReleases = deps.createGitHubReleases ?? createGitHubReleases;
   const log = deps.log ?? console.log;
+  const env = deps.env ?? process.env;
   const headSha = deps.headSha ?? runFn('git', ['rev-parse', 'HEAD']);
 
   const atHead = releaseSpecsForTagsAtHead(packages, git, headSha, runFn);
   if (atHead.length === 0) return [];
 
+  const ghToken = deps.ghToken ?? takeAndClearAppTokenFromEnv(env);
+
   const npmResult = await publish(atHead);
   log(
     `npm publish completed (published: ${npmResult.published.length}, skipped: ${npmResult.skipped.length}).`,
   );
-  publishReleases(atHead);
+  publishReleases(atHead, { ghToken });
   log('GitHub Releases created (or already present).');
   return atHead;
 }

@@ -1,13 +1,15 @@
 # Path-aware release: bump workspace package.json versions, update CHANGELOG.md,
-# commit `chore(release): Release package versions [skip ci]`, push that commit
-# to main plus annotated tags (singleton-release GitHub App), then npm Trusted
-# Publishing (OIDC) and GitHub Releases.
+# commit `chore(release): Release package versions [skip ci]` to main, push that
+# commit plus annotated tags (singleton-release GitHub App), then npm Trusted
+# Publishing (OIDC) and GitHub Releases. This is commit-back, not tag-only.
 #
 # Loop prevention is by commit message, not by actor. The singleton-release
 # App is on the main ruleset bypass list so the commit-back push is not GH013'd.
 # Never fall back to GITHUB_TOKEN for that push.
-# Checkout uses persist-credentials: false; the App token is applied to the
-# git remote only in the Release step (same pattern as poc-inkads-epaper-renderer).
+# Checkout uses persist-credentials: false and the job token (contents: read).
+# The App token is minted after install. git uses it only for the atomic push
+# (authenticated remote, then reset). `gh release` receives it as GH_TOKEN on
+# that subprocess only. Build and npm publish never see the App token.
 #
 # Auth: job-level id-token: write (npm OIDC) + contents: read. Push/tags/gh
 # use the App installation token. No NPM_TOKEN / PAT.
@@ -53,21 +55,9 @@ jobs:
             exit 1
           fi
 
-      - name: Create GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          owner: singleton-sd
-          repositories: post-kit
-          permission-contents: write
-
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-          # Keep the write token out of git config until the Release step.
           persist-credentials: false
 
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
@@ -101,24 +91,31 @@ jobs:
             fi
           done
 
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: singleton-sd
+          repositories: post-kit
+          permission-contents: write
+
       - name: Configure git identity
+        env:
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          RELEASE_APP_ID: ${{ vars.RELEASE_APP_ID }}
         run: |
           set -euo pipefail
-          slug="${{ steps.app-token.outputs.app-slug }}"
-          app_id="${{ vars.RELEASE_APP_ID }}"
-          git config user.name "${slug}[bot]"
-          git config user.email "${app_id}+${slug}[bot]@users.noreply.github.com"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${RELEASE_APP_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
 
       - name: Release changed packages
         id: release
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
-
-          git remote set-url origin \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           git fetch origin main --tags
           git checkout -B main origin/main

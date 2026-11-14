@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createGitHubReleases,
+  envForGitHubCli,
   formatReleaseNotes,
   formatReleaseTitle,
   githubReleaseCreateArgs,
@@ -17,6 +18,22 @@ const sample = {
   increment: 'minor',
   tag: '@singleton-sd/post-kit-publisher@0.2.0',
 };
+
+test('envForGitHubCli passes the App token only as GH_TOKEN', () => {
+  const env = envForGitHubCli('app-token-secret', {
+    RELEASE_APP_TOKEN: 'app-token-secret',
+    GITHUB_TOKEN: 'job-read-token',
+    PATH: '/usr/bin',
+  });
+  assert.equal(env.GH_TOKEN, 'app-token-secret');
+  assert.equal('RELEASE_APP_TOKEN' in env, false);
+  assert.equal('GITHUB_TOKEN' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('envForGitHubCli fails closed when the App token is missing', () => {
+  assert.throws(() => envForGitHubCli(''), /App token is required for gh release/);
+});
 
 test('formatReleaseTitle uses name@version', () => {
   assert.equal(formatReleaseTitle(sample), '@singleton-sd/post-kit-publisher@0.2.0');

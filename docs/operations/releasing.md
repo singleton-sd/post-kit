@@ -27,14 +27,17 @@ The job:
 
 1. Fails closed if `vars.RELEASE_APP_ID` or `secrets.RELEASE_APP_PRIVATE_KEY`
    is missing. It never falls back to `GITHUB_TOKEN` for the push.
-2. Mints an installation token for the **singleton-release** GitHub App
-   (`actions/create-github-app-token`, owner `singleton-sd`).
-3. Checks out `main` with that token (`fetch-depth: 0`,
-   `persist-credentials: false`). The authenticated remote is set only in the
-   release step, after install.
-4. Installs with **pnpm 9.15.0** (must match root `packageManager`) and **Node 24**.
-5. Upgrades the runner to **npm 11** for Trusted Publishing (OIDC).
-6. Runs `pnpm release:ci` (`node scripts/release-changed.mjs --ci`).
+2. Checks out `main` with the job token (`fetch-depth: 0`,
+   `persist-credentials: false`). Checkout does **not** receive the App token.
+3. Installs with **pnpm 9.15.0** (must match root `packageManager`) and **Node 24**.
+4. Upgrades the runner to **npm 11** for Trusted Publishing (OIDC).
+5. Mints an installation token for the **singleton-release** GitHub App
+   (`actions/create-github-app-token`, owner `singleton-sd`, scoped to
+   `post-kit`). Git identity reads `APP_SLUG` and `RELEASE_APP_ID` from `env:`.
+6. Runs `pnpm release:ci` (`node scripts/release-changed.mjs --ci`) with
+   `RELEASE_APP_TOKEN` only. The script authenticates `origin` for the atomic
+   push, then resets the remote. `pnpm build` / `pnpm publish` run without
+   that token. `gh release` receives it as `GH_TOKEN` on that subprocess only.
 
 If nothing needs a bump, the script logs `Nothing to release` (after
 reconciling tags already at HEAD) and the workflow exits successfully.
@@ -69,13 +72,17 @@ After planning bumps, CI:
 2. Prepends a dated section to `CHANGELOG.md`.
 3. Commits `chore(release): Release package versions [skip ci]`.
 4. Pushes **HEAD:main** and annotated tags in **one atomic** `git push`
-   (`refs/tags/@singleton-sd/post-kit-*@x.y.z`) with the App token. If `main`
-   has moved, the push fails closed; a later run re-plans from the new tip
-   instead of tagging a stale version.
+   (`refs/tags/@singleton-sd/post-kit-*@x.y.z`) with the App token on the
+   origin URL for that push only, then resets origin to token-free HTTPS. If
+   `main` has moved, the push fails closed; a later run re-plans from the new
+   tip instead of tagging a stale version.
 5. Publishes changed packages to **npmjs** via **Trusted Publishing (OIDC)** —
-   job-level `permissions: id-token: write`; **no `NPM_TOKEN`**.
+   job-level `permissions: id-token: write`; **no `NPM_TOKEN`**. Build and
+   publish run **without** the App token in the environment (including
+   `prepublishOnly`).
 6. Creates **GitHub Releases** per tag with `gh release create --generate-notes`
-   (`scripts/github-releases.mjs`).
+   (`scripts/github-releases.mjs`), passing the App token only to that `gh`
+   subprocess.
 
 Commit and tags are pushed **before** publish so a later retry cannot bind an
 already-published version to a newer HEAD. A retry with no new bump republishes
@@ -145,8 +152,10 @@ and grants the release job:
 | `contents: read` | Checkout metadata on `GITHUB_TOKEN` (the App token does the writes) |
 | `id-token: write` | npm Trusted Publishing (OIDC) |
 
-Push, tags, and `gh` use the singleton-release installation token. The job
-fails if `RELEASE_APP_ID` or `RELEASE_APP_PRIVATE_KEY` is unset.
+Push and tags use the singleton-release installation token on the git remote
+for the atomic push only. `gh release` receives that token as `GH_TOKEN`.
+Build and npm publish do not. The job fails if `RELEASE_APP_ID` or
+`RELEASE_APP_PRIVATE_KEY` is unset.
 
 App/runtime secrets (API keys, provider credentials) stay in Azure Key Vault
 and are unrelated to package publish. Do not document or paste credentials

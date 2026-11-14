@@ -5,12 +5,36 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   PUBLISH_ORDER,
+  envWithoutReleaseAppToken,
   fetchNpmVersionMetadata,
   isVersionOnNpm,
   npmVersionRegistryUrl,
   publishNpmReleases,
   sortReleasesForPublish,
 } from './publish-npm.mjs';
+
+test('envWithoutReleaseAppToken strips the App token from build/publish env', () => {
+  const env = envWithoutReleaseAppToken({
+    RELEASE_APP_TOKEN: 'app-token-secret',
+    GH_TOKEN: 'app-token-secret',
+    GITHUB_TOKEN: 'app-token-secret',
+    PATH: '/usr/bin',
+  });
+  assert.equal('RELEASE_APP_TOKEN' in env, false);
+  assert.equal('GH_TOKEN' in env, false);
+  assert.equal('GITHUB_TOKEN' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('envWithoutReleaseAppToken keeps a distinct job GITHUB_TOKEN', () => {
+  const env = envWithoutReleaseAppToken({
+    RELEASE_APP_TOKEN: 'app-token-secret',
+    GITHUB_TOKEN: 'job-read-token',
+    PATH: '/usr/bin',
+  });
+  assert.equal(env.GITHUB_TOKEN, 'job-read-token');
+  assert.equal('RELEASE_APP_TOKEN' in env, false);
+});
 
 test('sortReleasesForPublish follows dependency order', () => {
   const sorted = sortReleasesForPublish([
@@ -133,4 +157,43 @@ test('publishNpmReleases skips versions already on npmjs', async () => {
   assert.ok(calls.some((c) => c.includes('pnpm publish') && c.includes(editorDir)));
   assert.ok(!calls.some((c) => c.includes('pnpm publish') && c.includes(typesDir)));
   assert.match(logs.join('\n'), /Skipping @singleton-sd\/post-kit-types@0\.3\.0/);
+});
+
+test('buildAndPublishPackage strips the App token from pnpm build and publish env', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-build-env-'));
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify({ name: '@singleton-sd/post-kit-email', version: '0.6.0' }),
+  );
+  /** @type {object[]} */
+  const spawnOpts = [];
+  const run = (_file, _args, opts = {}) => {
+    spawnOpts.push(opts);
+    return '';
+  };
+  const previous = {
+    RELEASE_APP_TOKEN: process.env.RELEASE_APP_TOKEN,
+    GH_TOKEN: process.env.GH_TOKEN,
+  };
+  process.env.RELEASE_APP_TOKEN = 'app-token-secret';
+  process.env.GH_TOKEN = 'app-token-secret';
+  try {
+    await publishNpmReleases([{ name: '@singleton-sd/post-kit-email', path: dir, next: '0.6.0' }], {
+      run,
+      log: () => {},
+      fetchImpl: async () => ({ status: 404 }),
+    });
+  } finally {
+    if (previous.RELEASE_APP_TOKEN === undefined) delete process.env.RELEASE_APP_TOKEN;
+    else process.env.RELEASE_APP_TOKEN = previous.RELEASE_APP_TOKEN;
+    if (previous.GH_TOKEN === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = previous.GH_TOKEN;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  assert.ok(spawnOpts.length >= 2);
+  for (const opts of spawnOpts) {
+    assert.ok(opts.env);
+    assert.equal('RELEASE_APP_TOKEN' in opts.env, false);
+    assert.equal('GH_TOKEN' in opts.env, false);
+  }
 });

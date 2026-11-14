@@ -114,13 +114,34 @@ export function githubReleaseExists(runGh, tag) {
 }
 
 /**
+ * Subprocess env for `gh release`. The App token is GH_TOKEN only — never
+ * leave RELEASE_APP_TOKEN or the job GITHUB_TOKEN on the child.
+ *
+ * @param {string} ghToken
+ * @param {NodeJS.ProcessEnv} [base]
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function envForGitHubCli(ghToken, base = process.env) {
+  if (!ghToken) {
+    throw new Error('App token is required for gh release. Pass it only to the gh subprocess.');
+  }
+  const env = { ...base };
+  delete env.RELEASE_APP_TOKEN;
+  delete env.GITHUB_TOKEN;
+  env.GH_TOKEN = ghToken;
+  return env;
+}
+
+/**
+ * @param {string} [ghToken]
  * @returns {(args: string[]) => string}
  */
-function defaultRunGh() {
+function defaultRunGh(ghToken) {
   return (args) =>
     execFileSync('gh', args, {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: envForGitHubCli(ghToken ?? ''),
     }).trim();
 }
 
@@ -128,11 +149,15 @@ function defaultRunGh() {
  * Create one GitHub Release per package tag. Skips tags that already have a Release.
  *
  * @param {ReleaseSpec[]} releases
- * @param {{ runGh?: (args: string[]) => string, log?: (msg: string) => void }} [options]
+ * @param {{
+ *   runGh?: (args: string[]) => string,
+ *   log?: (msg: string) => void,
+ *   ghToken?: string,
+ * }} [options]
  * @returns {{ created: string[], skipped: string[] }}
  */
 export function createGitHubReleases(releases, options = {}) {
-  const runGh = options.runGh ?? defaultRunGh();
+  const runGh = options.runGh ?? defaultRunGh(options.ghToken);
   const log = options.log ?? console.log;
 
   /** @type {string[]} */

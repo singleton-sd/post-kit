@@ -152,6 +152,24 @@ export async function fetchNpmVersionMetadata(name, version, options = {}) {
 }
 
 /**
+ * Child env for `pnpm run build` / `pnpm publish`. Drops the App token so
+ * prepublishOnly builds cannot observe it.
+ *
+ * @param {NodeJS.ProcessEnv} [base]
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function envWithoutReleaseAppToken(base = process.env) {
+  const env = { ...base };
+  const appToken = env.RELEASE_APP_TOKEN;
+  delete env.RELEASE_APP_TOKEN;
+  delete env.GH_TOKEN;
+  if (appToken && env.GITHUB_TOKEN === appToken) {
+    delete env.GITHUB_TOKEN;
+  }
+  return env;
+}
+
+/**
  * @param {{ name: string, path: string, next?: string }} release
  * @param {{ run?: (file: string, args: string[], options?: object) => string, log?: (msg: string) => void, fetchImpl?: typeof fetch }} [options]
  * @returns {Promise<'published' | 'skipped'>}
@@ -190,7 +208,8 @@ export async function buildAndPublishPackage(release, options = {}) {
   }
 
   log(`Building ${packagePath}…`);
-  run('pnpm', ['run', 'build'], { cwd: packagePath });
+  const publishEnv = envWithoutReleaseAppToken();
+  run('pnpm', ['run', 'build'], { cwd: packagePath, env: publishEnv });
 
   log(`Publishing ${release.name}@${version} to npmjs (OIDC / Trusted Publishing)…`);
   // --no-git-checks: the release commit and tags are already on origin/main
@@ -198,6 +217,7 @@ export async function buildAndPublishPackage(release, options = {}) {
   // recover. --publish-branch main: Release job checks out main.
   run('pnpm', ['publish', '--access', 'public', '--no-git-checks', '--publish-branch', 'main'], {
     cwd: packagePath,
+    env: publishEnv,
   });
   return 'published';
 }

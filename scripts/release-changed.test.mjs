@@ -14,11 +14,15 @@ import {
   createAndPushTags,
   deriveIncrement,
   nextVersion,
+  originUrlPublic,
+  originUrlWithToken,
   planPackageRelease,
   pushReleaseCommit,
   reconcileTaggedHead,
   releaseSpecsForTagsAtHead,
   resolveNextVersion,
+  takeAndClearAppTokenFromEnv,
+  withAuthenticatedOrigin,
 } from './release-changed.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -246,6 +250,8 @@ test('applyCiRelease commits, pushes main and tags, then publishes, then creates
     createAndPushTags: (tags) => {
       steps.push(`push:${tags.join(',')}`);
     },
+    authenticatePush: (fn) => fn(),
+    ghToken: 'test-app-token',
     publishNpmReleases: async (releases) => {
       steps.push(`publish:${releases.map((r) => r.tag).join(',')}`);
       return { published: [planned.tag], skipped: [] };
@@ -354,6 +360,7 @@ test('reconcileTaggedHead publishes missing npm versions and creates GitHub Rele
       createGitHubReleases: (releases) => {
         steps.push(`gh:${releases.map((r) => r.tag).join(',')}`);
       },
+      ghToken: 'test-app-token',
       log: () => {},
     },
   );
@@ -361,6 +368,159 @@ test('reconcileTaggedHead publishes missing npm versions and creates GitHub Rele
   assert.deepEqual(steps, [
     'publish:@singleton-sd/post-kit-email@0.6.0',
     'gh:@singleton-sd/post-kit-email@0.6.0',
+  ]);
+});
+
+test('originUrlWithToken embeds the App token only in the git remote URL', () => {
+  assert.equal(
+    originUrlWithToken('app-token-secret', 'singleton-sd/post-kit'),
+    'https://x-access-token:app-token-secret@github.com/singleton-sd/post-kit.git',
+  );
+  assert.throws(() => originUrlWithToken('', 'singleton-sd/post-kit'), /RELEASE_APP_TOKEN/);
+  assert.throws(() => originUrlWithToken('tok', ''), /GITHUB_REPOSITORY/);
+});
+
+test('originUrlPublic is a token-free HTTPS remote', () => {
+  assert.equal(
+    originUrlPublic('singleton-sd/post-kit'),
+    'https://github.com/singleton-sd/post-kit.git',
+  );
+});
+
+test('withAuthenticatedOrigin authenticates for the push then always resets origin', () => {
+  /** @type {string[][]} */
+  const calls = [];
+  const env = {
+    RELEASE_APP_TOKEN: 'app-token-secret',
+    GITHUB_REPOSITORY: 'singleton-sd/post-kit',
+  };
+  withAuthenticatedOrigin(
+    () => {
+      calls.push(['work']);
+    },
+    (_file, args) => {
+      calls.push(args);
+      return '';
+    },
+    env,
+  );
+  assert.deepEqual(calls, [
+    [
+      'remote',
+      'set-url',
+      'origin',
+      'https://x-access-token:app-token-secret@github.com/singleton-sd/post-kit.git',
+    ],
+    ['work'],
+    ['remote', 'set-url', 'origin', 'https://github.com/singleton-sd/post-kit.git'],
+  ]);
+});
+
+test('withAuthenticatedOrigin resets origin when the push fails', () => {
+  /** @type {string[][]} */
+  const calls = [];
+  const env = {
+    RELEASE_APP_TOKEN: 'app-token-secret',
+    GITHUB_REPOSITORY: 'singleton-sd/post-kit',
+  };
+  assert.throws(() => {
+    withAuthenticatedOrigin(
+      () => {
+        throw new Error('non-fast-forward');
+      },
+      (_file, args) => {
+        calls.push(args);
+        return '';
+      },
+      env,
+    );
+  }, /non-fast-forward/);
+  assert.deepEqual(calls.at(-1), [
+    'remote',
+    'set-url',
+    'origin',
+    'https://github.com/singleton-sd/post-kit.git',
+  ]);
+});
+
+test('takeAndClearAppTokenFromEnv strips the App token from process env', () => {
+  const env = {
+    RELEASE_APP_TOKEN: 'app-token-secret',
+    GH_TOKEN: 'app-token-secret',
+    GITHUB_TOKEN: 'app-token-secret',
+    PATH: '/usr/bin',
+  };
+  assert.equal(takeAndClearAppTokenFromEnv(env), 'app-token-secret');
+  assert.equal('RELEASE_APP_TOKEN' in env, false);
+  assert.equal('GH_TOKEN' in env, false);
+  assert.equal('GITHUB_TOKEN' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('takeAndClearAppTokenFromEnv keeps a distinct job GITHUB_TOKEN', () => {
+  const env = {
+    RELEASE_APP_TOKEN: 'app-token-secret',
+    GITHUB_TOKEN: 'job-read-token',
+  };
+  assert.equal(takeAndClearAppTokenFromEnv(env), 'app-token-secret');
+  assert.equal(env.GITHUB_TOKEN, 'job-read-token');
+});
+
+test('applyCiRelease authenticates the push then clears the App token before publish', async () => {
+  /** @type {string[]} */
+  const steps = [];
+  const env = {
+    RELEASE_APP_TOKEN: 'app-token-secret',
+    GH_TOKEN: 'app-token-secret',
+    GITHUB_REPOSITORY: 'singleton-sd/post-kit',
+  };
+  const planned = {
+    name: '@singleton-sd/post-kit-email',
+    path: '/tmp/post-kit-email',
+    version: '0.5.0',
+    next: '0.6.0',
+    increment: /** @type {const} */ ('minor'),
+    tag: '@singleton-sd/post-kit-email@0.6.0',
+    previousTag: '@singleton-sd/post-kit-email@0.5.0',
+    messages: ['feat: expose retry budget\n'],
+  };
+
+  await applyCiRelease([planned], {
+    bumpPackageVersion: () => steps.push('bump'),
+    updateChangelog: () => steps.push('changelog'),
+    commitRelease: () => steps.push('commit'),
+    createAndPushTags: () => {
+      assert.equal(env.RELEASE_APP_TOKEN, 'app-token-secret');
+      steps.push('push');
+    },
+    authenticatePush: (fn) => {
+      steps.push('auth');
+      fn();
+      steps.push('reset');
+    },
+    publishNpmReleases: async () => {
+      assert.equal('RELEASE_APP_TOKEN' in env, false);
+      assert.equal('GH_TOKEN' in env, false);
+      steps.push('publish');
+      return { published: [planned.tag], skipped: [] };
+    },
+    createGitHubReleases: (_releases, options = {}) => {
+      assert.equal(options.ghToken, 'app-token-secret');
+      steps.push('gh');
+    },
+    env,
+    log: () => {},
+  });
+
+  assert.deepEqual(steps, [
+    'bump',
+    'changelog',
+    'commit',
+    'auth',
+    'push',
+    'reset',
+    'publish',
+    'gh',
   ]);
 });
 
@@ -374,6 +534,9 @@ test('release-changed.mjs commits CHANGELOG and pushes HEAD:main', () => {
   assert.match(src, /chore\(release\): Release package versions \[skip ci\]/);
   assert.match(src, /refs\/tags\//);
   assert.match(src, /\^\{commit\}/);
+  assert.match(src, /withAuthenticatedOrigin/);
+  assert.match(src, /takeAndClearAppTokenFromEnv/);
+  assert.match(src, /x-access-token:\$\{token\}/);
 });
 
 test('release.yml uses the singleton-release app, pinned SHAs, and job-level permissions', () => {
@@ -394,9 +557,24 @@ test('release.yml uses the singleton-release app, pinned SHAs, and job-level per
   assert.match(yml, /Never falling back to GITHUB_TOKEN/);
   assert.match(yml, /persist-credentials:\s*false/);
   assert.doesNotMatch(yml, /persist-credentials:\s*true/);
-  assert.match(yml, /git remote set-url origin/);
-  assert.match(yml, /x-access-token:\$\{GITHUB_TOKEN\}/);
+  assert.doesNotMatch(yml, /token:\s*\$\{\{\s*steps\.app-token\.outputs\.token\s*\}\}/);
+  assert.doesNotMatch(yml, /GH_TOKEN:\s*\$\{\{\s*steps\.app-token\.outputs\.token\s*\}\}/);
+  assert.doesNotMatch(yml, /GITHUB_TOKEN:\s*\$\{\{\s*steps\.app-token\.outputs\.token\s*\}\}/);
+  assert.match(yml, /RELEASE_APP_TOKEN:\s*\$\{\{\s*steps\.app-token\.outputs\.token\s*\}\}/);
+  assert.match(yml, /APP_SLUG:\s*\$\{\{\s*steps\.app-token\.outputs\.app-slug\s*\}\}/);
+  assert.match(yml, /RELEASE_APP_ID:\s*\$\{\{\s*vars\.RELEASE_APP_ID\s*\}\}/);
+  assert.match(yml, /\$\{APP_SLUG\}\[bot\]/);
+  assert.doesNotMatch(yml, /slug="\$\{\{\s*steps\.app-token\.outputs\.app-slug\s*\}\}"/);
+  assert.doesNotMatch(yml, /app_id="\$\{\{\s*vars\.RELEASE_APP_ID\s*\}\}"/);
+  assert.doesNotMatch(yml, /x-access-token:\$\{GITHUB_TOKEN\}/);
   assert.doesNotMatch(yml, /secrets\.GITHUB_TOKEN/);
+  const tokenStepAt = yml.indexOf('Create GitHub App token');
+  const installAt = yml.indexOf('pnpm install --frozen-lockfile');
+  const npmUpgradeAt = yml.indexOf('Upgrade npm for OIDC publish');
+  const gitIdentityAt = yml.indexOf('Configure git identity');
+  const releaseAt = yml.indexOf('Release changed packages');
+  assert.ok(tokenStepAt > installAt && tokenStepAt > npmUpgradeAt);
+  assert.ok(tokenStepAt < gitIdentityAt && gitIdentityAt < releaseAt);
   assert.match(yml, /startsWith\(github\.event\.head_commit\.message, 'chore\(release\):'\)/);
   assert.doesNotMatch(yml, /github\.actor/);
   const uncommented = yml
