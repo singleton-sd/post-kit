@@ -98,6 +98,60 @@ export async function isVersionOnNpm(name, version, options = {}) {
 }
 
 /**
+ * Registry metadata for an exact version. `gitHead` is present when npm recorded
+ * the publishing commit; many Trusted Publishing tarballs omit it.
+ *
+ * @param {string} name
+ * @param {string} version
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<{ published: boolean, gitHead: string | null }>}
+ */
+export async function fetchNpmVersionMetadata(name, version, options = {}) {
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  if (typeof fetchImpl !== 'function') {
+    throw new Error('fetch is required to probe the npm registry');
+  }
+
+  const url = npmVersionRegistryUrl(name, version);
+  let response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to reach npm registry while checking ${name}@${version}: ${detail}`, {
+      cause: err,
+    });
+  }
+
+  if (response.status === 404) {
+    return { published: false, gitHead: null };
+  }
+  if (response.status !== 200) {
+    throw new Error(
+      `Unexpected npm registry status ${response.status} for ${name}@${version} (${url})`,
+    );
+  }
+
+  /** @type {unknown} */
+  let body = null;
+  if (typeof response.json === 'function') {
+    body = await response.json();
+  }
+  const gitHead =
+    body &&
+    typeof body === 'object' &&
+    'gitHead' in body &&
+    typeof body.gitHead === 'string' &&
+    body.gitHead.length > 0
+      ? body.gitHead
+      : null;
+  return { published: true, gitHead };
+}
+
+/**
  * @param {{ name: string, path: string, next?: string }} release
  * @param {{ run?: (file: string, args: string[], options?: object) => string, log?: (msg: string) => void, fetchImpl?: typeof fetch }} [options]
  * @returns {Promise<'published' | 'skipped'>}

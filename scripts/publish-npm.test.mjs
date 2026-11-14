@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   PUBLISH_ORDER,
+  fetchNpmVersionMetadata,
   isVersionOnNpm,
   npmVersionRegistryUrl,
   publishNpmReleases,
@@ -65,6 +66,31 @@ test('isVersionOnNpm throws on unexpected status', async () => {
   await assert.rejects(
     () => isVersionOnNpm('@singleton-sd/post-kit-types', '0.3.0', { fetchImpl }),
     /Unexpected npm registry status 503/,
+  );
+});
+
+test('fetchNpmVersionMetadata reads gitHead from a published version', async () => {
+  const fetchImpl = async () => ({
+    status: 200,
+    json: async () => ({ gitHead: 'abc1234def' }),
+  });
+  assert.deepEqual(
+    await fetchNpmVersionMetadata('@singleton-sd/post-kit-types', '0.5.0', { fetchImpl }),
+    {
+      published: true,
+      gitHead: 'abc1234def',
+    },
+  );
+});
+
+test('fetchNpmVersionMetadata is unpublished on HTTP 404', async () => {
+  const fetchImpl = async () => ({ status: 404 });
+  assert.deepEqual(
+    await fetchNpmVersionMetadata('@singleton-sd/post-kit-types', '0.9.0', { fetchImpl }),
+    {
+      published: false,
+      gitHead: null,
+    },
   );
 });
 

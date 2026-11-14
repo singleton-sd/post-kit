@@ -67,7 +67,12 @@ After planning bumps, CI:
 
 Publish runs **before** pushing tags so an auth failure does not leave orphan
 tags. `package.json` on `main` is not the published version — tags, npmjs, and
-GitHub Releases are canonical.
+GitHub Releases are canonical. Before publish, CI writes last-tag versions into
+unreleased workspace dependencies so `workspace:*` does not pin a stale
+committed version. If a planned version is already on npm from a different
+commit, CI skips to the next increment instead of tagging HEAD as that version.
+A retry with no new bump still creates missing GitHub Releases for tags that
+already point at HEAD.
 
 `CHANGELOG.md` stays in the tree as a historical record of commit-back
 releases. New notes live on GitHub Releases.

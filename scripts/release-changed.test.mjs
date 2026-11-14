@@ -6,12 +6,16 @@ import test from 'node:test';
 import {
   TAGS_PUSHED_MESSAGE,
   applyCiRelease,
+  bindReleaseVersion,
   bumpPackageVersion,
   createAndPushTags,
   deriveIncrement,
+  headsMatch,
   nextVersion,
   planPackageRelease,
+  releaseSpecsForTagsAtHead,
   resolveNextVersion,
+  syncWorkspaceVersionsToTags,
 } from './release-changed.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -177,6 +181,9 @@ test('applyCiRelease publishes, pushes tags only, then creates GitHub Releases',
     createGitHubReleases: (releases) => {
       steps.push(`gh:${releases.map((r) => r.tag).join(',')}`);
     },
+    fetchNpmMeta: async () => ({ published: false, gitHead: null }),
+    tagExists: () => false,
+    headSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     log: (msg) => logs.push(msg),
   });
 
@@ -191,6 +198,175 @@ test('applyCiRelease publishes, pushes tags only, then creates GitHub Releases',
     logs.some((line) => /release commit/i.test(line)),
     false,
   );
+});
+
+test('headsMatch compares gitHead prefixes of at least 7 hex chars', () => {
+  assert.equal(headsMatch('abcdef1', 'abcdef1ffffffff'), true);
+  assert.equal(headsMatch('abcdef1ffffffff', 'abcdef1'), true);
+  assert.equal(headsMatch('abcdef2', 'abcdef1ffffffff'), false);
+  assert.equal(headsMatch(null, 'abcdef1ffffffff'), false);
+});
+
+test('syncWorkspaceVersionsToTags bumps unreleased deps whose tags are ahead', () => {
+  /** @type {string[]} */
+  const bumped = [];
+  syncWorkspaceVersionsToTags(
+    [
+      { name: '@singleton-sd/post-kit-types', path: '/tmp/types', version: '0.5.0' },
+      { name: '@singleton-sd/post-kit-editor', path: '/tmp/editor', version: '0.7.0' },
+    ],
+    [
+      {
+        name: '@singleton-sd/post-kit-editor',
+        path: '/tmp/editor',
+        version: '0.7.0',
+        next: '0.8.0',
+        increment: 'minor',
+        tag: '@singleton-sd/post-kit-editor@0.8.0',
+        previousTag: '@singleton-sd/post-kit-editor@0.7.0',
+        messages: [],
+      },
+    ],
+    {
+      getLastTag: (name) =>
+        name === '@singleton-sd/post-kit-types'
+          ? '@singleton-sd/post-kit-types@0.6.0'
+          : '@singleton-sd/post-kit-editor@0.7.0',
+      getCommitMessages: () => [],
+      tagExists: () => false,
+    },
+    (release) => bumped.push(`${release.name}@${release.next}`),
+  );
+  assert.deepEqual(bumped, ['@singleton-sd/post-kit-types@0.6.0']);
+});
+
+test('bindReleaseVersion selects the next increment when npm already has a different commit', async () => {
+  const bound = await bindReleaseVersion(
+    {
+      name: '@singleton-sd/post-kit-email',
+      path: '/tmp/email',
+      version: '0.5.0',
+      next: '0.6.0',
+      increment: 'minor',
+      tag: '@singleton-sd/post-kit-email@0.6.0',
+      previousTag: '@singleton-sd/post-kit-email@0.5.0',
+      messages: [],
+    },
+    {
+      fetchNpmMeta: async (_name, version) =>
+        version === '0.6.0'
+          ? { published: true, gitHead: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' }
+          : { published: false, gitHead: null },
+      tagExists: () => false,
+      headSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      log: () => {},
+    },
+  );
+  assert.equal(bound.next, '0.7.0');
+  assert.equal(bound.tag, '@singleton-sd/post-kit-email@0.7.0');
+  assert.equal(bound.npmAlreadyPublished, false);
+});
+
+test('bindReleaseVersion recovers a same-commit skip without republishing', async () => {
+  const head = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const bound = await bindReleaseVersion(
+    {
+      name: '@singleton-sd/post-kit-email',
+      path: '/tmp/email',
+      version: '0.5.0',
+      next: '0.6.0',
+      increment: 'minor',
+      tag: '@singleton-sd/post-kit-email@0.6.0',
+      previousTag: '@singleton-sd/post-kit-email@0.5.0',
+      messages: [],
+    },
+    {
+      fetchNpmMeta: async () => ({ published: true, gitHead: head }),
+      tagExists: () => false,
+      headSha: head,
+      log: () => {},
+    },
+  );
+  assert.equal(bound.next, '0.6.0');
+  assert.equal(bound.npmAlreadyPublished, true);
+});
+
+test('applyCiRelease syncs stale workspace deps then publishes the planned package', async () => {
+  /** @type {string[]} */
+  const steps = [];
+  await applyCiRelease(
+    [
+      {
+        name: '@singleton-sd/post-kit-editor',
+        path: '/tmp/editor',
+        version: '0.7.0',
+        next: '0.8.0',
+        increment: 'minor',
+        tag: '@singleton-sd/post-kit-editor@0.8.0',
+        previousTag: '@singleton-sd/post-kit-editor@0.7.0',
+        messages: [],
+      },
+    ],
+    {
+      workspacePackages: [
+        { name: '@singleton-sd/post-kit-types', path: '/tmp/types', version: '0.5.0' },
+        { name: '@singleton-sd/post-kit-editor', path: '/tmp/editor', version: '0.7.0' },
+      ],
+      git: {
+        getLastTag: (name) =>
+          name === '@singleton-sd/post-kit-types'
+            ? '@singleton-sd/post-kit-types@0.6.0'
+            : '@singleton-sd/post-kit-editor@0.7.0',
+        getCommitMessages: () => [],
+        tagExists: () => false,
+      },
+      bumpPackageVersion: (release) => {
+        steps.push(`bump:${release.name ?? '?'}@${release.next}`);
+      },
+      publishNpmReleases: async (releases) => {
+        steps.push(`publish:${releases.map((r) => r.tag).join(',')}`);
+        return { published: ['@singleton-sd/post-kit-editor@0.8.0'], skipped: [] };
+      },
+      createAndPushTags: (tags) => {
+        steps.push(`tags:${tags.join(',')}`);
+      },
+      createGitHubReleases: () => {
+        steps.push('gh');
+      },
+      fetchNpmMeta: async () => ({ published: false, gitHead: null }),
+      tagExists: () => false,
+      headSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      log: () => {},
+    },
+  );
+  assert.deepEqual(steps, [
+    'bump:@singleton-sd/post-kit-types@0.6.0',
+    'bump:@singleton-sd/post-kit-editor@0.8.0',
+    'publish:@singleton-sd/post-kit-editor@0.8.0',
+    'tags:@singleton-sd/post-kit-editor@0.8.0',
+    'gh',
+  ]);
+});
+
+test('releaseSpecsForTagsAtHead returns last tags that point at HEAD', () => {
+  const specs = releaseSpecsForTagsAtHead(
+    [{ name: '@singleton-sd/post-kit-email', path: '/tmp/email' }],
+    {
+      getLastTag: () => '@singleton-sd/post-kit-email@0.5.0',
+      getCommitMessages: () => [],
+      tagExists: () => true,
+    },
+    'deadbeef',
+    (_file, args) => {
+      if (args[0] === 'rev-parse' && args[1] === '@singleton-sd/post-kit-email@0.5.0') {
+        return 'deadbeef';
+      }
+      return 'other';
+    },
+  );
+  assert.equal(specs.length, 1);
+  assert.equal(specs[0].tag, '@singleton-sd/post-kit-email@0.5.0');
+  assert.equal(specs[0].next, '0.5.0');
 });
 
 test('release-changed.mjs never commits or pushes the default branch', () => {
