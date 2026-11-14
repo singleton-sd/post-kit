@@ -17,11 +17,11 @@ policy: [`pr-pipelines.md`](../pr-pipelines.md). Human npm gates:
 
 | Trigger | Behavior |
 | --- | --- |
-| Push to **`main`** whose subject does **not** start with `chore: Release` | Runs `release.yml` |
+| Push to **`main`** whose subject does **not** start with `chore(release):` | Runs `release.yml` |
 | `workflow_dispatch` | Same job, manual (also used to reconcile missing npm / GitHub Releases) |
 
-The `chore: Release package versions [skip ci]` commit does **not** re-run the
-job. Loop prevention is that commit message, not the GitHub actor.
+The `chore(release): Release package versions [skip ci]` commit does **not**
+re-run the job. Loop prevention is that commit message, not the GitHub actor.
 
 The job:
 
@@ -29,7 +29,9 @@ The job:
    is missing. It never falls back to `GITHUB_TOKEN` for the push.
 2. Mints an installation token for the **singleton-release** GitHub App
    (`actions/create-github-app-token`, owner `singleton-sd`).
-3. Checks out `main` with that token (`fetch-depth: 0`).
+3. Checks out `main` with that token (`fetch-depth: 0`,
+   `persist-credentials: false`). The authenticated remote is set only in the
+   release step, after install.
 4. Installs with **pnpm 9.15.0** (must match root `packageManager`) and **Node 24**.
 5. Upgrades the runner to **npm 11** for Trusted Publishing (OIDC).
 6. Runs `pnpm release:ci` (`node scripts/release-changed.mjs --ci`).
@@ -65,7 +67,7 @@ After planning bumps, CI:
 1. Writes the new version into each package.json. Committed versions are what
    `pnpm publish` uses to rewrite `workspace:*`.
 2. Prepends a dated section to `CHANGELOG.md`.
-3. Commits `chore: Release package versions [skip ci]`.
+3. Commits `chore(release): Release package versions [skip ci]`.
 4. Pushes **HEAD:main** and annotated tags
    (`refs/tags/@singleton-sd/post-kit-*@x.y.z`) with the App token.
 5. Publishes changed packages to **npmjs** via **Trusted Publishing (OIDC)** —

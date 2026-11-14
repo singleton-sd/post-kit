@@ -22,7 +22,7 @@ require approving reviews.
    the test plan and merges after CI is green.
 5. **Release exception (singleton-release App):** `release.yml` bumps
    package.json versions, updates `CHANGELOG.md`, commits
-   `chore: Release package versions [skip ci]`, and pushes that commit plus
+   `chore(release): Release package versions [skip ci]`, and pushes that commit plus
    tags to `main`. GitHub Actions `GITHUB_TOKEN` cannot bypass the CodeRabbit
    required ruleset (`GH013`). Add the **singleton-release** GitHub App to the
    main ruleset **bypass list** so that App can push. Do **not** add a PAT,
@@ -35,7 +35,7 @@ require approving reviews.
    | Repository variable | `RELEASE_APP_ID` | singleton-release GitHub App ID |
    | Repository secret | `RELEASE_APP_PRIVATE_KEY` | singleton-release private key |
 
-   Loop prevention is the commit message (`startsWith(chore: Release)`), not
+   Loop prevention is the commit message (`startsWith(chore(release):)`), not
    the actor. `[skip ci]` on that commit also skips CI.
 
    **Tag rulesets:** default-branch rulesets must **not** target

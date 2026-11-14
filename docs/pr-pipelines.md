@@ -29,7 +29,7 @@ On **`main`**, `release.yml` computes the next version for changed public
 packages from the latest per-package tag plus conventional commits since then
 (`fix`→patch, `feat`→minor, `BREAKING CHANGE`→major), writes those versions
 into package.json, prepends `CHANGELOG.md`, commits
-`chore: Release package versions [skip ci]`, and pushes that commit plus
+`chore(release): Release package versions [skip ci]`, and pushes that commit plus
 tags using the **singleton-release** App token (`vars.RELEASE_APP_ID` +
 `secrets.RELEASE_APP_PRIVATE_KEY`; never `GITHUB_TOKEN` for the push). It
 then publishes to npmjs via **Trusted Publishing (OIDC)** (job-level

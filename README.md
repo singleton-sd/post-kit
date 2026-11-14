@@ -54,7 +54,7 @@ which:
    latest reachable `@scope/name@version` tag and conventional commits since
    that tag.
 2. Writes those versions into each package.json and prepends `CHANGELOG.md`.
-3. Commits `chore: Release package versions [skip ci]` and pushes that commit
+3. Commits `chore(release): Release package versions [skip ci]` and pushes that commit
    to `main` plus annotated tags. The push uses the **singleton-release**
    GitHub App (on the main ruleset bypass list). Loop prevention is the
    commit message, not the actor.

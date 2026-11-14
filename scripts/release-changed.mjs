@@ -4,7 +4,7 @@
  *
  * Bumps each `@singleton-sd/post-kit-*` workspace package that has releasable
  * conventional commits since its last reachable `@scope/name@version` tag,
- * updates CHANGELOG.md, commits `chore: Release package versions [skip ci]`,
+ * updates CHANGELOG.md, commits `chore(release): Release package versions [skip ci]`,
  * pushes that commit to `main` plus annotated tags, then publishes to npmjs
  * via Trusted Publishing (OIDC) and creates GitHub Releases.
  *
@@ -28,7 +28,7 @@ import { publishNpmReleases } from './publish-npm.mjs';
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CI = process.argv.includes('--ci');
 const PACKAGE_PREFIX = '@singleton-sd/post-kit-';
-export const RELEASE_SUBJECT = 'chore: Release package versions [skip ci]';
+export const RELEASE_SUBJECT = 'chore(release): Release package versions [skip ci]';
 export const COMMIT_AND_TAGS_PUSHED_MESSAGE = 'Release commit and tags pushed.';
 export const NOTHING_TO_RELEASE_MESSAGE = 'Nothing to release.';
 
@@ -211,7 +211,9 @@ export function deriveIncrement(messages) {
 
   for (const message of messages) {
     const subject = message.split('\n')[0] ?? '';
-    if (subject.startsWith('chore: Release')) continue;
+    if (subject.startsWith('chore(release):') || subject.startsWith('chore: Release')) {
+      continue;
+    }
 
     const lower = message.toLowerCase();
     if (

@@ -32,6 +32,10 @@ test('deriveIncrement maps conventional commits to semver bumps', () => {
     'major',
   );
   assert.equal(deriveIncrement(['docs: readme\n', 'chore: Release package versions\n']), null);
+  assert.equal(
+    deriveIncrement(['docs: readme\n', 'chore(release): Release package versions [skip ci]\n']),
+    null,
+  );
 });
 
 test('deriveIncrement prefers the highest bump in a batch', () => {
@@ -170,6 +174,7 @@ test('commitRelease uses the skip-ci subject and stages package.json plus CHANGE
   const commit = calls.find((args) => args[0] === 'commit');
   assert.ok(commit);
   assert.equal(commit[1], '-m');
+  assert.equal(RELEASE_SUBJECT, 'chore(release): Release package versions [skip ci]');
   assert.equal(commit[2].startsWith(RELEASE_SUBJECT), true);
   assert.match(commit[2], /@singleton-sd\/post-kit-email@0\.6\.0/);
 });
@@ -307,14 +312,14 @@ test('release-changed.mjs commits CHANGELOG and pushes HEAD:main', () => {
   assert.match(src, /git', \['add'/);
   assert.match(src, /updateChangelog/);
   assert.match(src, /pushReleaseCommit/);
-  assert.match(src, /chore: Release package versions \[skip ci\]/);
+  assert.match(src, /chore\(release\): Release package versions \[skip ci\]/);
   assert.match(src, /refs\/tags\//);
 });
 
 test('release.yml uses the singleton-release app, pinned SHAs, and job-level permissions', () => {
   const yml = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8');
   assert.match(yml, /checkout -B main/);
-  assert.match(yml, /chore: Release/);
+  assert.match(yml, /chore\(release\):/);
   assert.doesNotMatch(yml, /secrets\.NPM_TOKEN|NPM_TOKEN:/);
   assert.match(yml, /Release commit and tags pushed/);
   assert.match(yml, /vars\.RELEASE_APP_ID/);
@@ -325,9 +330,12 @@ test('release.yml uses the singleton-release app, pinned SHAs, and job-level per
   assert.match(yml, /pnpm\/action-setup@[0-9a-f]{40}/);
   assert.match(yml, /actions\/setup-node@[0-9a-f]{40}/);
   assert.match(yml, /Never falling back to GITHUB_TOKEN/);
-  assert.doesNotMatch(yml, /x-access-token:\$\{GITHUB_TOKEN\}/);
+  assert.match(yml, /persist-credentials:\s*false/);
+  assert.doesNotMatch(yml, /persist-credentials:\s*true/);
+  assert.match(yml, /git remote set-url origin/);
+  assert.match(yml, /x-access-token:\$\{GITHUB_TOKEN\}/);
   assert.doesNotMatch(yml, /secrets\.GITHUB_TOKEN/);
-  assert.match(yml, /startsWith\(github\.event\.head_commit\.message, 'chore: Release'\)/);
+  assert.match(yml, /startsWith\(github\.event\.head_commit\.message, 'chore\(release\):'\)/);
   assert.doesNotMatch(yml, /github\.actor/);
   const uncommented = yml
     .split('\n')

@@ -187,9 +187,9 @@ Humans merge product PRs only after required CI (`Lint / test / build`) is
 green. Do not require approving reviews (solo identity cannot self-approve).
 Connected review bots comment; agents never approve or merge.
 
-**Branch protection:** `release.yml` pushes `chore: Release package versions
-[skip ci]` to `main` using the **singleton-release** GitHub App, which must
-be on the main ruleset bypass list. Agents still never push to `main`.
+**Branch protection:** `release.yml` pushes `chore(release): Release package
+versions [skip ci]` to `main` using the **singleton-release** GitHub App, which
+must be on the main ruleset bypass list. Agents still never push to `main`.
 Default-branch rulesets must not target `refs/tags/**`. Process still forbids
 merging red CI. See `SETUP.md` §1.
 

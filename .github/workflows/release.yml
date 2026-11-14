@@ -1,11 +1,13 @@
 # Path-aware release: bump workspace package.json versions, update CHANGELOG.md,
-# commit `chore: Release package versions [skip ci]`, push that commit to main
-# plus annotated tags (singleton-release GitHub App), then npm Trusted
+# commit `chore(release): Release package versions [skip ci]`, push that commit
+# to main plus annotated tags (singleton-release GitHub App), then npm Trusted
 # Publishing (OIDC) and GitHub Releases.
 #
 # Loop prevention is by commit message, not by actor. The singleton-release
 # App is on the main ruleset bypass list so the commit-back push is not GH013'd.
 # Never fall back to GITHUB_TOKEN for that push.
+# Checkout uses persist-credentials: false; the App token is applied to the
+# git remote only in the Release step (same pattern as poc-inkads-epaper-renderer).
 #
 # Auth: job-level id-token: write (npm OIDC) + contents: read. Push/tags/gh
 # use the App installation token. No NPM_TOKEN / PAT.
@@ -24,7 +26,7 @@ permissions: {}
 
 jobs:
   release:
-    if: "${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore: Release') }}"
+    if: "${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore(release):') }}"
     runs-on: ubuntu-latest
     name: Publish changed packages
     permissions:
@@ -63,7 +65,8 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
-          persist-credentials: true
+          # Keep the write token out of git config until the Release step.
+          persist-credentials: false
 
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
@@ -111,6 +114,9 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
+
+          git remote set-url origin \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           git fetch origin main --tags
           git checkout -B main origin/main
