@@ -20,17 +20,26 @@ require approving reviews.
 4. **Human merge only** for product PRs — agents never merge or review other
    agents' work. Connected review bots leave PR comments; the human validates
    the test plan and merges after CI is green.
-5. **Tag-only releases (no bypass):** `release.yml` never commits or pushes to
-   `main`. It computes the next per-package version from tags, writes it in
-   the CI workspace only, publishes via npm Trusted Publishing, pushes
-   **tags only**, and creates GitHub Releases. Required-PR / CodeRabbit /
-   status-check rulesets may stay **on** for `refs/heads/main`. Do **not** add
-   a GitHub Actions (or PAT) bypass actor — the marketing-repo commit-back
-   push was rejected by the CodeRabbit ruleset (`GH013`).
+5. **Release exception (singleton-release App):** `release.yml` bumps
+   package.json versions, updates `CHANGELOG.md`, commits
+   `chore: Release package versions [skip ci]`, and pushes that commit plus
+   tags to `main`. GitHub Actions `GITHUB_TOKEN` cannot bypass the CodeRabbit
+   required ruleset (`GH013`). Add the **singleton-release** GitHub App to the
+   main ruleset **bypass list** so that App can push. Do **not** add a PAT,
+   and do **not** add GitHub Actions as a bypass actor.
 
-   **Tag rulesets:** those default-branch rulesets must **not** target
-   `refs/tags/**`. Tag creation uses `GITHUB_TOKEN` with `contents: write`.
-   Blocking tag updates would stall publish.
+   Required credentials (fail closed — never fall back to `GITHUB_TOKEN`):
+
+   | Store | Name | Value |
+   | --- | --- | --- |
+   | Repository variable | `RELEASE_APP_ID` | singleton-release GitHub App ID |
+   | Repository secret | `RELEASE_APP_PRIVATE_KEY` | singleton-release private key |
+
+   Loop prevention is the commit message (`startsWith(chore: Release)`), not
+   the actor. `[skip ci]` on that commit also skips CI.
+
+   **Tag rulesets:** default-branch rulesets must **not** target
+   `refs/tags/**`. Tag creation uses the same App token.
 
    **Process vs GitHub enforcement:** Product changes still land only via
    human-merged PRs after `Lint / test / build` is green — agents never push
@@ -299,7 +308,7 @@ npm pack @singleton-sd/post-kit-types@0.3.0
 
 `release.yml` uses the root `packageManager` pnpm version + npm 11.x, refuses
 auth-bearing `.npmrc` files (no `registry-url` on `setup-node`), and runs
-`pnpm release:ci`, which writes versions in the CI workspace only, publishes
-changed packages, then pushes **tags only** (never a commit to `main`).
+`pnpm release:ci`, which commits version bumps + `CHANGELOG.md`, pushes to
+`main` with the singleton-release App, then publishes via OIDC.
 `publishConfig.provenance: true` is for CI OIDC only — local interactive
 publish may need it omitted temporarily.

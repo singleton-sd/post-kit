@@ -76,9 +76,9 @@ and minimal — for example `post-kit-publisher` only exports `.`, so its
 test-only client seam is unreachable from the published surface.
 
 Public `@singleton-sd/post-kit-*` packages (including client and editor) are
-on npmjs. `release.yml` is tag-only: it pushes tags, then publishes changed
-packages via **Trusted Publishing (OIDC)** (no `NPM_TOKEN`) without
-committing back to `main`; maintainer checklist:
+on npmjs. `release.yml` commits version bumps and `CHANGELOG.md` to `main`
+via the **singleton-release** GitHub App, then publishes via **Trusted
+Publishing (OIDC)** (no `NPM_TOKEN`); maintainer checklist:
 [`SETUP.md`](../../SETUP.md) §6.
 
 ## Not yet implemented

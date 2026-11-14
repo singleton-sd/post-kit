@@ -47,26 +47,21 @@ See [SETUP.md](./SETUP.md), [AGENTS.md](./AGENTS.md), and
 
 ## Releases
 
-All singleton-sd repositories use **tag-only** releases (decision: 14 Nov 2026).
 Merging to `main` runs [`.github/workflows/release.yml`](./.github/workflows/release.yml),
 which:
 
 1. Computes the next version per `@singleton-sd/post-kit-*` package from the
    latest reachable `@scope/name@version` tag and conventional commits since
    that tag.
-2. Sets the version in the CI workspace only (`npm version --no-git-tag-version`).
-   That write is **not** committed.
-3. Publishes to npmjs via **Trusted Publishing** (OIDC; `id-token: write`; no
+2. Writes those versions into each package.json and prepends `CHANGELOG.md`.
+3. Commits `chore: Release package versions [skip ci]` and pushes that commit
+   to `main` plus annotated tags. The push uses the **singleton-release**
+   GitHub App (on the main ruleset bypass list). Loop prevention is the
+   commit message, not the actor.
+4. Publishes to npmjs via **Trusted Publishing** (OIDC; `id-token: write`; no
    `NPM_TOKEN`).
-4. Pushes **tags only** (`@singleton-sd/post-kit-<name>@<version>`) and creates
-   [GitHub Releases](https://github.com/singleton-sd/post-kit/releases) with
-   generated notes.
+5. Creates [GitHub Releases](https://github.com/singleton-sd/post-kit/releases)
+   with generated notes.
 
-The workflow never commits or pushes to the default branch, so it needs **no
-ruleset bypass**. Protect `refs/heads/main` as usual; do **not** apply
-CodeRabbit / required-PR rulesets to `refs/tags/**` (those blocked the old
-commit-back push with `GH013`).
-
-`CHANGELOG.md` remains as a historical record. Current release notes live in
-GitHub Releases. Details:
+Do **not** apply CodeRabbit / required-PR rulesets to `refs/tags/**`. Details:
 [`docs/operations/releasing.md`](./docs/operations/releasing.md).
