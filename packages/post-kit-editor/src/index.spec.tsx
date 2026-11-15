@@ -69,6 +69,7 @@ describe('EmailTemplateEditor', () => {
   it('renders the EmailBuilder canvas inside the root container', () => {
     const html = renderToStaticMarkup(<EmailTemplateEditor {...baseProps} />);
     assert.match(html, new RegExp(`class="[^"]*${EDITOR_CLASS_PREFIX}canvas`));
+    assert.match(html, /data-testid="pk-editor-eb-mui-surface"/);
     assert.match(html, /Hello \{\{name\}\}/);
   });
 
@@ -155,5 +156,15 @@ describe('EmailBuilderCanvas', () => {
       <EmailBuilderCanvas document={document} onChange={() => {}} readOnly />,
     );
     assert.match(html, /Hello \{\{name\}\}/);
+    assert.match(html, /data-testid="pk-editor-eb-mui-surface"/);
+  });
+
+  it('renders the MUI EmailBuilder surface with Samples drawer when editable', () => {
+    const document: EmailBuilderDocument = template.templateJson;
+    const html = renderToStaticMarkup(
+      <EmailBuilderCanvas document={document} onChange={() => {}} />,
+    );
+    assert.match(html, /data-testid="pk-editor-eb-mui-surface"/);
+    assert.match(html, />Samples</);
   });
 });

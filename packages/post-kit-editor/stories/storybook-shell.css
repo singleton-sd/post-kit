@@ -1,0 +1,144 @@
+/**
+ * Storybook-only layout/chrome for PostKit editor surfaces.
+ * The published package still ships class names without a required stylesheet;
+ * these rules make stories reviewable (sidebar vs canvas, panel cards).
+ */
+html,
+body,
+#storybook-root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: #1f1f21;
+  background: #f2f5f7;
+}
+
+.pk-story-shell {
+  box-sizing: border-box;
+  padding: 1.25rem;
+  max-width: 480px;
+  background: #fff;
+  border: 1px solid #e3e8ee;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(33, 36, 67, 0.06);
+}
+
+.pk-story-shell--wide {
+  max-width: none;
+  width: 100%;
+}
+
+.pk-story-shell h2,
+.pk-story-shell label,
+.pk-story-shell button,
+.pk-story-shell input,
+.pk-story-shell textarea,
+.pk-story-shell select {
+  font: inherit;
+}
+
+.pk-story-shell label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.pk-story-shell input,
+.pk-story-shell textarea,
+.pk-story-shell select {
+  font-weight: 400;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.pk-story-shell button {
+  cursor: pointer;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.pk-story-shell button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* EmailTemplateEditor chrome — keep PostKit sidebar beside the canvas */
+.pk-editor-root {
+  min-height: 100%;
+}
+
+.pk-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 0;
+  min-height: calc(100vh - 2rem);
+  align-items: stretch;
+  background: #f2f5f7;
+}
+
+.pk-editor-sidebar {
+  box-sizing: border-box;
+  padding: 1rem;
+  border-right: 1px solid #e3e8ee;
+  background: #fff;
+  overflow: auto;
+  max-height: calc(100vh - 2rem);
+}
+
+.pk-editor-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.75rem;
+  overflow: auto;
+}
+
+.pk-editor-canvas {
+  min-height: 520px;
+  background: #fff;
+  border: 1px solid #e3e8ee;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pk-editor-preview-pane,
+.pk-editor-preview-data,
+.pk-editor-metadata,
+.pk-editor-variables,
+.pk-editor-validation,
+.pk-editor-save-send {
+  margin-bottom: 1rem;
+}
+
+.pk-editor-save-send button,
+.pk-editor-variables button {
+  margin: 0.25rem 0.25rem 0.25rem 0;
+}
+
+.pk-admin-root {
+  min-height: 100vh;
+}
+
+@media (max-width: 900px) {
+  .pk-editor-layout {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .pk-editor-sidebar {
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid #e3e8ee;
+  }
+}

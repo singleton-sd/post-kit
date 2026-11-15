@@ -1,22 +1,27 @@
 # Editor integration
 
 How a consumer embeds [`@singleton-sd/post-kit-editor`](../../packages/post-kit-editor/README.md)
-in a React admin application so an internal user can edit EmailBuilder.js
-template sources, preview them, and persist changes through
-**consumer-supplied** callbacks that ultimately feed the Git-backed publish
-pipeline.
+so an internal user can list and edit EmailBuilder.js template sources, preview
+them, and persist changes through **consumer-supplied** callbacks that feed the
+Git-backed publish pipeline.
+
+**Default path:** mount one component — `EmailTemplateAdmin` — which owns the
+template list, MUI EmailBuilder.js canvas (inspector + samples, comparable to
+[the official playground](https://usewaypoint.github.io/email-builder-js)), and
+PostKit metadata / variables / preview / validation / save / send chrome.
 
 Template file layout and variables:
 [`template-authoring.md`](./template-authoring.md). Publishing to Blob:
 [`template-publishing.md`](./template-publishing.md).
 
-A runnable minimal host lives in
+A runnable thin host lives in
 [`examples/admin-editor/`](../../examples/admin-editor/).
 
-## What the editor is (and is not)
+## What the package is (and is not)
 
-`@singleton-sd/post-kit-editor` is a React **authoring surface** for the three
-Git-backed source files under `content/email-templates/<key>/`:
+`@singleton-sd/post-kit-editor` ships a React **admin page** (and lower-level
+surfaces) for the three Git-backed source files under
+`content/email-templates/<key>/`:
 
 | File | Role |
 | --- | --- |
@@ -24,8 +29,8 @@ Git-backed source files under `content/email-templates/<key>/`:
 | `metadata.json` | key, name, subject, variables, schemaVersion |
 | `preview.json` | synthetic sample values for in-editor preview |
 
-It holds those files **in memory**, offers canvas / metadata / preview-data /
-validation UI, and calls consumer callbacks on Save (and optional Send-test).
+It holds those files **in memory** and calls consumer callbacks on Save (and
+optional Send-test).
 
 It does **not**:
 
@@ -33,6 +38,7 @@ It does **not**:
 - accept API keys, tokens, or other credentials as props
 - write to disk, Git, Azure Blob Storage, or the network
 - run the publish pipeline (`post-kit-publish` / compiler content hashing)
+- own consumer SSO/RBAC (your admin route still wraps the page)
 
 Persistence and test delivery leave the package only through the props you pass
 in. Production secrets stay in Azure Key Vault **`ssd-postkit-kv-prod-ae`**
@@ -46,6 +52,10 @@ pnpm add @singleton-sd/post-kit-editor
 pnpm add react@^18.3.1 react-dom@^18.3.1
 ```
 
+MUI / Emotion are **runtime dependencies** of the package. You do **not** need
+to install or wrap `ThemeProvider` yourself — `EmailTemplateAdmin` (and the
+canvas surface) provide them.
+
 | Requirement | As shipped |
 | --- | --- |
 | React / React DOM | **Peer** `^18.3.1` — the host owns the React instance |
@@ -55,34 +65,33 @@ pnpm add react@^18.3.1 react-dom@^18.3.1
 
 Cross-package install notes: [`packages.md`](./packages.md).
 
-## Minimal embedding
+## Recommended embedding: `EmailTemplateAdmin`
 
-Load the three source files (from your API, static imports, etc.), validate
-them with `loadTemplateSource`, and mount `EmailTemplateEditor`:
+Load a catalog of templates (from your API, static imports, etc.), validate each
+with `loadTemplateSource`, and mount the full page:
 
 ```tsx
 import {
-  EmailTemplateEditor,
+  EmailTemplateAdmin,
   loadTemplateSource,
   type SerializedTemplateSource,
   type TemplateSourceFiles,
 } from '@singleton-sd/post-kit-editor';
 
-const template = loadTemplateSource({
-  templateJson /* from template.json */,
-  metadata /* from metadata.json */,
-  previewData /* from preview.json */,
-});
+const catalog: TemplateSourceFiles[] = [
+  loadTemplateSource({
+    templateJson /* from template.json */,
+    metadata /* from metadata.json */,
+    previewData /* from preview.json */,
+  }),
+  // …
+];
 
 export function TemplateAdminPage() {
   return (
-    <EmailTemplateEditor
-      template={template}
-      availableVariables={[
-        { name: 'name', label: 'Recipient name', description: 'Display name' },
-      ]}
+    <EmailTemplateAdmin
+      templates={catalog}
       onSave={async (serialized: SerializedTemplateSource, files: TemplateSourceFiles) => {
-        // Persist via your trusted server — see Persistence below.
         const res = await fetch('/api/templates', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -92,19 +101,36 @@ export function TemplateAdminPage() {
           return { ok: false, message: 'Save failed.' };
         }
       }}
+      onSendTest={async (_serialized, files, recipient) => {
+        const res = await fetch('/api/email-templates/send-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            templateKey: files.metadata.key,
+            to: recipient,
+            variables: files.previewData,
+          }),
+        });
+        if (!res.ok) {
+          return { ok: false, message: 'Test send failed.' };
+        }
+      }}
     />
   );
 }
 ```
 
-While the host is still fetching files, pass `loading` or `loadError` so the
-editor shows a non-interactive shell instead of a blank canvas.
+Omit `onSendTest` to hide Send-test chrome. Pass `loading` / `loadError` while
+the host is still fetching the catalog (same shells as the single-template
+editor).
 
 ### Public exports used for integration
 
 | Export | Purpose |
 | --- | --- |
-| `EmailTemplateEditor` | Main React component |
+| `EmailTemplateAdmin` | **Primary** full-page React component (list + canvas + chrome) |
+| `EmailTemplateEditor` | Advanced: single-template surface without list chrome |
+| `EmailBuilderCanvas` | Advanced: canvas-only |
 | `loadTemplateSource` | Validate and normalize the working triple |
 | `serializeTemplateSource` | Stable Git file strings (also used internally on Save) |
 | `validateTemplate` / `hasValidationErrors` | Optional host-side validation |
@@ -113,19 +139,29 @@ editor shows a non-interactive shell instead of a blank canvas.
 There is **no** exported `PersistenceAdapter` interface. Persistence is the
 `onSave` prop (and optionally `onSendTest`).
 
-### Props that matter for embedding
+### `EmailTemplateAdmin` props
 
 | Prop | Required | Role |
 | --- | --- | --- |
-| `template` | yes | Seeded `TemplateSourceFiles` |
+| `templates` | yes | Catalog of `TemplateSourceFiles` (at least one) |
 | `onSave` | yes | `(serialized, files) => SaveResult \| void \| Promise<…>` |
 | `onSendTest` | no | When set, shows Send-test chrome; must hit **your** server |
-| `availableVariables` | no | Catalogue entries for the editing user |
-| `onDirtyChange` | no | Navigation guards while dirty |
-| `onValidationChange` | no | Mirror validation in host chrome |
-| `onPreviewRendered` | no | Successful preview HTML string |
+| `availableVariables` | no | Catalogue labels; defaults to metadata variable names |
+| `onDirtyChange` / `onValidationChange` / `onPreviewRendered` | no | Same as `EmailTemplateEditor` |
 | `loading` / `loadError` | no | Host fetch shells |
-| `className` | no | Extra class on the root (`pk-editor-` prefix for CSS) |
+| `className` | no | Extra class on the admin root (`pk-admin-` prefix) |
+
+### Advanced: `EmailTemplateEditor` only
+
+If you already own list UI and only need the single-template surface:
+
+```tsx
+<EmailTemplateEditor
+  template={template}
+  onSave={…}
+  onSendTest={…}
+/>
+```
 
 Full props table: package
 [README](../../packages/post-kit-editor/README.md).
@@ -214,10 +250,10 @@ call `@singleton-sd/post-kit-client` with secrets from Azure Key Vault
 `ssd-postkit-kv-prod-ae` (or local uncommitted `.env` from `.env.example`).
 Omitting `onSendTest` hides Send-test chrome entirely.
 
-## Lifecycle: editor → PR → Blob → send
+## Lifecycle: admin → PR → Blob → send
 
 ```text
-Admin embeds EmailTemplateEditor
+Admin embeds EmailTemplateAdmin
         │  onSave → consumer persistence
         ▼
 content/email-templates/<key>/   (consumer repo)
@@ -236,7 +272,7 @@ PostKit API loads Blob at send time
 
 ## Access control
 
-- The editor is an **internal admin** surface. Your admin app owns
+- The admin page is an **internal** surface. Your host app owns
   authentication and authorisation (who may open which templates, who may
   save, who may trigger Send-test).
 - Do **not** put a long-lived PostKit send credential (or

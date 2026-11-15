@@ -37,12 +37,19 @@
   "scripts": {
     "build": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.json",
     "lint": "echo \"lint:editor — covered by root eslint on staged files\"",
-    "test": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.spec.json && node --import tsx --test \"src/**/*.spec.ts\" \"src/**/*.spec.tsx\"",
+    "test": "pnpm --filter @singleton-sd/post-kit-types run build && pnpm --filter @singleton-sd/post-kit-compiler run build && tsc -p tsconfig.spec.json && node --import tsx --test \"src/**/*.spec.ts\" \"src/**/*.spec.tsx\" \"tests/*.spec.mjs\"",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
+    "playwright:install": "playwright install chromium",
+    "test:visual": "node tests/visual.mjs",
+    "test:visual:gate": "node tests/visual-gate.mjs",
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
+    "@emotion/react": "11.11.3",
+    "@emotion/styled": "11.11.0",
+    "@mui/icons-material": "5.15.10",
+    "@mui/material": "5.15.10",
     "@singleton-sd/post-kit-compiler": "workspace:*",
     "@singleton-sd/post-kit-types": "workspace:*",
     "@usewaypoint/block-avatar": "^0.0.3",
@@ -57,19 +64,29 @@
     "@usewaypoint/block-text": "^0.0.7",
     "@usewaypoint/document-core": "^0.0.6",
     "@usewaypoint/email-builder": "0.0.9",
-    "zod": "^3.25.76"
+    "highlight.js": "11.9.0",
+    "prettier": "3.2.5",
+    "react-colorful": "5.6.1",
+    "zod": "^3.25.76",
+    "zustand": "4.5.1"
   },
   "peerDependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@storybook/addon-essentials": "8.6.14",
+    "@storybook/addon-interactions": "8.6.14",
     "@storybook/blocks": "8.6.14",
     "@storybook/react": "8.6.14",
     "@storybook/react-vite": "8.6.14",
+    "@storybook/test": "8.6.14",
     "@types/node": "^20.17.9",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
+    "pixelmatch": "^7.1.0",
+    "playwright": "^1.55.0",
+    "pngjs": "^7.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "storybook": "8.6.14",
