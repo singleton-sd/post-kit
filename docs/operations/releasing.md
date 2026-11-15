@@ -1,8 +1,12 @@
 # Releasing PostKit packages
 
-How `@singleton-sd/post-kit-*` versions are bumped and published. Describes the
+How `@singleton-sd/post-kit-*` versions are computed and published. Describes the
 automation as implemented in `.github/workflows/release.yml` and
 `scripts/release-changed.mjs`.
+
+On merge to `main`, the Release workflow commits version bumps and
+`CHANGELOG.md`, pushes that commit plus tags with the **singleton-release**
+GitHub App, then publishes to npmjs and creates GitHub Releases.
 
 Consumer install / semver guidance:
 [`guides/packages.md`](../guides/packages.md). Pipeline overview and secrets
@@ -13,18 +17,30 @@ policy: [`pr-pipelines.md`](../pr-pipelines.md). Human npm gates:
 
 | Trigger | Behavior |
 | --- | --- |
-| Push to **`main`** | Runs `release.yml` unless the head commit subject starts with `chore: Release` (avoids loops) |
-| `workflow_dispatch` | Same job, manual |
+| Push to **`main`** whose subject does **not** start with `chore(release):` | Runs `release.yml` |
+| `workflow_dispatch` | Same job, manual (also used to reconcile missing npm / GitHub Releases) |
+
+The `chore(release): Release package versions [skip ci]` commit does **not**
+re-run the job. Loop prevention is that commit message, not the GitHub actor.
 
 The job:
 
-1. Checks out `main` with full history.
-2. Installs with **pnpm 9.15.0** (must match root `packageManager`) and **Node 24**.
-3. Upgrades the runner to **npm 11** for Trusted Publishing (OIDC).
-4. Runs `pnpm release:ci` (`node scripts/release-changed.mjs --ci`).
+1. Fails closed if `vars.RELEASE_APP_ID` or `secrets.RELEASE_APP_PRIVATE_KEY`
+   is missing. It never falls back to `GITHUB_TOKEN` for the push.
+2. Checks out `main` with the job token (`fetch-depth: 0`,
+   `persist-credentials: false`). Checkout does **not** receive the App token.
+3. Installs with **pnpm 9.15.0** (must match root `packageManager`) and **Node 24**.
+4. Upgrades the runner to **npm 11** for Trusted Publishing (OIDC).
+5. Mints an installation token for the **singleton-release** GitHub App
+   (`actions/create-github-app-token`, owner `singleton-sd`, scoped to
+   `post-kit`). Git identity reads `APP_SLUG` and `RELEASE_APP_ID` from `env:`.
+6. Runs `pnpm release:ci` (`node scripts/release-changed.mjs --ci`) with
+   `RELEASE_APP_TOKEN` only. The script authenticates `origin` for the atomic
+   push, then resets the remote. `pnpm build` / `pnpm publish` run without
+   that token. `gh release` receives it as `GH_TOKEN` on that subprocess only.
 
-If nothing needs a bump, the script logs `Nothing to release` and the workflow
-exits successfully.
+If nothing needs a bump, the script logs `Nothing to release` (after
+reconciling tags already at HEAD) and the workflow exits successfully.
 
 ## Which packages are released
 
@@ -40,7 +56,8 @@ not private. Today that is:
 
 Each package bumps **independently** when it has releasable conventional commits
 since its last reachable `@scope/name@version` tag (path-aware: only commits that
-touch that package’s paths count). Bump rules:
+touch that package’s paths count). The next version is the max of `package.json`
+and the last tag, then incremented. Bump rules:
 
 | Conventional commit | Increment |
 | --- | --- |
@@ -48,16 +65,40 @@ touch that package’s paths count). Bump rules:
 | `feat:` | minor |
 | `BREAKING CHANGE` footer or `type!:` / `type(scope)!:` | major |
 
-After bumps, CI:
+After planning bumps, CI:
 
-1. Commits `chore: Release package versions` on `main` (local).
-2. Publishes changed packages to **npmjs** via **Trusted Publishing (OIDC)** —
-   `permissions: id-token: write`; **no `NPM_TOKEN`**.
-3. Pushes the release commit, then annotated tags, then creates **GitHub
-   Releases** per tag (`scripts/github-releases.mjs`).
+1. Writes the new version into each package.json. Committed versions are what
+   `pnpm publish` uses to rewrite `workspace:*`.
+2. Prepends a dated section to `CHANGELOG.md`.
+3. Commits `chore(release): Release package versions [skip ci]`.
+4. Pushes **HEAD:main** and annotated tags in **one atomic** `git push`
+   (`refs/tags/@singleton-sd/post-kit-*@x.y.z`) with the App token on the
+   origin URL for that push only, then resets origin to token-free HTTPS. If
+   `main` has moved, the push fails closed; a later run re-plans from the new
+   tip instead of tagging a stale version.
+5. Publishes changed packages to **npmjs** via **Trusted Publishing (OIDC)** —
+   job-level `permissions: id-token: write`; **no `NPM_TOKEN`**. Build and
+   publish run **without** the App token in the environment (including
+   `prepublishOnly`).
+6. Creates **GitHub Releases** per tag with `gh release create --generate-notes`
+   (`scripts/github-releases.mjs`), passing the App token only to that `gh`
+   subprocess.
 
-Publish runs **before** pushing tags so an auth failure does not leave orphan
-tags on `origin/main`.
+Commit and tags are pushed **before** publish so a later retry cannot bind an
+already-published version to a newer HEAD. A retry with no new bump republishes
+any **tag-at-HEAD** still missing on npm and creates missing GitHub Releases
+(annotated tags are peeled to the commit they point at).
+
+That retry does **not** cover a tag that is **behind HEAD** (for example npm
+publish failed, then more commits landed on `main`). Recover that version
+from the tag’s own tree:
+
+1. `git fetch --tags` and `git switch --detach <tag>`
+   (example: `@singleton-sd/post-kit-email@0.6.0`).
+2. From that commit, publish the package to npm and
+   `gh release create <tag> --generate-notes`.
+3. Do not move the tag onto HEAD or bump past the missing version until it
+   exists on npm.
 
 ## Contributor requirements (so a release is correct)
 
@@ -69,7 +110,7 @@ For product PRs that should affect published packages:
 3. Keep hub churn minimal (`pnpm-lock.yaml` only via `pnpm install`, etc. — see
    `AGENTS.md`).
 4. Do **not** hand-edit package versions for release; the Release workflow owns
-   version numbers on `main`.
+   version numbers.
 
 Humans merge PRs. Merging to `main` is what starts the release path.
 
@@ -83,20 +124,38 @@ Before relying on automated publish:
    `npm publish` — details in [`SETUP.md`](../../SETUP.md).
 3. After OIDC publish works: npm **Publishing access → Require 2FA and disallow
    tokens** (human setting on each package).
-4. Branch protection must allow the Release workflow’s intentional direct push
-   of `chore: Release…` to `main` (see `SETUP.md` / `pr-pipelines.md`).
+4. Install the **singleton-release** GitHub App on this repository. Set
+   `RELEASE_APP_ID` (variable) and `RELEASE_APP_PRIVATE_KEY` (secret). Put that
+   App on the main ruleset **bypass list**. Do not add a PAT or GitHub Actions
+   as a bypass actor.
+5. Default-branch rulesets (required PR, CodeRabbit, status checks) may stay
+   on. They must **not** apply to `refs/tags/**`.
 
-After a release commit lands:
+After a release run:
 
 1. Confirm the Release workflow succeeded.
-2. Confirm each intended tag exists and has a GitHub Release.
+2. Confirm the release commit is on `main`, each intended tag exists, and each
+   has a GitHub Release.
 3. Spot-check npm (`npm pack @singleton-sd/<pkg>@<version>` or the registry
    version URL) if anything looks off.
 
-## Authentication (no tokens in GitHub Secrets)
+## Authentication (no tokens in GitHub Secrets except the App key)
 
 npm publish uses **GitHub Actions OIDC → npm Trusted Publishing**. Do not add
 `NPM_TOKEN` / `NODE_AUTH_TOKEN` or Key Vault publish secrets for this path.
+
+The workflow sets `permissions: {}` at the workflow level (deny by default)
+and grants the release job:
+
+| Permission | Why |
+| --- | --- |
+| `contents: read` | Checkout metadata on `GITHUB_TOKEN` (the App token does the writes) |
+| `id-token: write` | npm Trusted Publishing (OIDC) |
+
+Push and tags use the singleton-release installation token on the git remote
+for the atomic push only. `gh release` receives that token as `GH_TOKEN`.
+Build and npm publish do not. The job fails if `RELEASE_APP_ID` or
+`RELEASE_APP_PRIVATE_KEY` is unset.
 
 App/runtime secrets (API keys, provider credentials) stay in Azure Key Vault
 and are unrelated to package publish. Do not document or paste credentials

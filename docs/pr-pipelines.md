@@ -5,7 +5,7 @@
 | Workflow | Triggers | Checks |
 | --- | --- | --- |
 | `ci.yml` | every pull request; every push to `main` | prettier check, eslint, worktree-path tests, PR automation tests, recursive package test/build |
-| `release.yml` | push to **`main`** / `workflow_dispatch` (skipped for `chore: Release` commits) | Path-aware bumps; OIDC `npm publish` (Trusted Publishing); commit + tags + GitHub Releases for `@singleton-sd/post-kit-*` |
+| `release.yml` | push to **`main`** / `workflow_dispatch` | Path-aware version bumps + CHANGELOG commit to `main` via singleton-release App; OIDC `npm publish` (Trusted Publishing); tags + GitHub Releases for `@singleton-sd/post-kit-*` |
 | `validate-email-domain-branding.yml` | daily 06:00 UTC; `workflow_dispatch`; pushes to `main` under `packages/post-kit-email/**`, this workflow file, root `package.json`, `pnpm-lock.yaml`, or `infra/appconfig-seed.json` | Live SPF/DKIM/DMARC/BIMI check. Reads `app:email:validation:*` from App Configuration with `--auth-mode login`. Skips (success) when Azure repository Variables are missing, the store is missing, or `app:email:validation:domain` is unset. Failed OIDC federation fails the job. Not required on PRs. |
 | `deploy-api.yml` | `main` path changes under `apps/api/**`, `packages/post-kit-email/**`, `infra/function-app.bicep`, `infra/appconfig-seed.json`, `.github/workflows/deploy-api.yml`; also `workflow_dispatch` | OIDC → bicep + App Config seed-if-absent + zip deploy; skips Azure if `AZURE_*` Variables are missing |
 
@@ -21,20 +21,24 @@ Branch naming is `<type>/<issue-number>-<kebab-title>` (e.g.
 matching worktree with `pnpm worktree:add` under the parent workspace
 `worktrees/` folder (see `AGENTS.md`). Humans only merge product PRs to
 `main`. Solo-repo: do **not** require approving reviews; keep CI green before
-merge. Classic required-PR / required-status-check gates stay off so
-`release.yml` can push version bumps (see `SETUP.md` §1 — process still
-requires green CI for human merges; preferred end state is an org ruleset
-with GitHub Actions as a bypass actor for `release.yml` only).
+merge. `release.yml` pushes release commits to `main` with the
+**singleton-release** GitHub App, which must be on the ruleset bypass list
+(see `SETUP.md` §1). Default-branch rulesets must not target `refs/tags/**`.
 
-On **`main`**, `release.yml` bumps versions for changed public packages
-(conventional commits: `fix`→patch, `feat`→minor, `BREAKING CHANGE`→major),
-publishes them to npmjs via **Trusted Publishing (OIDC)** (`id-token: write`;
-no `NPM_TOKEN`), commits `chore: Release…` on `main`, pushes one annotated
-git tag per package, then creates a matching **GitHub Release** per tag
-(`scripts/github-releases.mjs`). That direct push is intentional: branch
-protection must allow the Release workflow to update `main` (see `SETUP.md`
-§1). With an empty workspace (no `@singleton-sd/post-kit-*` packages yet) it
-logs `Nothing to release` and exits 0.
+On **`main`**, `release.yml` computes the next version for changed public
+packages from the latest per-package tag plus conventional commits since then
+(`fix`→patch, `feat`→minor, `BREAKING CHANGE`→major), writes those versions
+into package.json, prepends `CHANGELOG.md`, commits
+`chore(release): Release package versions [skip ci]`, and pushes that commit plus
+tags using the **singleton-release** App token (`vars.RELEASE_APP_ID` +
+`secrets.RELEASE_APP_PRIVATE_KEY`; never `GITHUB_TOKEN` for the push). It
+then publishes to npmjs via **Trusted Publishing (OIDC)** (job-level
+`id-token: write`; no `NPM_TOKEN`) and creates matching **GitHub Releases**
+with generated notes (`scripts/github-releases.mjs`). Loop prevention is the
+commit message, not the actor. A retry with no new bump still publishes
+missing npm versions and GitHub Releases for tags that already point at HEAD.
+With an empty workspace (no `@singleton-sd/post-kit-*` packages yet) it logs
+`Nothing to release` and exits 0.
 
 ### Backfill existing tags (one-shot)
 
@@ -45,7 +49,7 @@ Tags created before GitHub Releases were enabled can be backfilled with:
   set -e
   for tag in $(git tag -l '@singleton-sd/*'); do
     gh release view "$tag" >/dev/null 2>&1 && continue
-    gh release create "$tag" --verify-tag --title "$tag" --notes "Backfilled from existing tag. See CHANGELOG.md."
+    gh release create "$tag" --verify-tag --generate-notes --title "$tag" --notes "Backfilled from existing tag."
   done
 )
 ```
@@ -55,7 +59,7 @@ Tags created before GitHub Releases were enabled can be backfilled with:
 | Allowed in GitHub | Forbidden in GitHub |
 | --- | --- |
 | Variables: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (IDs) | Any secret: connection strings, passwords, client secrets, `AZURE_CREDENTIALS` |
-| Built-in `GITHUB_TOKEN` for PR labels and release commits | Provider API tokens |
+| Variable `RELEASE_APP_ID` + secret `RELEASE_APP_PRIVATE_KEY` (singleton-release App; push + GitHub Releases) | Provider API tokens, PATs, `NPM_TOKEN` |
 
 Flow (later, when Azure workflows exist): **Azure Login (OIDC)** →
 `az keyvault secret show` → use value only as a **job env var** (mask in

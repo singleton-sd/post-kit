@@ -25,7 +25,7 @@ org-wide. This repository has **no** ClickUp engineering integration.
 | Email | `@singleton-sd/post-kit-email` (Forward Email + development provider) |
 | Secrets | Azure Key Vault `ssd-postkit-kv-prod-ae` |
 | CI | GitHub Actions — single `CI` workflow (`Lint / test / build`) |
-| Release | Path-aware bumps via `scripts/release-changed.mjs` |
+| Release | Tag-only: path-aware versions from git tags, npm Trusted Publishing, GitHub Releases |
 | Agents | GitHub Issues → worktree → PR (`Closes #N`); humans merge |
 
 ## Quick start
@@ -44,3 +44,24 @@ Claude Code, Grok, and Codex). Do not copy `SKILL.md` files into this repo.
 
 See [SETUP.md](./SETUP.md), [AGENTS.md](./AGENTS.md), and
 [docs/pr-pipelines.md](./docs/pr-pipelines.md).
+
+## Releases
+
+Merging to `main` runs [`.github/workflows/release.yml`](./.github/workflows/release.yml),
+which:
+
+1. Computes the next version per `@singleton-sd/post-kit-*` package from the
+   latest reachable `@scope/name@version` tag and conventional commits since
+   that tag.
+2. Writes those versions into each package.json and prepends `CHANGELOG.md`.
+3. Commits `chore(release): Release package versions [skip ci]` and pushes that commit
+   to `main` plus annotated tags. The push uses the **singleton-release**
+   GitHub App (on the main ruleset bypass list). Loop prevention is the
+   commit message, not the actor.
+4. Publishes to npmjs via **Trusted Publishing** (OIDC; `id-token: write`; no
+   `NPM_TOKEN`).
+5. Creates [GitHub Releases](https://github.com/singleton-sd/post-kit/releases)
+   with generated notes.
+
+Do **not** apply CodeRabbit / required-PR rulesets to `refs/tags/**`. Details:
+[`docs/operations/releasing.md`](./docs/operations/releasing.md).

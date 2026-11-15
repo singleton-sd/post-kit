@@ -1,9 +1,18 @@
-# Path-aware release: bump workspace package versions on main,
-# publish to npmjs via Trusted Publishing (OIDC), then tag + GitHub Releases.
-# Skips when the push is already a release commit (avoids loops).
+# Path-aware release: bump workspace package.json versions, update CHANGELOG.md,
+# commit `chore(release): Release package versions [skip ci]` to main, push that
+# commit plus annotated tags (singleton-release GitHub App), then npm Trusted
+# Publishing (OIDC) and GitHub Releases. This is commit-back, not tag-only.
 #
-# Auth model matches engineering/publish-npm-library and
-# singleton-sd/poc-inkads-epaper-renderer (no NPM_TOKEN / registry-url).
+# Loop prevention is by commit message, not by actor. The singleton-release
+# App is on the main ruleset bypass list so the commit-back push is not GH013'd.
+# Never fall back to GITHUB_TOKEN for that push.
+# Checkout uses persist-credentials: false and the job token (contents: read).
+# The App token is minted after install. git uses it only for the atomic push
+# (authenticated remote, then reset). `gh release` receives it as GH_TOKEN on
+# that subprocess only. Build and npm publish never see the App token.
+#
+# Auth: job-level id-token: write (npm OIDC) + contents: read. Push/tags/gh
+# use the App installation token. No NPM_TOKEN / PAT.
 name: Release
 
 on:
@@ -15,29 +24,49 @@ concurrency:
   group: release-main
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  id-token: write
+permissions: {}
 
 jobs:
   release:
-    if: "${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore: Release') }}"
+    if: "${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore(release):') }}"
     runs-on: ubuntu-latest
-    name: Bump package versions
+    name: Publish changed packages
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Require singleton-release app credentials
+        env:
+          RELEASE_APP_ID: ${{ vars.RELEASE_APP_ID }}
+          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${RELEASE_APP_ID:-}" ]; then
+            echo "::error::Missing repository variable RELEASE_APP_ID (GitHub App singleton-release)."
+            missing=1
+          fi
+          if [ -z "${RELEASE_APP_PRIVATE_KEY:-}" ]; then
+            echo "::error::Missing repository secret RELEASE_APP_PRIVATE_KEY (GitHub App singleton-release)."
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Refusing to run release: singleton-release must push to main. Never falling back to GITHUB_TOKEN."
+            exit 1
+          fi
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
-          # Keep the write token out of git config until the Release step.
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           # Must match root package.json "packageManager" (pnpm/action-setup
           # errors if both disagree). npm ≥11 for OIDC is installed below.
           version: 9.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: pnpm
@@ -62,26 +91,31 @@ jobs:
             fi
           done
 
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: singleton-sd
+          repositories: post-kit
+          permission-contents: write
+
       - name: Configure git identity
+        env:
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          RELEASE_APP_ID: ${{ vars.RELEASE_APP_ID }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${RELEASE_APP_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
 
       - name: Release changed packages
         id: release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          RELEASE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
-
-          git remote set-url origin \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           git fetch origin main --tags
           git checkout -B main origin/main

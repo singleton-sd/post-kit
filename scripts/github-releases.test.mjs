@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createGitHubReleases,
+  envForGitHubCli,
   formatReleaseNotes,
   formatReleaseTitle,
+  githubReleaseCreateArgs,
   githubReleaseExists,
   isReleaseNotFoundError,
 } from './github-releases.mjs';
@@ -17,11 +19,27 @@ const sample = {
   tag: '@singleton-sd/post-kit-publisher@0.2.0',
 };
 
+test('envForGitHubCli passes the App token only as GH_TOKEN', () => {
+  const env = envForGitHubCli('app-token-secret', {
+    RELEASE_APP_TOKEN: 'app-token-secret',
+    GITHUB_TOKEN: 'job-read-token',
+    PATH: '/usr/bin',
+  });
+  assert.equal(env.GH_TOKEN, 'app-token-secret');
+  assert.equal('RELEASE_APP_TOKEN' in env, false);
+  assert.equal('GITHUB_TOKEN' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('envForGitHubCli fails closed when the App token is missing', () => {
+  assert.throws(() => envForGitHubCli(''), /App token is required for gh release/);
+});
+
 test('formatReleaseTitle uses name@version', () => {
   assert.equal(formatReleaseTitle(sample), '@singleton-sd/post-kit-publisher@0.2.0');
 });
 
-test('formatReleaseNotes includes bump, npmjs link, and install line', () => {
+test('formatReleaseNotes includes bump, npmjs link, and CHANGELOG on main', () => {
   const notes = formatReleaseNotes(sample);
   assert.match(notes, /0\.1\.0.*→.*0\.2\.0.*minor/);
   assert.match(notes, /CHANGELOG\.md/);
@@ -30,6 +48,20 @@ test('formatReleaseNotes includes bump, npmjs link, and install line', () => {
     /\[`@singleton-sd\/post-kit-publisher@0\.2\.0`\]\(https:\/\/www\.npmjs\.com\/package\/@singleton-sd\/post-kit-publisher\/v\/0\.2\.0\)/,
   );
   assert.match(notes, /pnpm add @singleton-sd\/post-kit-publisher@0\.2\.0/);
+});
+
+test('githubReleaseCreateArgs uses generated notes from the previous package tag', () => {
+  const args = githubReleaseCreateArgs({
+    ...sample,
+    previousTag: '@singleton-sd/post-kit-publisher@0.1.0',
+  });
+  assert.ok(args.includes('--generate-notes'));
+  assert.ok(args.includes('--verify-tag'));
+  assert.equal(
+    args[args.indexOf('--notes-start-tag') + 1],
+    '@singleton-sd/post-kit-publisher@0.1.0',
+  );
+  assert.match(args[args.indexOf('--notes') + 1], /0\.1\.0.*→.*0\.2\.0/);
 });
 
 test('isReleaseNotFoundError recognizes gh not-found output', () => {
@@ -95,7 +127,8 @@ test('createGitHubReleases creates missing releases and skips existing', () => {
   const createCall = calls.find((a) => a[1] === 'create');
   assert.ok(createCall);
   assert.equal(createCall[2], sample.tag);
-  assert.equal(createCall[3], '--verify-tag');
+  assert.ok(createCall.includes('--verify-tag'));
+  assert.ok(createCall.includes('--generate-notes'));
   assert.equal(createCall[createCall.indexOf('--title') + 1], sample.tag);
   assert.match(createCall[createCall.indexOf('--notes') + 1], /0\.1\.0.*→.*0\.2\.0/);
   assert.match(logs.join('\n'), /Created GitHub Release/);

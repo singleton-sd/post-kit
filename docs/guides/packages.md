@@ -120,8 +120,8 @@ notes before upgrading production.
 ## Upgrade guidance
 
 1. Read the **GitHub Release** for the package tag
-   (`@singleton-sd/<package>@<version>`) — notes link to npmjs and summarize
-   the conventional-changelog body.
+   (`@singleton-sd/<package>@<version>`) and the matching `CHANGELOG.md` bump
+   on `main` (notes link to npmjs and include GitHub-generated commit history).
 2. Diff your lockfile / `package.json` pins; run install and your app’s test suite.
 3. After a **client** upgrade: re-verify a real or staging `send()` (auth,
    template key, variables, error handling / retries).

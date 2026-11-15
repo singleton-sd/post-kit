@@ -98,6 +98,78 @@ export async function isVersionOnNpm(name, version, options = {}) {
 }
 
 /**
+ * Registry metadata for an exact version. `gitHead` is present when npm recorded
+ * the publishing commit; many Trusted Publishing tarballs omit it.
+ *
+ * @param {string} name
+ * @param {string} version
+ * @param {{ fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<{ published: boolean, gitHead: string | null }>}
+ */
+export async function fetchNpmVersionMetadata(name, version, options = {}) {
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  if (typeof fetchImpl !== 'function') {
+    throw new Error('fetch is required to probe the npm registry');
+  }
+
+  const url = npmVersionRegistryUrl(name, version);
+  let response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to reach npm registry while checking ${name}@${version}: ${detail}`, {
+      cause: err,
+    });
+  }
+
+  if (response.status === 404) {
+    return { published: false, gitHead: null };
+  }
+  if (response.status !== 200) {
+    throw new Error(
+      `Unexpected npm registry status ${response.status} for ${name}@${version} (${url})`,
+    );
+  }
+
+  /** @type {unknown} */
+  let body = null;
+  if (typeof response.json === 'function') {
+    body = await response.json();
+  }
+  const gitHead =
+    body &&
+    typeof body === 'object' &&
+    'gitHead' in body &&
+    typeof body.gitHead === 'string' &&
+    body.gitHead.length > 0
+      ? body.gitHead
+      : null;
+  return { published: true, gitHead };
+}
+
+/**
+ * Child env for `pnpm run build` / `pnpm publish`. Drops the App token so
+ * prepublishOnly builds cannot observe it.
+ *
+ * @param {NodeJS.ProcessEnv} [base]
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function envWithoutReleaseAppToken(base = process.env) {
+  const env = { ...base };
+  const appToken = env.RELEASE_APP_TOKEN;
+  delete env.RELEASE_APP_TOKEN;
+  delete env.GH_TOKEN;
+  if (appToken && env.GITHUB_TOKEN === appToken) {
+    delete env.GITHUB_TOKEN;
+  }
+  return env;
+}
+
+/**
  * @param {{ name: string, path: string, next?: string }} release
  * @param {{ run?: (file: string, args: string[], options?: object) => string, log?: (msg: string) => void, fetchImpl?: typeof fetch }} [options]
  * @returns {Promise<'published' | 'skipped'>}
@@ -136,14 +208,16 @@ export async function buildAndPublishPackage(release, options = {}) {
   }
 
   log(`Building ${packagePath}…`);
-  run('pnpm', ['run', 'build'], { cwd: packagePath });
+  const publishEnv = envWithoutReleaseAppToken();
+  run('pnpm', ['run', 'build'], { cwd: packagePath, env: publishEnv });
 
   log(`Publishing ${release.name}@${version} to npmjs (OIDC / Trusted Publishing)…`);
-  // --no-git-checks: release commit may not be pushed yet; we publish before push
-  // so a failed publish does not leave tags on origin/main.
-  // --publish-branch main: Release job checks out main; matches InkAds requireBranch.
+  // --no-git-checks: the release commit and tags are already on origin/main
+  // before publish. Already-published versions are skipped so a retry can
+  // recover. --publish-branch main: Release job checks out main.
   run('pnpm', ['publish', '--access', 'public', '--no-git-checks', '--publish-branch', 'main'], {
     cwd: packagePath,
+    env: publishEnv,
   });
   return 'published';
 }

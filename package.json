@@ -14,7 +14,7 @@
     "release:ci": "node ./scripts/release-changed.mjs --ci",
     "prepare": "husky",
     "pr:gate": "node scripts/pr-handoff-gate.mjs",
-    "test:pr-automation": "node scripts/pr-handoff-gate.test.mjs && node --test scripts/invoke-ps1.test.mjs && node --test scripts/github-releases.test.mjs && node --test scripts/publish-npm.test.mjs && node --test scripts/tenant-key-map.test.mjs && node --test scripts/platform-cors-origins.test.mjs",
+    "test:pr-automation": "node scripts/pr-handoff-gate.test.mjs && node --test scripts/invoke-ps1.test.mjs && node --test scripts/github-releases.test.mjs && node --test scripts/publish-npm.test.mjs && node --test scripts/release-changed.test.mjs && node --test scripts/tenant-key-map.test.mjs && node --test scripts/platform-cors-origins.test.mjs",
     "tenant:register-key": "./scripts/register-tenant-api-key.sh",
     "email:provision": "pnpm --filter @singleton-sd/post-kit-email provision",
     "validate:email-domain-branding": "pnpm --filter @singleton-sd/post-kit-email validate:domain-branding",
