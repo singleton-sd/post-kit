@@ -70,7 +70,7 @@ branch / worktree created from origin/main
 implementation
         |
         v
-fetch + rebase (or merge, per repo conflict playbook) origin/main
+fetch + merge origin/main (never rebase)
         |
         v
 relevant tests run
@@ -241,14 +241,15 @@ automatic and does not depend on a human remembering to close it separately.
    declares that dependency (section 5).
 5. Before pushing completed implementation:
    - `git fetch origin`
-   - rebase (or merge, per the repository's existing conflict playbook for
-     shared hub files in `AGENTS.md`) onto `origin/main`
+   - `git merge origin/main` (never rebase; see the conflict playbook in
+     `AGENTS.md`)
    - resolve conflicts
    - run the relevant test suite
-6. Push with `--force-with-lease` after a rebase, never plain `--force`.
+6. Push normally. Never force-push, including `--force-with-lease`.
 7. Open/update the PR, with `Closes #N` linking the originating issue.
 8. If `origin/main` changes while CI/review is running and branch
-   protection or mergeability requires it, rebase again and re-push.
+   protection or mergeability requires it, `git merge origin/main` again
+   and push.
 9. Humans merge. Agents do not approve or merge their own PRs.
 
 ## 7. Public-repository safety boundary

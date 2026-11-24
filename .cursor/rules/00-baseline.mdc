@@ -1,0 +1,31 @@
+---
+description: Singleton SD baseline rules for every agent and every repo
+alwaysApply: true
+---
+
+# Singleton SD agent baseline (applies in every repo)
+
+- **Read first:** this repo's `AGENTS.md` (and nested ones) and `.cursor/rules/*.mdc`, including `review-lessons.mdc`. If they conflict with this rule, this rule wins. If they conflict with your brief, the brief wins, as long as it doesn't break a rule here.
+- **Never** merge a PR or GitLab MR, push to `main`/`master`, rebase, force-push (including `--force-with-lease`) or enable auto-merge (or merge-when-pipeline-succeeds). Pato merges by hand. Bring in the base branch with `git merge` only.
+- **Push budget:** one commit and one push per round, at most 3 rounds (the first push counts). Never use `[skip ci]` or any CI-skip trailer.
+- **Draft until green:** open the PR as a draft and mark it ready only when CI is green on the latest head.
+- **No verdicts:** don't approve, request changes, add or remove labels, or request reviewers. Never touch `visual-accepted`.
+- **Never post `@coderabbitai`**, `@cursor` or any other bot trigger or command comment. Wait for the automatic review of each head.
+- **Review loop:** for each review thread, fix a real defect in the next round, or reply in the thread with a short reason. Then resolve it. At most 2 review rounds (they share the 3-push budget). Style nits get a reply, not a rewrite.
+- **PR body** must contain:
+  - ClickUp link (private repos) or `Closes #N` (public repos, no ClickUp references);
+  - `No GitHub issue exists for this work.` if a private repo has no GitHub issue;
+  - `Agent id: bc-…`;
+  - Summary, Test plan, Automated checks (gate output), and **Self-review** (pass/fail per item against `review-lessons.mdc`).
+- **Tests must fail on regression.** Assert behaviour and output (DOM, ARIA, payloads, exit codes, error paths), not just that a callback was called. Cover the enabled/happy path as well as error/disabled paths. Add a regression test for every bug you fix.
+- **Least privilege:**
+  - every workflow job declares `permissions:` (default `contents: read`);
+  - GitHub App tokens are scoped to this repo (`repositories: ${{ github.event.repository.name }}`) with the minimum `permission-*`;
+  - publish/release tokens live only in the step that needs them, never in install/build/test steps;
+  - pin third-party actions to a commit SHA.
+- **Release/publish automation must be resumable and idempotent.** Re-running after a partial failure (tag pushed, publish failed, `main` moved on) must finish or stop safely. It must never move `latest` back or republish a different source.
+- **No secrets** in commits, PR/MR bodies, comments, logs or test fixtures. Secrets come from the environment only (Cursor Secrets / CI variables). Their source of truth is Azure Key Vault. Never create a secret that exists only in CI or Cursor.
+- **Shared kits stay domain-free:** no product or tenant words (InkAds, LeaseMate, campaign, display, ad, …) in defaults, stories, tests or docs.
+- **Small PRs, one concern each:** stay inside the files your brief lists. Don't fold in follow-ups; name them in the PR body instead.
+- **Run every gate locally before each push**, using the commands in `AGENTS.md` or CI. If a gate can't run in your environment, say so in the PR body. Don't skip it silently.
+- **When stuck or blocked,** stop and say so in the PR body. Don't widen scope, add tooling or change CI to get unblocked.

@@ -1,5 +1,21 @@
 # AGENTS.md - post-kit
 
+## Agent rules (read first)
+
+Read `.cursor/rules/00-baseline.mdc` and `.cursor/rules/review-lessons.mdc`
+before starting.
+
+- Never rebase.
+- Never force-push (including `--force-with-lease`).
+- Bring in `origin/main` with `git merge` only.
+- One commit and one push per round, at most 3 rounds.
+- Never `[skip ci]` (only the singleton-release App's release commit
+  carries it).
+- Wait for the automatic review; never post bot commands.
+- The PR says `Closes #N`.
+
+These match `docs/github-source-of-truth.md` §3 and §6.
+
 ## Engineering source of truth (read first)
 
 **[`docs/github-source-of-truth.md`](docs/github-source-of-truth.md) is the
@@ -73,6 +89,11 @@ change.
 
 ### Worktree bootstrap (required)
 
+**Cloud agents** (Cursor cloud) work in the checkout they're given. Skip
+the parent-workspace/worktree layout and run
+`pnpm install --frozen-lockfile`. Local and parallel agents follow the
+layout below.
+
 **Layout (locked):** open a **parent workspace** folder in your editor, not
 the git clone.
 
@@ -125,7 +146,7 @@ git worktree remove ../worktrees/<issue-number>-<kebab-slug>
 git worktree prune
 ```
 
-### Repository workflow (fetch, rebase, push, PR)
+### Repository workflow (fetch, merge, push, PR)
 
 Per `docs/github-source-of-truth.md` section 6:
 
@@ -136,12 +157,10 @@ Per `docs/github-source-of-truth.md` section 6:
    issue explicitly declares that dependency.
 5. Before pushing completed implementation:
    - `git fetch origin`
-   - rebase (or merge, per the **Shared hub files / conflict playbook**
-     below) onto `origin/main`
+   - `git merge origin/main` (never rebase)
    - resolve conflicts
    - run the relevant test suite
-6. Push with `--force-with-lease` after a rebase. Never plain `--force`.
-7. Open/update the PR with a GitHub closing keyword linking the issue:
+6. Open/update the PR with a GitHub closing keyword linking the issue:
 
    ```text
    Closes #1
@@ -149,16 +168,18 @@ Per `docs/github-source-of-truth.md` section 6:
 
    Use `Closes`/`Fixes`/`Resolves`, not a plain `#1` reference, so merging
    closes the issue automatically.
-8. If `origin/main` changes while CI/review is running and branch
-   protection or mergeability requires it, rebase again and re-push
-   (`--force-with-lease`).
-9. Humans merge. Agents never approve or merge their own PRs (GitHub
-   forbids self-approval on a solo identity anyway).
+7. If `origin/main` changes while CI/review is running and branch
+   protection or mergeability requires it, `git merge origin/main` and
+   push. That push counts toward the 3-push limit. Never rebase or
+   force-push.
+8. Humans merge. Agents never approve or merge their own PRs (GitHub
+   forbids self-approval on a solo identity anyway). Agents never enable
+   auto-merge.
 
 ### Review feedback
 
-Connected review bots (e.g. Cursor Bugbot, ChatGPT Codex Connector) review
-PRs on GitHub; humans may also comment.
+Connected review bots (CodeRabbit; also Cursor Bugbot / ChatGPT Codex
+Connector where enabled) review PRs on GitHub; humans may also comment.
 
 1. After pushing, watch required CI in-session (`gh pr checks --watch`).
    Required check: `Lint / test / build`.
@@ -172,8 +193,14 @@ PRs on GitHub; humans may also comment.
    is green, and there are no unresolved review threads. Do not wait on a
    `ready-for-human` label — that pipeline is not used here.
 5. Bot or human feedback that requires code changes: fetch the PR tip and
-   all feedback, make the change, push. There is no separate ticket status
-   to move — the PR itself is the state.
+   all feedback, make the change, push, within the push limit. There is no
+   separate ticket status to move — the PR itself is the state.
+6. Wait for CodeRabbit's automatic review of each pushed head. Never post
+   `@coderabbitai` or any bot command.
+7. For each thread, fix a real defect in the next round, or reply with a
+   short reason, then resolve it. At most 2 review rounds, which share the
+   3-push limit.
+8. No approvals, verdicts or labels.
 
 ### Completion
 
@@ -191,7 +218,8 @@ Connected review bots comment; agents never approve or merge.
 versions [skip ci]` to `main` using the **singleton-release** GitHub App, which
 must be on the main ruleset bypass list. Agents still never push to `main`.
 Default-branch rulesets must not target `refs/tags/**`. Process still forbids
-merging red CI. See `SETUP.md` §1.
+merging red CI. See `SETUP.md` §1. Only the singleton-release App's release
+commit uses `[skip ci]`; agents never do.
 
 ## Shared hub files (conflict prevention)
 
@@ -207,10 +235,11 @@ ticket requires it.**
 | `AGENTS.md`, `SETUP.md`, `docs/pr-pipelines.md` | Docs/ops issue | Otherwise open a GitHub issue as a follow-up |
 | `.github/workflows/**` | CI/CD ticket | - |
 | `.env.example` | New env keys required by ticket | Add keys only; no secrets |
+| `.cursor/rules/**` | Agent-rules issue/rollout | Org baseline lives in `00-baseline.mdc`; don't edit it in feature PRs |
 
-### Conflict playbook (mandatory on dirty / `needs-rebase`)
+### Conflict playbook (mandatory on dirty / behind `main`)
 
-Agents must not reason through lockfiles. Prefer **merge** over rebase
+Agents must not reason through lockfiles. Always **merge**; never rebase
 (simpler ours/theirs):
 
 ```text
@@ -218,7 +247,7 @@ Agents must not reason through lockfiles. Prefer **merge** over rebase
 2. git merge origin/main
 3. For pnpm-lock.yaml: take main's lock, then pnpm install, then stage
 4. Hand-fix remaining paths (package.json, workflows, docs)
-5. Commit the merge, push
+5. Commit the merge, push (counts toward the 3-push limit)
 6. gh pr checks --watch; confirm mergeable
 ```
 
@@ -240,9 +269,10 @@ feature PRs when possible.
 
 Narrative overview: [`docs/architecture/overview.md`](docs/architecture/overview.md).
 
-- **API:** Azure Functions in `apps/api` (contact/send; not in this bootstrap)
-- **Packages:** public npm `@singleton-sd/post-kit-*` under `packages/`
-  (first: `post-kit-email`; later client, editor, types, compiler, publisher)
+- **API:** Azure Functions in `apps/api` (anonymous contact + health)
+- **Packages:** public npm `@singleton-sd/post-kit-*` under `packages/`:
+  `post-kit-client`, `post-kit-compiler`, `post-kit-editor`,
+  `post-kit-email`, `post-kit-publisher`, `post-kit-types`
 - Consumers call PostKit from trusted server-side code. Browser code must
   never contain long-lived PostKit credentials.
 - **Secrets:** Azure Key Vault only (preferred `ssd-postkit-kv-prod-ae` —
@@ -254,13 +284,20 @@ Narrative overview: [`docs/architecture/overview.md`](docs/architecture/overview
 
 ## Testing
 
-Wave A (this bootstrap) uses Node's built-in test runner for repo scripts:
+CI uses Node 24. Local gates match CI order:
 
 ```bash
+pnpm install --frozen-lockfile
 pnpm test:worktree-paths    # node scripts/worktree-paths.test.mjs
-pnpm test:pr-automation     # pr-handoff-gate + invoke-ps1
-pnpm test                   # script tests, then pnpm -r --if-present run test
+pnpm test:pr-automation     # pr-handoff-gate, invoke-ps1, github-releases, publish-npm, release-changed, tenant-key-map, platform-cors-origins
+pnpm format:check
+pnpm exec eslint .
+pnpm -r --if-present run test
+pnpm -r --if-present run build
 ```
+
+`pnpm test` runs `test:worktree-paths`, then `test:pr-automation`, then
+`pnpm -r --if-present run test`.
 
 Workspace packages (when they exist) use `node --test` / `tsx` for unit
 tests — document the runner in the package and keep it consistent. Prefer
@@ -308,6 +345,8 @@ GitHub Actions (see `docs/pr-pipelines.md` / `SETUP.md`):
   `pnpm build`. Manual staged check: `pnpm lint:staged`.
 - Humans only merge; agents open PRs linking their GitHub issue (`Closes #N`).
   There is no hygiene/label pipeline and no `pr:gate` handoff step.
+  The PR body also includes `Agent id: bc-…` and a **Self-review** against
+  `.cursor/rules/review-lessons.mdc`. No links or IDs from private trackers.
 
 ## Skills
 
@@ -321,10 +360,12 @@ pnpm sync:skills
 That runs:
 
 ```bash
-npx skills add singleton-sd/ai-plattform-skills \
+npx --yes skills add singleton-sd/ai-plattform-skills \
   --skill task-driven-development \
+  --skill "Task-Driven Development" \
   --skill backend \
   --skill frontend \
+  --skill postkit-contact-consumer \
   -a cursor -a claude-code -a grok -a codex \
   --copy \
   -y

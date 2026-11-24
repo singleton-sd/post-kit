@@ -1,0 +1,33 @@
+---
+description: Lessons from earlier post-kit PR reviews. Check every item before each push and report pass/fail under "Self-review" in the PR body.
+alwaysApply: true
+---
+
+# post-kit review lessons (updated 24 Nov 2026)
+
+All lessons below are CodeRabbit findings on [#152](https://github.com/singleton-sd/post-kit/pull/152) (merged 15 Nov 2026, "ci: restore commit-back releases via singleton-release app"), except the process items.
+
+## Release automation must be resumable and idempotent
+
+(`scripts/release-changed.mjs`, `release.yml`, `docs/operations/releasing.md`)
+
+- Push the release commit and its tags in **one atomic push**. A commit pushed without its tags leaves `main` claiming a version that has no tag. [#152 Major: "Recover a release whose tag push fails after the commit push succeeds"]
+- If `main` advances between planning and pushing, **re-plan** (or stop before tagging). Never keep an old plan over new commits: a `fix!:` would ship as a patch. [#152 Major: "Recalculate the release plan when main advances"]
+- Recover a tag left behind `HEAD` after a failed publish **from the tag's own tree**: publish that version and create its GitHub Release. Never move the tag onto `HEAD`. [#152 Major: "Reconcile tags that are behind HEAD after a failed publish"]
+- Reconcile missing GitHub Releases for existing tags on every run, not only when there are new bumps. [#152 Minor: "Reconcile GitHub Releases independently of new package bumps"]
+- A version that already exists on npm must be bound to the source being tagged. Don't skip-publish and then tag different source. [#152 Major: "Bind skipped npm versions to the source being tagged"]
+- Compare **peeled** tags with `HEAD` (`git rev-parse <tag>^{commit}`). Annotated tags have their own object id. [#152 Major: "Peel annotated tags before comparing them with HEAD"]
+- `workspace:*`/`^`/`~` dependencies must publish the dependency's real current version, including when that dependency isn't being bumped. [#152 Major: "Unchanged workspace dependencies can publish stale version pins"]
+
+## Least-privilege tokens
+
+- GitHub App tokens set `repositories: post-kit` and the minimum `permission-*` (here `contents: write`). `owner` alone grants every repo in the installation. The token lives only in the step that pushes or creates releases; install, build and npm publish never see it. [#152 Major: "Bound the release App token to post-kit and to contents write"]
+
+## Tests must fail on regression
+
+- Every release-script fix comes with a `node --test` case in `scripts/*.test.mjs` that reproduces the failure: partial push, `main` advanced, orphaned tag, existing npm version, annotated tag. [#152 pattern: 7 of 8 findings were untested recovery paths]
+
+## Process
+
+- Never post `@coderabbitai`. Wait for the automatic review of each head. [org lesson: kit-ui #6, #8]
+- This repo is public: no secrets, private business detail or internal ticket text in code, docs, commits or PRs. [AGENTS.md Public-repo safety]
